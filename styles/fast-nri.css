@@ -1141,3 +1141,181 @@ body.theme-dark .fast-nri-hit-damage-great.selected {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ========================================================= */
+/* v0.3.2 - Visible weapon attack button                     */
+/* ========================================================= */
+
+.fast-nri-weapon-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto auto 28px;
+}
+
+.fast-nri-attack-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 76px;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--fnri-border);
+  border-radius: 5px;
+  background: rgba(127, 127, 127, 0.08);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fast-nri-attack-button:hover {
+  background: rgba(127, 127, 127, 0.18);
+  border-color: var(--fnri-accent);
+}
+
+.fast-nri-attack-button i {
+  font-size: 0.82rem;
+}
+
+
+/* ========================================================= */
+/* v0.3.3 - Apply damage + undo chat message                 */
+/* ========================================================= */
+
+.fast-nri-damage-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 0.8rem;
+}
+
+.fast-nri-damage-total span {
+  color: #666;
+  font-weight: 600;
+}
+
+.fast-nri-damage-total strong {
+  font-size: 1rem;
+}
+
+.fast-nri-apply-damage-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 9px;
+  color: #7a2828;
+  border: 1px solid #b46565;
+  border-radius: 5px;
+  background: rgba(180, 70, 70, 0.06);
+  font-weight: 700;
+}
+
+.fast-nri-apply-damage-button:hover {
+  color: #641d1d;
+  border-color: #953d3d;
+  background: rgba(180, 70, 70, 0.12);
+}
+
+.fast-nri-applied-damage-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px;
+  border-left: 3px solid #a64646;
+  border-radius: 3px;
+  background: rgba(166, 70, 70, 0.055);
+}
+
+.fast-nri-applied-damage-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.fast-nri-applied-damage-text > i {
+  flex: 0 0 auto;
+  color: #9a3d3d;
+}
+
+.fast-nri-undo-damage-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  min-width: 25px;
+  min-height: 25px;
+  padding: 0;
+  color: #666;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+.fast-nri-undo-damage-button:hover {
+  color: #222;
+  border-color: #666;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.fast-nri-applied-damage-message.undone {
+  color: #777;
+  border-left-color: #999;
+  background: rgba(127, 127, 127, 0.05);
+}
+
+.fast-nri-applied-damage-message.undone .fast-nri-applied-damage-text > i {
+  color: #777;
+}
+
+.theme-dark .fast-nri-damage-total span,
+body.theme-dark .fast-nri-damage-total span {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-apply-damage-button,
+body.theme-dark .fast-nri-apply-damage-button {
+  color: #efa4a4;
+  border-color: #9d5c5c;
+}
+
+.theme-dark .fast-nri-applied-damage-message,
+body.theme-dark .fast-nri-applied-damage-message {
+  border-left-color: #c76565;
+  background: rgba(199, 101, 101, 0.08);
+}
+
+.theme-dark .fast-nri-applied-damage-text > i,
+body.theme-dark .fast-nri-applied-damage-text > i {
+  color: #e08a8a;
+}
+
+.theme-dark .fast-nri-undo-damage-button,
+body.theme-dark .fast-nri-undo-damage-button {
+  color: #bbb;
+  border-color: #666;
+}
+
+
+/* ========================================================= */
+/* v0.3.5 - Undo damage: strike through original message     */
+/* ========================================================= */
+
+.fast-nri-applied-damage-message.undone .fast-nri-applied-damage-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  opacity: 0.62;
+}
+
+.fast-nri-applied-damage-message.undone .fast-nri-applied-damage-text > i {
+  color: inherit;
+}

@@ -697,15 +697,34 @@ export async function rollDamageFromChat(element) {
   const flavor = `
     <div class="fast-nri-chat-roll fast-nri-damage-card">
       ${rollCardHeader(`Урон: ${weapon.name}`, "fa-burst")}
+
       <div class="fast-nri-chat-damage-profile-name">
         ${esc(labels[profile] ?? profile)}
       </div>
+
       ${critical ? `
         <div class="fast-nri-critical-roll">
           <i class="fa-solid fa-xmark"></i>
           <strong>Критический урон: ${result.roll.total} × 2 = ${finalTotal}</strong>
         </div>
       ` : ""}
+
+      <div class="fast-nri-damage-total">
+        <span>Итоговый урон</span>
+        <strong>${finalTotal}</strong>
+      </div>
+
+      <button
+        type="button"
+        class="fast-nri-apply-damage-button"
+        data-fast-nri-apply-damage
+        data-damage="${escAttr(finalTotal)}"
+        title="Нанести ${escAttr(finalTotal)} урона выделенному токену"
+      >
+        <i class="fa-solid fa-heart-crack"></i>
+        <span>Нанести урон</span>
+      </button>
+
       ${modifierNotesHTML(result)}
     </div>
   `;
@@ -734,21 +753,334 @@ export async function rollDamageFromChat(element) {
   };
 }
 
-export function activateChatInteractions(root = document) {
-  root.addEventListener("click", async event => {
-    const button = event.target.closest("[data-fast-nri-damage]");
-    if (!button) return;
+function controlledSingleToken() {
+  const controlled = Array.from(canvas?.tokens?.controlled ?? []);
 
-    event.preventDefault();
-    event.stopPropagation();
+  if (controlled.length === 0) {
+    ui.notifications.warn("Выдели токен, которому нужно нанести урон.");
+    return null;
+  }
 
-    if (button.dataset.fastNriBusy === "true") return;
-    button.dataset.fastNriBusy = "true";
+  if (controlled.length > 1) {
+    ui.notifications.warn("Для нанесения урона должен быть выделен только один токен.");
+    return null;
+  }
+
+  return controlled[0];
+}
+
+function appliedDamageMessageContent({
+  tokenName,
+  damage,
+  tokenUuid,
+  actorUuid,
+  previousHp,
+  afterHp,
+  undone = false
+}) {
+  return `
+    <div class="fast-nri-applied-damage-message ${undone ? "undone" : ""}">
+      <div class="fast-nri-applied-damage-text">
+        <i class="fa-solid fa-heart-crack"></i>
+        <span>
+          <strong>${esc(tokenName)}</strong>
+          получает <strong>${esc(damage)}</strong> урона
+        </span>
+      </div>
+
+      ${undone ? "" : `
+        <button
+          type="button"
+          class="fast-nri-undo-damage-button"
+          data-fast-nri-undo-damage
+          data-token-uuid="${escAttr(tokenUuid)}"
+          data-actor-uuid="${escAttr(actorUuid)}"
+          data-previous-hp="${escAttr(previousHp)}"
+          data-after-hp="${escAttr(afterHp)}"
+          data-damage="${escAttr(damage)}"
+          title="Отменить нанесение урона"
+          aria-label="Отменить нанесение урона"
+        >
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      `}
+    </div>
+  `;
+}
+
+export async function applyDamageFromChat(element) {
+  const requestedDamage = Number(element?.dataset?.damage);
+
+  if (!Number.isFinite(requestedDamage) || requestedDamage < 0) {
+    ui.notifications.error("Не удалось определить величину урона.");
+    return null;
+  }
+
+  const token = controlledSingleToken();
+  if (!token) return null;
+
+  const actor = token.actor;
+  if (!actor) {
+    ui.notifications.error("У выделенного токена нет Actor.");
+    return null;
+  }
+
+  const previousHp = Number(actor.system?.hp?.value);
+  if (!Number.isFinite(previousHp)) {
+    ui.notifications.error("У выделенного токена нет корректного значения HP.");
+    return null;
+  }
+
+  // HP никогда не может опуститься ниже 0.
+  const afterHp = Math.max(0, previousHp - requestedDamage);
+
+  // Фактически снятое HP. Например, при 5 HP и 12 урона снимается только 5 HP.
+  const appliedDamage = previousHp - afterHp;
+
+  try {
+    await actor.update({
+      "system.hp.value": afterHp
+    });
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка нанесения урона", error);
+    ui.notifications.error("Не удалось изменить HP выделенного токена.");
+    return null;
+  }
+
+  const tokenUuid = token.document?.uuid ?? "";
+  const actorUuid = actor.uuid;
+  const tokenName = token.name || actor.name || "Цель";
+
+  const content = appliedDamageMessageContent({
+    tokenName,
+    damage: requestedDamage,
+    tokenUuid,
+    actorUuid,
+    previousHp,
+    afterHp
+  });
+
+  const message = await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
+    content,
+    flags: {
+      "fast-nri": {
+        kind: "damage-applied",
+        tokenUuid,
+        actorUuid,
+        tokenName,
+        requestedDamage,
+        appliedDamage,
+        previousHp,
+        afterHp,
+        undone: false
+      }
+    }
+  });
+
+  return {
+    message,
+    token,
+    actor,
+    requestedDamage,
+    appliedDamage,
+    previousHp,
+    afterHp
+  };
+}
+
+async function resolveDamageActor({ tokenUuid, actorUuid }) {
+  if (tokenUuid) {
+    try {
+      const tokenDocument = await fromUuid(tokenUuid);
+      if (tokenDocument?.actor) return tokenDocument.actor;
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось получить Token по UUID", error);
+    }
+  }
+
+  if (actorUuid) {
+    try {
+      const actor = await fromUuid(actorUuid);
+      if (actor) return actor;
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось получить Actor по UUID", error);
+    }
+  }
+
+  return null;
+}
+
+function messageIdFromElement(element) {
+  return element
+    ?.closest(".chat-message, .message")
+    ?.dataset?.messageId ?? null;
+}
+
+export async function undoAppliedDamage(element) {
+  const messageId = messageIdFromElement(element);
+  const message = messageId ? game.messages?.get(messageId) : null;
+
+  const stored = message?.getFlag("fast-nri", "kind") === "damage-applied"
+    ? {
+        tokenUuid: message.getFlag("fast-nri", "tokenUuid"),
+        actorUuid: message.getFlag("fast-nri", "actorUuid"),
+        tokenName: message.getFlag("fast-nri", "tokenName"),
+        requestedDamage: Number(
+          message.getFlag("fast-nri", "requestedDamage")
+          ?? message.getFlag("fast-nri", "damage")
+        ),
+        appliedDamage: Number(
+          message.getFlag("fast-nri", "appliedDamage")
+          ?? (
+            Number(message.getFlag("fast-nri", "previousHp"))
+            - Number(message.getFlag("fast-nri", "afterHp"))
+          )
+        ),
+        previousHp: Number(message.getFlag("fast-nri", "previousHp")),
+        afterHp: Number(message.getFlag("fast-nri", "afterHp")),
+        undone: Boolean(message.getFlag("fast-nri", "undone"))
+      }
+    : {
+        tokenUuid: element?.dataset?.tokenUuid ?? "",
+        actorUuid: element?.dataset?.actorUuid ?? "",
+        tokenName: "Цель",
+        requestedDamage: Number(element?.dataset?.damage),
+        appliedDamage: Number(element?.dataset?.damage),
+        previousHp: Number(element?.dataset?.previousHp),
+        afterHp: Number(element?.dataset?.afterHp),
+        undone: false
+      };
+
+  if (stored.undone) {
+    ui.notifications.info("Это нанесение урона уже отменено.");
+    return null;
+  }
+
+  if (!Number.isFinite(stored.appliedDamage) || stored.appliedDamage < 0) {
+    ui.notifications.error("Не удалось определить фактически нанесённый урон.");
+    return null;
+  }
+
+  const actor = await resolveDamageActor(stored);
+  if (!actor) {
+    ui.notifications.error("Не удалось найти персонажа для отмены урона.");
+    return null;
+  }
+
+  const currentHp = Number(actor.system?.hp?.value);
+  if (!Number.isFinite(currentHp)) {
+    ui.notifications.error("Не удалось определить текущее HP.");
+    return null;
+  }
+
+  const maxHp = Number(actor.system?.hp?.max);
+
+  // Отмена возвращает ровно то HP, которое сняло это конкретное сообщение.
+  // Так последующие урон/лечение не перезаписываются возвратом старого состояния.
+  let restoredHp = currentHp + stored.appliedDamage;
+
+  // Если максимальное HP задано корректно, отмена не должна поднять HP выше максимума.
+  if (Number.isFinite(maxHp)) {
+    restoredHp = Math.min(maxHp, restoredHp);
+  }
+
+  restoredHp = Math.max(0, restoredHp);
+
+  try {
+    await actor.update({
+      "system.hp.value": restoredHp
+    });
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка отмены урона", error);
+    ui.notifications.error("Не удалось вернуть HP.");
+    return null;
+  }
+
+  if (message) {
+    const displayDamage = Number.isFinite(stored.requestedDamage)
+      ? stored.requestedDamage
+      : stored.appliedDamage;
+
+    const content = appliedDamageMessageContent({
+      tokenName: stored.tokenName || actor.name || "Цель",
+      damage: displayDamage,
+      tokenUuid: stored.tokenUuid,
+      actorUuid: stored.actorUuid,
+      previousHp: stored.previousHp,
+      afterHp: stored.afterHp,
+      undone: true
+    });
 
     try {
-      await rollDamageFromChat(button);
-    } finally {
-      delete button.dataset.fastNriBusy;
+      await message.update({
+        content,
+        "flags.fast-nri.undone": true,
+        "flags.fast-nri.restoredHp": restoredHp
+      });
+    } catch (error) {
+      console.warn("Быстрая НРИ | HP возвращены, но сообщение не удалось обновить", error);
+    }
+  } else {
+    element.disabled = true;
+  }
+
+  return {
+    actor,
+    restoredHp,
+    restoredAmount: stored.appliedDamage
+  };
+}
+
+export function activateChatInteractions(root = document) {
+  root.addEventListener("click", async event => {
+    const damageProfileButton = event.target.closest("[data-fast-nri-damage]");
+    if (damageProfileButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (damageProfileButton.dataset.fastNriBusy === "true") return;
+      damageProfileButton.dataset.fastNriBusy = "true";
+
+      try {
+        await rollDamageFromChat(damageProfileButton);
+      } finally {
+        delete damageProfileButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
+    const applyDamageButton = event.target.closest("[data-fast-nri-apply-damage]");
+    if (applyDamageButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (applyDamageButton.dataset.fastNriBusy === "true") return;
+      applyDamageButton.dataset.fastNriBusy = "true";
+
+      try {
+        await applyDamageFromChat(applyDamageButton);
+      } finally {
+        delete applyDamageButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
+    const undoDamageButton = event.target.closest("[data-fast-nri-undo-damage]");
+    if (undoDamageButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (undoDamageButton.dataset.fastNriBusy === "true") return;
+      undoDamageButton.dataset.fastNriBusy = "true";
+
+      try {
+        await undoAppliedDamage(undoDamageButton);
+      } finally {
+        delete undoDamageButton.dataset.fastNriBusy;
+      }
     }
   });
 }
