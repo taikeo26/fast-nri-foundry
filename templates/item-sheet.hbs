@@ -1,0 +1,99 @@
+<div class="fast-nri-sheet fast-nri-item" autocomplete="off">
+  <header class="fast-nri-header">
+    <img class="fast-nri-portrait" src="{{item.img}}" alt="{{item.name}}" />
+
+    <div class="fast-nri-identity">
+      <input class="fast-nri-name" type="text" name="name" value="{{item.name}}" />
+      <div class="fast-nri-subline">
+        <span>{{item.type}}</span>
+        <label>
+          Уровень
+          <input type="number" name="system.level" value="{{system.level}}" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  {{#if isWeapon}}
+    <section class="fast-nri-section">
+      <h2>Оружие</h2>
+      <div class="fast-nri-two">
+        <label>
+          Дистанция
+          <input type="text" name="system.range" value="{{system.range}}" />
+        </label>
+        <label>
+          Тип урона
+          <select name="system.damageType">
+            <option value="physical" {{#if (eq system.damageType "physical")}}selected{{/if}}>Физический</option>
+            <option value="magic" {{#if (eq system.damageType "magic")}}selected{{/if}}>Магический</option>
+            <option value="poison" {{#if (eq system.damageType "poison")}}selected{{/if}}>Яд</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="fast-nri-three">
+        <label>Частичный
+          <input type="text" name="system.damage.partial" value="{{system.damage.partial}}" />
+        </label>
+        <label>Успех
+          <input type="text" name="system.damage.success" value="{{system.damage.success}}" />
+        </label>
+        <label>Большой
+          <input type="text" name="system.damage.great" value="{{system.damage.great}}" />
+        </label>
+      </div>
+    </section>
+  {{/if}}
+
+  {{#if isAbility}}
+    <section class="fast-nri-section">
+      <h2>{{#if abilityIsSpell}}Заклинание{{else}}Способность{{/if}}</h2>
+
+      <div class="fast-nri-two">
+        <label>
+          Категория
+          <select name="system.category">
+            <option value="ability" {{#if (eq system.category "ability")}}selected{{/if}}>Способность</option>
+            <option value="spell" {{#if (eq system.category "spell")}}selected{{/if}}>Заклинание</option>
+          </select>
+        </label>
+
+        <label>
+          Время использования
+          <input type="text" name="system.timing" value="{{system.timing}}" />
+        </label>
+      </div>
+
+      <label>
+        Стоимость классового ресурса
+        <input type="number" name="system.classResourceCost" value="{{system.classResourceCost}}" />
+      </label>
+    </section>
+  {{/if}}
+
+  {{#if isEquipment}}
+    <section class="fast-nri-section">
+      <h2>Снаряжение</h2>
+      <label>
+        Категория
+        <input type="text" name="system.category" value="{{system.category}}" />
+      </label>
+    </section>
+  {{/if}}
+
+  {{#if isConsumable}}
+    <section class="fast-nri-section">
+      <h2>Расходник</h2>
+      <label>
+        Количество
+        <input type="number" name="system.quantity" value="{{system.quantity}}" />
+      </label>
+    </section>
+  {{/if}}
+
+  <section class="fast-nri-section">
+    <h2>Описание</h2>
+    <textarea name="system.description" rows="12">{{system.description}}</textarea>
+  </section>
+</div>

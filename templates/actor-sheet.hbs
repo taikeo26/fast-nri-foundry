@@ -1,0 +1,277 @@
+<div class="fast-nri-sheet" autocomplete="off">
+  <header class="fast-nri-header fast-nri-header-compact">
+    <img class="fast-nri-portrait" src="{{actor.img}}" alt="{{actor.name}}" />
+
+    <div class="fast-nri-identity">
+      <input class="fast-nri-name" type="text" name="name" value="{{actor.name}}" />
+      <div class="fast-nri-subline">
+        <span>{{actor.type}}</span>
+        <label>
+          Уровень
+          <input type="number" name="system.level" value="{{system.level}}" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <nav class="fast-nri-tabs" role="tablist" aria-label="Разделы карточки">
+    <button type="button" class="fast-nri-tab-button {{#if tabs.main.active}}active{{/if}}" data-tab="main" role="tab">
+      Основное
+    </button>
+    <button type="button" class="fast-nri-tab-button {{#if tabs.abilities.active}}active{{/if}}" data-tab="abilities" role="tab">
+      Способности
+    </button>
+    <button type="button" class="fast-nri-tab-button {{#if tabs.inventory.active}}active{{/if}}" data-tab="inventory" role="tab">
+      Инвентарь
+    </button>
+    <button type="button" class="fast-nri-tab-button {{#if tabs.spells.active}}active{{/if}}" data-tab="spells" role="tab">
+      Заклинания
+    </button>
+    <button type="button" class="fast-nri-tab-button {{#if tabs.skills.active}}active{{/if}}" data-tab="skills" role="tab">
+      Навыки
+    </button>
+  </nav>
+
+  <main class="fast-nri-tab-content">
+
+    <!-- ============================================================= -->
+    <!-- ОСНОВНОЕ                                                     -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.main.active}}active{{/if}}" data-tab="main" role="tabpanel">
+      <section class="fast-nri-vitals">
+        <div class="fast-nri-card">
+          <h3>HP</h3>
+          <div class="fast-nri-inline">
+            <input type="number" name="system.hp.value" value="{{system.hp.value}}" />
+            <span>/</span>
+            <input type="number" name="system.hp.max" value="{{system.hp.max}}" />
+          </div>
+        </div>
+
+        <div class="fast-nri-card">
+          <h3>Скорость</h3>
+          <input type="number" name="system.speed" value="{{system.speed}}" />
+        </div>
+
+        <div class="fast-nri-card">
+          <h3>Куб боя</h3>
+          <input type="text" name="system.combatDie" value="{{system.combatDie}}" />
+        </div>
+      </section>
+
+      <section class="fast-nri-section">
+        <h2>КЗ</h2>
+        <div class="fast-nri-three">
+          <label>Частичный
+            <input type="number" name="system.armor.partial" value="{{system.armor.partial}}" />
+          </label>
+          <label>Успех
+            <input type="number" name="system.armor.success" value="{{system.armor.success}}" />
+          </label>
+          <label>Большой
+            <input type="number" name="system.armor.great" value="{{system.armor.great}}" />
+          </label>
+        </div>
+      </section>
+
+      <section class="fast-nri-section">
+        <h2>Защиты</h2>
+        <div class="fast-nri-four">
+          <label>Внимательность
+            <input type="number" name="system.defenses.awareness" value="{{system.defenses.awareness}}" />
+          </label>
+          <label>Рефлекс
+            <input type="number" name="system.defenses.reflex" value="{{system.defenses.reflex}}" />
+          </label>
+          <label>Стойкость
+            <input type="number" name="system.defenses.fortitude" value="{{system.defenses.fortitude}}" />
+          </label>
+          <label>Воля
+            <input type="number" name="system.defenses.will" value="{{system.defenses.will}}" />
+          </label>
+        </div>
+      </section>
+
+      <section class="fast-nri-section">
+        <h2>Базовые ресурсы</h2>
+        <div class="fast-nri-three fast-nri-resources">
+          <label>Движение
+            <input type="number" name="system.resources.movement" value="{{system.resources.movement}}" />
+          </label>
+          <label>Воздействие
+            <input type="number" name="system.resources.action" value="{{system.resources.action}}" />
+          </label>
+          <label>Вмешательство
+            <input type="number" name="system.resources.intervention" value="{{system.resources.intervention}}" />
+          </label>
+        </div>
+      </section>
+
+      <section class="fast-nri-section">
+        <h2>Классовый ресурс</h2>
+        <div class="fast-nri-class-resource">
+          <input type="text" name="system.classResource.label" value="{{system.classResource.label}}" />
+          <input type="number" name="system.classResource.value" value="{{system.classResource.value}}" />
+          <span>/</span>
+          <input type="number" name="system.classResource.max" value="{{system.classResource.max}}" />
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- СПОСОБНОСТИ                                                   -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.abilities.active}}active{{/if}}" data-tab="abilities" role="tabpanel">
+      <section class="fast-nri-section">
+        <div class="fast-nri-section-heading">
+          <div>
+            <h2>Способности</h2>
+            <p class="fast-nri-help">Классовые, расовые и общие способности персонажа.</p>
+          </div>
+          <button type="button" data-action="createItem" data-item-type="ability" data-item-category="ability">
+            + Способность
+          </button>
+        </div>
+
+        <div class="fast-nri-drop-zone">
+          {{#each abilities as |item|}}
+            <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+              <img src="{{item.img}}" alt="" />
+              <a data-action="editItem">{{item.name}}</a>
+              <small>{{item.system.timing}}</small>
+              <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
+            </div>
+          {{else}}
+            <div class="fast-nri-empty">Способностей пока нет.</div>
+          {{/each}}
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- ИНВЕНТАРЬ                                                     -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.inventory.active}}active{{/if}}" data-tab="inventory" role="tabpanel">
+      <section class="fast-nri-section fast-nri-inventory">
+        <div class="fast-nri-section-heading">
+          <div>
+            <h2>Инвентарь</h2>
+            <p class="fast-nri-help">Оружие, снаряжение и расходники.</p>
+          </div>
+        </div>
+
+        <div class="fast-nri-create-row">
+          <button type="button" data-action="createItem" data-item-type="weapon">+ Оружие</button>
+          <button type="button" data-action="createItem" data-item-type="equipment">+ Снаряжение</button>
+          <button type="button" data-action="createItem" data-item-type="consumable">+ Расходник</button>
+        </div>
+
+        <div class="fast-nri-drop-zone">
+          <div class="fast-nri-drop-hint">
+            <i class="fa-solid fa-arrow-down"></i>
+            <strong>Сюда можно перетаскивать Items</strong>
+          </div>
+
+          <div class="fast-nri-item-group">
+            <h3>Оружие</h3>
+            {{#each weapons as |item|}}
+              <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+                <img src="{{item.img}}" alt="" />
+                <a data-action="editItem">{{item.name}}</a>
+                <small>{{item.system.range}}</small>
+                <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
+              </div>
+            {{else}}
+              <div class="fast-nri-empty">Нет оружия.</div>
+            {{/each}}
+          </div>
+
+          <div class="fast-nri-item-group">
+            <h3>Снаряжение</h3>
+            {{#each equipment as |item|}}
+              <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+                <img src="{{item.img}}" alt="" />
+                <a data-action="editItem">{{item.name}}</a>
+                <small>{{item.system.category}}</small>
+                <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
+              </div>
+            {{else}}
+              <div class="fast-nri-empty">Нет снаряжения.</div>
+            {{/each}}
+          </div>
+
+          <div class="fast-nri-item-group">
+            <h3>Расходники</h3>
+            {{#each consumables as |item|}}
+              <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+                <img src="{{item.img}}" alt="" />
+                <a data-action="editItem">{{item.name}}</a>
+                <small>× {{item.system.quantity}}</small>
+                <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
+              </div>
+            {{else}}
+              <div class="fast-nri-empty">Нет расходников.</div>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- ЗАКЛИНАНИЯ                                                    -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.spells.active}}active{{/if}}" data-tab="spells" role="tabpanel">
+      <section class="fast-nri-section">
+        <div class="fast-nri-section-heading">
+          <div>
+            <h2>Заклинания</h2>
+            <p class="fast-nri-help">Заклинание хранится как Ability Item с категорией «Заклинание».</p>
+          </div>
+          <button type="button" data-action="createItem" data-item-type="ability" data-item-category="spell">
+            + Заклинание
+          </button>
+        </div>
+
+        <div class="fast-nri-drop-zone">
+          {{#each spells as |item|}}
+            <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+              <img src="{{item.img}}" alt="" />
+              <a data-action="editItem">{{item.name}}</a>
+              <small>{{item.system.timing}}</small>
+              <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
+            </div>
+          {{else}}
+            <div class="fast-nri-empty">Заклинаний пока нет.</div>
+          {{/each}}
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- НАВЫКИ                                                        -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.skills.active}}active{{/if}}" data-tab="skills" role="tabpanel">
+      <section class="fast-nri-section">
+        <h2>Навыки</h2>
+        <p class="fast-nri-help">Пока это ручные значения. Броски добавим следующим этапом.</p>
+
+        <div class="fast-nri-skills-grid">
+          {{#each skillRows as |skill|}}
+            <label class="fast-nri-skill-row">
+              <span>{{skill.label}}</span>
+              <select name="system.skills.{{skill.id}}">
+                <option value="" {{#unless skill.value}}selected{{/unless}}>—</option>
+                <option value="d4" {{#if (eq skill.value "d4")}}selected{{/if}}>d4</option>
+                <option value="d6" {{#if (eq skill.value "d6")}}selected{{/if}}>d6</option>
+                <option value="d8" {{#if (eq skill.value "d8")}}selected{{/if}}>d8</option>
+                <option value="d10" {{#if (eq skill.value "d10")}}selected{{/if}}>d10</option>
+                <option value="d12" {{#if (eq skill.value "d12")}}selected{{/if}}>d12</option>
+              </select>
+            </label>
+          {{/each}}
+        </div>
+      </section>
+    </section>
+
+  </main>
+</div>

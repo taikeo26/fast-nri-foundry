@@ -1,0 +1,69 @@
+import {
+  CharacterData,
+  CreatureData,
+  WeaponData,
+  AbilityData,
+  EquipmentData,
+  ConsumableData
+} from "./module/data-models.mjs";
+
+import {
+  FastNriActorSheet,
+  FastNriItemSheet
+} from "./module/sheets.mjs";
+
+Hooks.once("init", () => {
+  console.log("Быстрая НРИ 6.2 | Инициализация системы");
+
+  CONFIG.Actor.dataModels = {
+    character: CharacterData,
+    creature: CreatureData
+  };
+
+  CONFIG.Item.dataModels = {
+    weapon: WeaponData,
+    ability: AbilityData,
+    equipment: EquipmentData,
+    consumable: ConsumableData
+  };
+
+  CONFIG.Actor.trackableAttributes = {
+    character: {
+      bar: ["hp", "classResource"],
+      value: [
+        "resources.movement",
+        "resources.action",
+        "resources.intervention"
+      ]
+    },
+    creature: {
+      bar: ["hp", "classResource"],
+      value: [
+        "resources.movement",
+        "resources.action",
+        "resources.intervention"
+      ]
+    }
+  };
+
+  const { DocumentSheetConfig } = foundry.applications.apps;
+
+  DocumentSheetConfig.registerSheet(
+    foundry.documents.Actor,
+    game.system.id,
+    FastNriActorSheet,
+    { types: ["character", "creature"], makeDefault: true }
+  );
+
+  DocumentSheetConfig.registerSheet(
+    foundry.documents.Item,
+    game.system.id,
+    FastNriItemSheet,
+    { types: ["weapon", "ability", "equipment", "consumable"], makeDefault: true }
+  );
+});
+
+Hooks.once("ready", () => {
+  console.log("Быстрая НРИ 6.2 | Система готова");
+  ui.notifications.info("Быстрая НРИ 6.2 загружена");
+});

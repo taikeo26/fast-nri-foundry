@@ -1,0 +1,68 @@
+{
+  "type": "system",
+  "id": "fast-nri",
+  "title": "Быстрая НРИ 6.2",
+  "description": "Базовая система «Быстрая НРИ 6.2» для Foundry VTT 14.",
+  "version": "0.1.7",
+  "compatibility": {
+    "minimum": 14,
+    "verified": 14
+  },
+  "authors": [
+    {
+      "name": "Проект «Быстрая НРИ»"
+    }
+  ],
+  "esmodules": [
+    "fast-nri.mjs"
+  ],
+  "styles": [
+    "styles/fast-nri.css"
+  ],
+  "packs": [],
+  "languages": [
+    {
+      "lang": "ru",
+      "name": "Русский",
+      "path": "lang/ru.json"
+    }
+  ],
+  "documentTypes": {
+    "Actor": {
+      "character": {},
+      "creature": {}
+    },
+    "Item": {
+      "weapon": {
+        "htmlFields": [
+          "description"
+        ]
+      },
+      "ability": {
+        "htmlFields": [
+          "description"
+        ]
+      },
+      "equipment": {
+        "htmlFields": [
+          "description"
+        ]
+      },
+      "consumable": {
+        "htmlFields": [
+          "description"
+        ]
+      }
+    }
+  },
+  "socket": false,
+  "initiative": "1d20",
+  "grid": {
+    "distance": 1,
+    "units": "клетка"
+  },
+  "primaryTokenAttribute": "hp",
+  "secondaryTokenAttribute": "classResource",
+  "media": [],
+  "url": "https://github.com/taikeo26/fast-nri-foundry"
+}

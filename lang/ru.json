@@ -1,0 +1,17 @@
+{
+  "FASTNRI": {
+    "SystemName": "Быстрая НРИ 6.2"
+  },
+  "TYPES": {
+    "Actor": {
+      "character": "Персонаж",
+      "creature": "Существо"
+    },
+    "Item": {
+      "weapon": "Оружие",
+      "ability": "Способность",
+      "equipment": "Снаряжение",
+      "consumable": "Расходник"
+    }
+  }
+}

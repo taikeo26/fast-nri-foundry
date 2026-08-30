@@ -1,0 +1,312 @@
+.fast-nri {
+  --fnri-border: rgba(120, 120, 120, 0.45);
+  --fnri-panel: rgba(127, 127, 127, 0.08);
+}
+.fast-nri .window-content { padding: 0; }
+.fast-nri-sheet { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.fast-nri-header { display: grid; grid-template-columns: 84px 1fr; gap: 14px; align-items: center; }
+.fast-nri-portrait { width: 84px; height: 84px; object-fit: cover; border: 1px solid var(--fnri-border); border-radius: 8px; }
+.fast-nri-identity { display: flex; flex-direction: column; gap: 8px; }
+.fast-nri-name { font-size: 1.5rem; font-weight: 700; }
+.fast-nri-subline, .fast-nri-inline, .fast-nri-class-resource { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fast-nri-subline label { display: flex; gap: 6px; align-items: center; }
+.fast-nri-subline input { width: 64px; }
+.fast-nri-vitals, .fast-nri-three, .fast-nri-four { display: grid; gap: 10px; }
+.fast-nri-vitals { grid-template-columns: 2fr 1fr 1fr; }
+.fast-nri-three { grid-template-columns: repeat(3, 1fr); }
+.fast-nri-four { grid-template-columns: repeat(4, 1fr); }
+.fast-nri-card, .fast-nri-section { border: 1px solid var(--fnri-border); border-radius: 8px; background: var(--fnri-panel); padding: 10px; }
+.fast-nri-card h3, .fast-nri-section h2 { margin: 0 0 8px; }
+.fast-nri-card input, .fast-nri-three input, .fast-nri-four input { width: 100%; text-align: center; }
+.fast-nri-three label, .fast-nri-four label { display: flex; flex-direction: column; gap: 5px; font-size: 0.85rem; }
+.fast-nri-resources input { font-size: 1.35rem; font-weight: 700; }
+.fast-nri-class-resource > input[type="text"] { flex: 1 1 220px; }
+.fast-nri-class-resource > input[type="number"] { width: 72px; text-align: center; font-size: 1.1rem; }
+.fast-nri-item-list { display: flex; flex-direction: column; gap: 5px; }
+.fast-nri-item-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; padding: 5px; border-bottom: 1px solid var(--fnri-border); }
+.fast-nri-item-row img { width: 28px; height: 28px; object-fit: cover; }
+.fast-nri-help, .fast-nri-empty { opacity: 0.75; font-size: 0.9rem; }
+.fast-nri textarea { width: 100%; resize: vertical; }
+@media (max-width: 650px) {
+  .fast-nri-vitals, .fast-nri-three, .fast-nri-four { grid-template-columns: 1fr; }
+}
+
+
+.fast-nri-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.fast-nri-section-heading h2 {
+  margin-bottom: 2px;
+}
+
+.fast-nri-drop-badge {
+  padding: 7px 10px;
+  border: 1px dashed var(--fnri-accent);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.fast-nri-drop-zone {
+  margin-top: 8px;
+  min-height: 180px;
+  padding: 10px;
+  border: 2px dashed var(--fnri-border);
+  border-radius: 8px;
+}
+
+.fast-nri-drop-hint {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  margin-bottom: 10px;
+  opacity: 0.7;
+  font-size: 0.85rem;
+}
+
+.fast-nri-item-group + .fast-nri-item-group {
+  margin-top: 12px;
+}
+
+.fast-nri-item-group h3 {
+  margin: 0 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--fnri-border);
+}
+
+.fast-nri-item-row {
+  cursor: grab;
+  grid-template-columns: 28px minmax(0, 1fr) auto 28px;
+}
+
+.fast-nri-item-row:active {
+  cursor: grabbing;
+}
+
+.fast-nri-item-row > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fast-nri-item-row .icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fast-nri-actor-sheet.dragover .fast-nri-drop-zone,
+.fast-nri-drop-zone:hover {
+  border-color: var(--fnri-accent);
+}
+
+
+.fast-nri-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.fast-nri-create-row button {
+  flex: 1 1 auto;
+}
+
+.fast-nri-drop-zone.is-dragover {
+  border-color: var(--fnri-accent);
+  background: rgba(127, 127, 127, 0.14);
+}
+
+
+/* --------------------------------------------------------- */
+/* ApplicationV2 layout / scrolling                          */
+/* --------------------------------------------------------- */
+
+/*
+ * The Foundry window has a fixed height. Keep the window-content itself
+ * constrained and make our sheet the scroll container.
+ */
+.fast-nri-actor-sheet .window-content,
+.fast-nri-item-sheet .window-content {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The actual sheet content must be allowed to shrink inside the flex parent. */
+.fast-nri-actor-sheet .fast-nri-sheet,
+.fast-nri-item-sheet .fast-nri-sheet {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* Ensure the last section can be scrolled fully above the window edge. */
+.fast-nri-actor-sheet .fast-nri-sheet {
+  padding-bottom: 28px;
+}
+
+/* Keep inventory content from collapsing when the window is short. */
+.fast-nri-inventory,
+.fast-nri-drop-zone {
+  flex: 0 0 auto;
+}
+
+
+
+/* ========================================================= */
+/* v0.1.5 - ApplicationV2 scrolling fix                      */
+/* ========================================================= */
+
+/*
+ * In this simple one-part ActorSheet, scroll the Foundry window-content
+ * itself. Do NOT make the inner sheet a competing fixed-height scroller.
+ */
+.application.fast-nri-actor-sheet .window-content,
+.fast-nri-actor-sheet .window-content {
+  display: block !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/*
+ * Let the rendered Handlebars content take its natural height so it can
+ * overflow the window-content and create a real scrollbar.
+ */
+.application.fast-nri-actor-sheet .window-content > .fast-nri-sheet,
+.fast-nri-actor-sheet .window-content > .fast-nri-sheet,
+.fast-nri-actor-sheet .fast-nri-sheet {
+  display: flex !important;
+  flex-direction: column !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: max-content !important;
+  overflow: visible !important;
+  padding-bottom: 32px !important;
+}
+
+/* Safety net for different ApplicationV2 frame nesting. */
+.application.fast-nri-actor-sheet {
+  min-height: 0;
+}
+
+
+
+/* ========================================================= */
+/* v0.1.6 - Tabs                                             */
+/* ========================================================= */
+
+.fast-nri-header-compact {
+  flex: 0 0 auto;
+}
+
+.fast-nri-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  padding: 6px 0;
+  background: var(--color-cool-5-90, rgba(30, 26, 31, 0.96));
+  border-bottom: 1px solid var(--fnri-border);
+}
+
+.fast-nri-tab-button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fast-nri-tab-button:hover {
+  border-color: var(--fnri-border);
+}
+
+.fast-nri-tab-button.active {
+  border-color: var(--fnri-accent);
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.fast-nri-tab-content {
+  min-height: 0;
+}
+
+.fast-nri-tab-pane {
+  display: none;
+}
+
+.fast-nri-tab-pane.active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fast-nri-two {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.fast-nri-two label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fast-nri-skills-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+}
+
+.fast-nri-skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--fnri-border);
+}
+
+.fast-nri-skill-row select {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .fast-nri-tabs {
+    flex-wrap: wrap;
+  }
+
+  .fast-nri-tab-button {
+    flex: 1 1 30%;
+  }
+
+  .fast-nri-two,
+  .fast-nri-skills-grid {
+    grid-template-columns: 1fr;
+  }
+}
