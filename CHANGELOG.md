@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.8
+
+Первая версия со штатным обновлением через Foundry VTT.
+
+- добавлен стабильный `manifest` URL;
+- добавлен `download` URL на GitHub Release;
+- добавлен GitHub Actions workflow;
+- после изменения номера версии и Push в `main` GitHub автоматически:
+  - проверяет URL манифеста;
+  - собирает `fast-nri.zip`;
+  - создаёт тег и Release;
+  - прикладывает к Release `fast-nri.zip` и `system.json`.
+
 ## 0.1.7
 
 Первая версия, подготовленная для хранения через GitHub.

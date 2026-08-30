@@ -142,15 +142,19 @@
 - drop-зоны работают на вкладках Items.
 
 
-## GitHub workflow
+## Автоматические релизы с 0.1.8
 
-Начиная с 0.1.7 система хранится в репозитории:
+При Push в ветку `main` workflow `.github/workflows/release.yml` читает версию из `system.json`.
 
-`https://github.com/taikeo26/fast-nri-foundry`
+Если Release `v<version>` ещё не существует, GitHub автоматически:
 
-Через GitHub Desktop:
+1. собирает `fast-nri.zip`;
+2. создаёт GitHub Release;
+3. прикладывает `fast-nri.zip`;
+4. прикладывает `system.json`.
 
-1. заменить файлы в локальной папке репозитория;
-2. проверить изменения;
-3. сделать Commit;
-4. нажать Push origin.
+Foundry проверяет обновления по стабильному адресу:
+
+`https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json`
+
+Для каждого нового релиза необходимо увеличить `version` в `system.json` и изменить `download` на URL той же версии.

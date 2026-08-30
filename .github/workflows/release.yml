@@ -1,0 +1,101 @@
+name: Build Foundry Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./system.json').version")"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manifest URLs
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          EXPECTED_MANIFEST="https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json"
+          EXPECTED_DOWNLOAD="https://github.com/taikeo26/fast-nri-foundry/releases/download/v${VERSION}/fast-nri.zip"
+
+          node <<'NODE'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("system.json", "utf8"));
+          const version = p.version;
+          const expectedManifest = "https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json";
+          const expectedDownload = `https://github.com/taikeo26/fast-nri-foundry/releases/download/v${version}/fast-nri.zip`;
+
+          if (p.manifest !== expectedManifest) {
+            console.error(`manifest must be: ${expectedManifest}`);
+            process.exit(1);
+          }
+
+          if (p.download !== expectedDownload) {
+            console.error(`download must be: ${expectedDownload}`);
+            process.exit(1);
+          }
+
+          console.log(`Manifest validated for ${version}`);
+          NODE
+
+      - name: Check whether release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists. Nothing to publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Foundry package
+        if: steps.existing.outputs.exists == 'false'
+        shell: bash
+        run: |
+          zip -r fast-nri.zip \
+            system.json \
+            fast-nri.mjs \
+            README.md \
+            CHANGELOG.md \
+            lang \
+            module \
+            styles \
+            templates
+
+          echo "Package contents:"
+          unzip -l fast-nri.zip
+
+      - name: Create GitHub Release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          gh release create "$TAG" \
+            fast-nri.zip \
+            system.json \
+            --target "$GITHUB_SHA" \
+            --title "Fast NRI ${VERSION}" \
+            --notes "Автоматический релиз системы «Быстрая НРИ 6.2» для Foundry VTT 14."
