@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read version
         id: version
@@ -75,7 +75,6 @@ jobs:
             system.json \
             fast-nri.mjs \
             README.md \
-            CHANGELOG.md \
             lang \
             module \
             styles \
