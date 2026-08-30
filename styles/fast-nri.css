@@ -658,3 +658,32 @@ body.theme-dark .fast-nri-chat-roll-meta {
   border-color: rgba(152, 181, 206, 0.22);
   background: rgba(152, 181, 206, 0.07);
 }
+
+
+/* ========================================================= */
+/* v0.2.4 - Degree text contrast only                         */
+/* ========================================================= */
+
+/*
+ * Сохраняем цветной фон и рамку из 0.2.2,
+ * но текст степени делаем нейтральным и контрастным.
+ */
+.fast-nri-degree-result,
+.fast-nri-degree-result-label,
+.fast-nri-degree-result strong {
+  color: #202225 !important;
+}
+
+.fast-nri-degree-result strong {
+  font-weight: 800;
+}
+
+/* В тёмной теме — светлый нейтральный текст. */
+.theme-dark .fast-nri-degree-result,
+body.theme-dark .fast-nri-degree-result,
+.theme-dark .fast-nri-degree-result-label,
+body.theme-dark .fast-nri-degree-result-label,
+.theme-dark .fast-nri-degree-result strong,
+body.theme-dark .fast-nri-degree-result strong {
+  color: #f4f4f4 !important;
+}
