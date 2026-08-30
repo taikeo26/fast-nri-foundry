@@ -1,5 +1,7 @@
 import {
-  ITEM_PROPERTY_IDS
+  CREATURE_TRAITS,
+  ITEM_PROPERTY_IDS,
+  RESISTANCE_TRAITS
 } from "./config.mjs";
 
 const DEGREE_LABELS = {
@@ -521,6 +523,35 @@ export async function rollSkillCheck(actor, skill) {
   });
 }
 
+
+export async function rollSpecializationCheck(actor, specialization) {
+  const die = String(specialization?.die ?? "").trim();
+  const name = String(specialization?.name ?? "").trim();
+  const kindLabel = specialization?.kind === "secondary"
+    ? "Дополнительная специализация"
+    : "Основная специализация";
+  const label = name || kindLabel;
+  const baseFormula = die ? `1d20 + ${die}` : "1d20";
+
+  return openPreRollDialog({
+    actor,
+    label,
+    baseFormula,
+    baseSources: [
+      {
+        formula: "1d20",
+        label: "Базовый d20",
+        reason: "Проверка специализации"
+      },
+      ...(die ? [{
+        formula: die,
+        label,
+        reason: kindLabel
+      }] : [])
+    ]
+  });
+}
+
 function getSingleTarget() {
   const targets = Array.from(game.user?.targets ?? []);
   if (targets.length !== 1) return null;
@@ -577,11 +608,88 @@ function armorMetaHTML(target) {
   `;
 }
 
+function componentTraitIds(component, weapon, actor) {
+  const traits = new Set(component?.traitIds ?? []);
+
+  // Общие свойства источника Creature также считаются свойствами каждой
+  // части его урона. Это позволяет, например, Уязвимости: Демон реагировать
+  // на урон демона без дублирования свойства в каждом оружии.
+  for (const id of actor?.system?.creatureTraitIds ?? []) traits.add(id);
+
+  // Legacy: свойство Яд раньше могло стоять в общем списке свойств оружия.
+  for (const id of weapon?.system?.propertyIds ?? []) {
+    if (Object.hasOwn(CREATURE_TRAITS, id)) traits.add(id);
+  }
+
+  return Array.from(traits);
+}
+
+function weaponDamageComponents(actor, weapon, profile) {
+  const configured = Array.from(weapon?.system?.damageComponents?.[profile] ?? [])
+    .map(component => ({
+      formula: String(component?.formula ?? "").trim(),
+      damageType: ["physical", "magic"].includes(component?.damageType)
+        ? component.damageType
+        : "physical",
+      traitIds: componentTraitIds(component, weapon, actor)
+    }))
+    .filter(component => component.formula);
+
+  if (configured.length) return configured;
+
+  const formula = String(weapon?.system?.damage?.[profile] ?? "0").trim() || "0";
+  return [{
+    formula,
+    damageType: weapon?.system?.damageType === "magic" ? "magic" : "physical",
+    traitIds: componentTraitIds({ traitIds: [] }, weapon, actor)
+  }];
+}
+
+function plainDamageFormula(components) {
+  return (components ?? []).map(component => `(${component.formula})`).join(" + ") || "0";
+}
+
+function componentFlavor(component) {
+  const labels = [
+    component.damageType === "magic" ? "Магический" : "Физический",
+    ...(component.traitIds ?? []).map(id => CREATURE_TRAITS[id] ?? id)
+  ];
+  return Array.from(new Set(labels)).join(" • ");
+}
+
+function flavoredDamageFormula(components) {
+  const chunks = [];
+
+  for (const component of components ?? []) {
+    const parsed = new Roll(component.formula);
+    const flavor = componentFlavor(component);
+
+    const formula = parsed.terms.map(term => {
+      if (term?.operator) return term.operator;
+      const raw = String(term?.formula ?? term?.expression ?? "").trim();
+      if (!raw) return "";
+      return `${raw}[${flavor}]`;
+    }).filter(Boolean).join(" ");
+
+    chunks.push(formula);
+  }
+
+  return chunks.join(" + ") || "0";
+}
+
+function damageComponentMap(components) {
+  const map = new Map();
+  for (const component of components ?? []) {
+    map.set(componentFlavor(component), component);
+  }
+  return map;
+}
+
 function damageProfilesHTML(actor, weapon, degree, critical) {
   const profiles = [
-    ["partial", "Частичный", weapon.system?.damage?.partial],
-    ["success", "Успех", weapon.system?.damage?.success],
-    ["great", "Большой", weapon.system?.damage?.great]
+    ["partial", "Частичный"],
+    ["success", "Успех"],
+    ["great", "Большой"]
   ];
 
   return `
@@ -592,8 +700,9 @@ function damageProfilesHTML(actor, weapon, degree, critical) {
       </div>
 
       <div class="fast-nri-hit-damage-buttons">
-        ${profiles.map(([key, label, rawFormula]) => {
-          const formula = String(rawFormula ?? "").trim() || "0";
+        ${profiles.map(([key, label]) => {
+          const components = weaponDamageComponents(actor, weapon, key);
+          const formula = plainDamageFormula(components);
           const selected = degree === key;
 
           return `
@@ -777,14 +886,33 @@ function activeDieResults(term) {
  * - штрафы кубами урона не считаются;
  * - защита работает с уже выпавшими/фиксированными результатами.
  */
+function termDamageMeta(term, componentMap, fallback) {
+  const flavor = String(term?.flavor ?? term?.options?.flavor ?? "").trim();
+  const component = flavor ? componentMap.get(flavor) : null;
+
+  return {
+    damageType: component?.damageType ?? fallback.damageType ?? "physical",
+    traitIds: Array.from(new Set(component?.traitIds ?? fallback.traitIds ?? []))
+  };
+}
+
+/**
+ * Каждый выпавший куб и каждый положительный фиксированный бонус — отдельная
+ * часть урона. У части есть исходное значение, текущее значение после Защит,
+ * тип и собственные свойства.
+ */
 function buildDamageState(roll, {
-  damageType = "physical"
+  components = [],
+  damageType = "physical",
+  traitIds = []
 } = {}) {
   const parts = [];
   const penalties = [];
   let sign = 1;
   let supported = true;
   let sequence = 0;
+  const componentMap = damageComponentMap(components);
+  const fallback = { damageType, traitIds };
 
   for (const term of roll?.terms ?? []) {
     const operator = String(term?.operator ?? "").trim();
@@ -796,7 +924,9 @@ function buildDamageState(roll, {
       continue;
     }
 
+    const meta = termDamageMeta(term, componentMap, fallback);
     const dieResults = activeDieResults(term);
+
     if (dieResults) {
       for (const dieResult of dieResults) {
         const entry = {
@@ -804,17 +934,19 @@ function buildDamageState(roll, {
           kind: "die",
           faces: Number(term.faces),
           value: dieResult.value,
+          rolledValue: dieResult.value,
+          currentValue: dieResult.value,
           nativeLabel: dieResult.label,
           nativeResultCSS: dieResult.css,
-          damageType,
+          damageType: meta.damageType,
+          traitIds: meta.traitIds,
+          defenseZeroed: false,
+          immuneRemoved: false,
           removed: false
         };
 
         if (sign >= 0) parts.push(entry);
-        else penalties.push({
-          ...entry,
-          id: `penalty-${sequence++}`
-        });
+        else penalties.push({ ...entry, id: `penalty-${sequence++}` });
       }
       continue;
     }
@@ -827,7 +959,12 @@ function buildDamageState(roll, {
           kind: "fixed",
           faces: null,
           value: numeric,
-          damageType,
+          rolledValue: numeric,
+          currentValue: numeric,
+          damageType: meta.damageType,
+          traitIds: meta.traitIds,
+          defenseZeroed: false,
+          immuneRemoved: false,
           removed: false
         });
       } else if (numeric > 0 && sign < 0) {
@@ -836,7 +973,12 @@ function buildDamageState(roll, {
           kind: "fixed",
           faces: null,
           value: numeric,
-          damageType,
+          rolledValue: numeric,
+          currentValue: numeric,
+          damageType: meta.damageType,
+          traitIds: meta.traitIds,
+          defenseZeroed: false,
+          immuneRemoved: false,
           removed: false
         });
       }
@@ -874,11 +1016,11 @@ function recalculateDamageState(state) {
   }
 
   const positive = (next.parts ?? [])
-    .filter(part => !part.removed)
-    .reduce((sum, part) => sum + Math.max(0, Number(part.value) || 0), 0);
+    .filter(part => !part.immuneRemoved)
+    .reduce((sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0), 0);
 
   const penalty = (next.penalties ?? [])
-    .reduce((sum, part) => sum + Math.max(0, Number(part.value) || 0), 0);
+    .reduce((sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0), 0);
 
   next.currentBaseTotal = Math.max(0, positive - penalty);
   next.currentTotal = next.currentBaseTotal;
@@ -886,8 +1028,11 @@ function recalculateDamageState(state) {
 }
 
 function damagePartLabel(part) {
-  if (part?.kind === "die") return `d${part.faces} → ${part.value}`;
-  return `фикс. +${part?.value ?? 0}`;
+  const current = Number(part?.currentValue ?? part?.value) || 0;
+  const original = Number(part?.rolledValue ?? part?.value) || 0;
+  const valueText = current === original ? `${original}` : `${original} → ${current}`;
+  if (part?.kind === "die") return `d${part.faces}: ${valueText}`;
+  return `фикс. +${valueText}`;
 }
 
 function damagePartShortLabel(part) {
@@ -910,6 +1055,19 @@ function nativeDamageDieClasses(part) {
     .join(" ");
 }
 
+function damageTypeLabel(type) {
+  return type === "magic" ? "Магический" : "Физический";
+}
+
+function damagePartTraitsHTML(part) {
+  const labels = [
+    damageTypeLabel(part?.damageType),
+    ...(part?.traitIds ?? []).map(id => CREATURE_TRAITS[id] ?? id)
+  ];
+
+  return `<small class="fast-nri-damage-part-traits">${labels.map(esc).join(" · ")}</small>`;
+}
+
 function damagePartsHTML(state) {
   if (!state?.supported) {
     return `
@@ -921,80 +1079,66 @@ function damagePartsHTML(state) {
   }
 
   const parts = (state.parts ?? []).map(part => {
+    const current = Math.max(0, Number(part.currentValue ?? part.value) || 0);
+    const original = Math.max(0, Number(part.rolledValue ?? part.value) || 0);
+    const changed = current !== original;
+    const statusClass = part.immuneRemoved
+      ? "immune-removed"
+      : part.defenseZeroed
+        ? "defense-zeroed"
+        : "";
+
     if (part.kind === "die") {
-      const nativeLabel = part.nativeLabel ?? part.value;
+      const nativeLabel = part.nativeLabel ?? original;
       const nativeClasses = nativeDamageDieClasses(part);
 
       return `
-        <span
-          class="fast-nri-damage-native-part ${part.removed ? "removed" : ""}"
-          title="${part.removed ? "Удалено защитой" : escAttr(damagePartLabel(part))}"
-        >
-          <span class="fast-nri-damage-native-type">
-            ${esc(damagePartShortLabel(part))}:
+        <span class="fast-nri-damage-part-stack ${statusClass}" title="${escAttr(damagePartLabel(part))}">
+          <span class="fast-nri-damage-native-part">
+            <span class="fast-nri-damage-native-type">${esc(damagePartShortLabel(part))}:</span>
+            <span class="dice-tooltip fast-nri-inline-dice-tooltip">
+              <section class="tooltip-part">
+                <div class="dice">
+                  <ol class="dice-rolls fast-nri-damage-native-rolls">
+                    <li class="${escAttr(nativeClasses)}">${esc(nativeLabel)}</li>
+                  </ol>
+                </div>
+              </section>
+            </span>
+            ${changed ? `<strong class="fast-nri-damage-part-current">→ ${esc(current)}</strong>` : ""}
           </span>
-
-          <span class="dice-tooltip fast-nri-inline-dice-tooltip">
-            <section class="tooltip-part">
-              <div class="dice">
-                <ol class="dice-rolls fast-nri-damage-native-rolls">
-                  <li class="${escAttr(nativeClasses)}">
-                    ${esc(nativeLabel)}
-                  </li>
-                </ol>
-              </div>
-            </section>
-          </span>
+          ${damagePartTraitsHTML(part)}
         </span>
       `;
     }
 
     return `
-      <span
-        class="fast-nri-damage-fixed-part ${part.removed ? "removed" : ""}"
-        title="${part.removed ? "Удалено защитой" : escAttr(damagePartLabel(part))}"
-      >
-        <span class="fast-nri-damage-native-type">
-          ${esc(damagePartShortLabel(part))}:
+      <span class="fast-nri-damage-part-stack ${statusClass}" title="${escAttr(damagePartLabel(part))}">
+        <span class="fast-nri-damage-fixed-part">
+          <span class="fast-nri-damage-native-type">${esc(damagePartShortLabel(part))}:</span>
+          <strong class="fast-nri-fixed-result">${esc(original)}</strong>
+          ${changed ? `<strong class="fast-nri-damage-part-current">→ ${esc(current)}</strong>` : ""}
         </span>
-        <strong class="fast-nri-fixed-result">
-          ${esc(part.value)}
-        </strong>
+        ${damagePartTraitsHTML(part)}
       </span>
     `;
   }).join("");
 
   const penalty = (state.penalties ?? [])
-    .reduce((sum, part) => sum + Math.max(0, Number(part.value) || 0), 0);
+    .reduce((sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0), 0);
 
   const total = Math.max(0, Number(state.currentTotal) || 0);
 
   return `
     <section class="fast-nri-damage-parts-block">
       <div class="fast-nri-damage-parts-title">Кубы урона</div>
-
       <div class="fast-nri-damage-equation">
         <div class="fast-nri-damage-parts">
           ${parts || `<span class="fast-nri-roll-empty">Нет положительных кубов урона.</span>`}
         </div>
-
-        ${penalty > 0 ? `
-          <span
-            class="fast-nri-damage-adjustment"
-            title="Штраф применяется после Защитных действий"
-          >
-            −${esc(penalty)}
-          </span>
-        ` : ""}
-
+        ${penalty > 0 ? `<span class="fast-nri-damage-adjustment" title="Штраф применяется после Защитных действий">−${esc(penalty)}</span>` : ""}
         <span class="fast-nri-damage-equation-arrow" aria-hidden="true">→</span>
-
-        <strong
-          class="fast-nri-damage-equation-total"
-          title="Текущий итоговый урон"
-        >
-          ${esc(total)}
-        </strong>
+        <strong class="fast-nri-damage-equation-total" title="Текущий итоговый урон">${esc(total)}</strong>
       </div>
     </section>
   `;
@@ -1030,7 +1174,7 @@ function defenseSummaryHTML(state) {
       </small>
 
       ${removed ? `
-        <div>Удалён куб: <strong>${esc(damagePartLabel(removed))}</strong></div>
+        <div>Обнулён куб: <strong>${esc(damagePartLabel(removed))}</strong></div>
       ` : ""}
 
       ${beforeDegree && afterDegree && beforeDegree !== afterDegree ? `
@@ -1096,6 +1240,7 @@ function damageCardHTML({
           class="fast-nri-apply-damage-button"
           data-fast-nri-apply-damage
           data-damage="${escAttr(baseDamage)}"
+          data-multiplier="1"
           ${state.fullCancel ? "disabled" : ""}
           title="${state.fullCancel
             ? "Действие полностью отменено"
@@ -1111,6 +1256,7 @@ function damageCardHTML({
           class="fast-nri-apply-damage-button fast-nri-apply-damage-x2"
           data-fast-nri-apply-damage
           data-damage="${escAttr(doubledDamage)}"
+          data-multiplier="2"
           ${state.fullCancel ? "disabled" : ""}
           title="${state.fullCancel
             ? "Действие полностью отменено"
@@ -1128,16 +1274,16 @@ function damageCardHTML({
 }
 
 async function chooseDamagePart(parts, mode = "largest") {
-  const active = (parts ?? []).filter(part => !part.removed);
+  const active = (parts ?? []).filter(part => !part.immuneRemoved && (Number(part.currentValue ?? part.value) || 0) > 0);
   if (!active.length) return null;
 
-  const values = active.map(part => Number(part.value) || 0);
+  const values = active.map(part => Number(part.currentValue ?? part.value) || 0);
   const targetValue = mode === "smallest"
     ? Math.min(...values)
     : Math.max(...values);
 
   const tied = active.filter(
-    part => (Number(part.value) || 0) === targetValue
+    part => (Number(part.currentValue ?? part.value) || 0) === targetValue
   );
 
   if (tied.length === 1) return tied[0];
@@ -1334,10 +1480,10 @@ export async function rollDamageFromChat(element) {
   const actorUuid = element?.dataset?.actorUuid;
   const itemUuid = element?.dataset?.itemUuid;
   const profile = element?.dataset?.profile;
-  const formula = String(element?.dataset?.formula ?? "").trim();
+  const fallbackFormula = String(element?.dataset?.formula ?? "").trim();
   const critical = element?.dataset?.critical === "true";
 
-  if (!actorUuid || !itemUuid || !formula) return;
+  if (!actorUuid || !itemUuid) return;
 
   const actor = await fromUuid(actorUuid);
   const weapon = await fromUuid(itemUuid);
@@ -1346,6 +1492,10 @@ export async function rollDamageFromChat(element) {
     ui.notifications.error("Не удалось найти персонажа или оружие для броска урона.");
     return;
   }
+
+  const components = weaponDamageComponents(actor, weapon, profile);
+  const formula = flavoredDamageFormula(components) || fallbackFormula || "0";
+  const displayFormula = plainDamageFormula(components) || fallbackFormula || "0";
 
   const attackMessage = chatMessageFromElement(element);
   const attackTotal = finiteNumberOrNull(
@@ -1371,7 +1521,7 @@ export async function rollDamageFromChat(element) {
     actor,
     label: `Урон: ${weapon.name} — ${labels[profile] ?? profile}`,
     baseFormula: formula,
-    baseSources: [{ formula, label: `${weapon.name}: ${labels[profile] ?? profile}`, reason: "Профиль урона" }],
+    baseSources: [{ formula: displayFormula, label: `${weapon.name}: ${labels[profile] ?? profile}`, reason: "Профиль урона" }],
     showDC: false,
     contextHTML: critical ? `
       <section class="fast-nri-roll-context fast-nri-roll-context-critical">
@@ -1387,7 +1537,9 @@ export async function rollDamageFromChat(element) {
   if (!result) return null;
 
   let damageState = buildDamageState(result.roll, {
-    damageType: weapon.system?.damageType || "physical"
+    components,
+    damageType: weapon.system?.damageType || "physical",
+    traitIds: componentTraitIds({ traitIds: [] }, weapon, actor)
   });
 
   // Нажатый профиль является явным подтверждением игроком исходной
@@ -1598,10 +1750,17 @@ export async function selfDefenseFromChat(element) {
     removedPart = selectedRemovalPart;
 
     if (removedPart) {
-      // Новая карточка получает уже новый набор кубов.
-      // Исходную карточку и её damageState не изменяем.
-      damageState.parts = damageState.parts.filter(
-        part => part.id !== removedPart.id
+      // Защита меняет числовой результат части на 0, но НЕ стирает её тип
+      // и свойства. Они продолжают существовать для последующей проверки
+      // Устойчивости/Уязвимости, пока Иммунитет не удалит эту часть целиком.
+      damageState.parts = damageState.parts.map(part => part.id === removedPart.id
+        ? {
+            ...part,
+            currentValue: 0,
+            defenseZeroed: true,
+            removed: false
+          }
+        : part
       );
     }
 
@@ -1740,6 +1899,176 @@ function controlledSingleToken() {
   return controlled[0];
 }
 
+function partMatchIds(part) {
+  return new Set([
+    part?.damageType === "magic" ? "magic" : "physical",
+    ...(part?.traitIds ?? [])
+  ]);
+}
+
+function actorResistanceEntries(actor) {
+  const selected = new Set(actor?.system?.resistanceIds ?? []);
+  const legacy = {
+    universal: Number(actor?.system?.resistances?.universal) || 0,
+    physical: Number(actor?.system?.resistances?.physical) || 0,
+    magic: Number(actor?.system?.resistances?.magic) || 0
+  };
+
+  for (const [id, value] of Object.entries(legacy)) {
+    if (value > 0) selected.add(id);
+  }
+
+  return Array.from(selected).map(id => ({
+    id,
+    label: RESISTANCE_TRAITS[id] ?? CREATURE_TRAITS[id] ?? id,
+    value: Math.max(0, Number(actor?.system?.resistanceValues?.[id]) || legacy[id] || 0)
+  })).filter(entry => entry.value > 0);
+}
+
+function actorVulnerabilityEntries(actor) {
+  return Array.from(actor?.system?.vulnerabilityIds ?? []).map(id => ({
+    id,
+    label: CREATURE_TRAITS[id] ?? id,
+    value: Math.max(0, Number(actor?.system?.vulnerabilityValues?.[id]) || 0)
+  })).filter(entry => entry.value > 0);
+}
+
+export function resolveDamageAgainstActor(state, actor, multiplier = 1) {
+  const safeMultiplier = multiplier === 2 ? 2 : 1;
+  const sourceParts = (state?.parts ?? []).map(part => foundry.utils.deepClone(part));
+
+  // Полная отмена Защитой прекращает нанесение урона целиком.
+  // Никакие свойства старых частей не должны заново оживить урон
+  // через Уязвимость при нажатии «Нанести».
+  if (state?.fullCancel) {
+    return {
+      multiplier: safeMultiplier,
+      sourceParts,
+      survivingParts: [],
+      immuneParts: [],
+      activeMatchIds: [],
+      partsTotal: 0,
+      penalty: 0,
+      afterPenalty: 0,
+      afterMultiplier: 0,
+      matchingResistances: [],
+      matchingVulnerabilities: [],
+      resistance: null,
+      vulnerability: null,
+      finalDamage: 0,
+      fullCancel: true
+    };
+  }
+
+  const immunityIds = new Set(actor?.system?.immunityIds ?? []);
+  const survivingParts = [];
+  const immuneParts = [];
+
+  for (const part of sourceParts) {
+    const matches = partMatchIds(part);
+    const immunityId = Array.from(immunityIds).find(id => matches.has(id)) ?? null;
+
+    if (immunityId) {
+      part.immuneRemoved = true;
+      part.immunityId = immunityId;
+      part.currentValue = 0;
+      immuneParts.push(part);
+    } else {
+      part.immuneRemoved = false;
+      survivingParts.push(part);
+    }
+  }
+
+  // После Иммунитетов НЕ создаются отдельные группы урона.
+  // Все оставшиеся части формируют одно нанесение:
+  // 1) их значения складываются в одну сумму;
+  // 2) их типы и свойства объединяются в один набор совпадений;
+  // 3) на ВСЁ нанесение выбирается ровно одна максимальная Устойчивость
+  //    и ровно одна максимальная Уязвимость.
+  //
+  // Часть с currentValue = 0 после Самозащиты остаётся здесь и сохраняет
+  // свои тип/свойства. Поэтому она может активировать Устойчивость или
+  // Уязвимость. Только Иммунитет удаляет часть и её свойства окончательно.
+  const activeMatchIds = new Set();
+  for (const part of survivingParts) {
+    for (const id of partMatchIds(part)) activeMatchIds.add(id);
+  }
+
+  const matchingResistances = actorResistanceEntries(actor)
+    .filter(entry => entry.id === "universal"
+      ? survivingParts.length > 0
+      : activeMatchIds.has(entry.id))
+    .sort((a, b) => b.value - a.value);
+
+  const matchingVulnerabilities = actorVulnerabilityEntries(actor)
+    .filter(entry => activeMatchIds.has(entry.id))
+    .sort((a, b) => b.value - a.value);
+
+  const resistance = matchingResistances[0] ?? null;
+  const vulnerability = matchingVulnerabilities[0] ?? null;
+
+  const partsTotal = survivingParts.reduce(
+    (sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0),
+    0
+  );
+
+  const penalty = (state?.penalties ?? []).reduce(
+    (sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0),
+    0
+  );
+
+  const afterPenalty = Math.max(0, partsTotal - penalty);
+  const afterMultiplier = afterPenalty * safeMultiplier;
+
+  // Устойчивость и Уязвимость применяются ОДИН РАЗ ко всей сумме
+  // оставшегося нанесения, а не отдельно к кубам, типам или группам.
+  //
+  // Устойчивость сначала снижает сумму минимум до 0.
+  // Уязвимость применяется после неё и может снова создать положительный
+  // урон, даже если Защиты/Устойчивость снизили числовую сумму до 0.
+  const afterResistance = Math.max(0, afterMultiplier - (resistance?.value ?? 0));
+  const finalDamage = Math.max(0, afterResistance + (vulnerability?.value ?? 0));
+
+  return {
+    multiplier: safeMultiplier,
+    sourceParts,
+    survivingParts,
+    immuneParts,
+    activeMatchIds: Array.from(activeMatchIds),
+    partsTotal,
+    penalty,
+    afterPenalty,
+    afterMultiplier,
+    matchingResistances,
+    matchingVulnerabilities,
+    resistance,
+    vulnerability,
+    finalDamage,
+    fullCancel: false
+  };
+}
+
+function damageResolutionHTML(resolution, { tempAbsorbed = 0, hpLost = 0 } = {}) {
+  const immuneRows = (resolution?.immuneParts ?? []).map(part => {
+    const immunityId = part.immunityId;
+    const label = CREATURE_TRAITS[immunityId] ?? immunityId;
+    return `<div>Иммунитет: <strong>${esc(label)}</strong> — ${esc(damagePartLabel(part))} удалён</div>`;
+  }).join("");
+
+  return `
+    <div class="fast-nri-damage-resolution">
+      ${immuneRows}
+      <div>После Защит и Иммунитетов: <strong>${esc(resolution.afterPenalty)}</strong></div>
+      ${resolution.multiplier === 2 ? `<div>Крит ×2: <strong>${esc(resolution.afterMultiplier)}</strong></div>` : ""}
+      ${resolution.resistance ? `<div>Лучшая Устойчивость на всё нанесение: <strong>${esc(resolution.resistance.label)} −${esc(resolution.resistance.value)}</strong></div>` : ""}
+      ${resolution.vulnerability ? `<div>Лучшая Уязвимость на всё нанесение: <strong>${esc(resolution.vulnerability.label)} +${esc(resolution.vulnerability.value)}</strong></div>` : ""}
+      <div>Итоговый урон: <strong>${esc(resolution.finalDamage)}</strong></div>
+      ${tempAbsorbed > 0 ? `<div>Временные HP: <strong>−${esc(tempAbsorbed)}</strong></div>` : ""}
+      ${hpLost > 0 ? `<div>Обычные HP: <strong>−${esc(hpLost)}</strong></div>` : ""}
+    </div>
+  `;
+}
+
 function appliedDamageMessageContent({
   tokenName,
   damage,
@@ -1747,6 +2076,11 @@ function appliedDamageMessageContent({
   actorUuid,
   previousHp,
   afterHp,
+  previousTemp = 0,
+  afterTemp = 0,
+  appliedToHp = 0,
+  appliedToTemp = 0,
+  resolutionHTML = "",
   undone = false
 }) {
   return `
@@ -1759,6 +2093,8 @@ function appliedDamageMessageContent({
         </span>
       </div>
 
+      ${resolutionHTML}
+
       ${undone ? "" : `
         <button
           type="button"
@@ -1768,6 +2104,10 @@ function appliedDamageMessageContent({
           data-actor-uuid="${escAttr(actorUuid)}"
           data-previous-hp="${escAttr(previousHp)}"
           data-after-hp="${escAttr(afterHp)}"
+          data-previous-temp="${escAttr(previousTemp)}"
+          data-after-temp="${escAttr(afterTemp)}"
+          data-applied-to-hp="${escAttr(appliedToHp)}"
+          data-applied-to-temp="${escAttr(appliedToTemp)}"
           data-damage="${escAttr(damage)}"
           title="Отменить нанесение урона"
           aria-label="Отменить нанесение урона"
@@ -1780,12 +2120,8 @@ function appliedDamageMessageContent({
 }
 
 export async function applyDamageFromChat(element) {
-  const requestedDamage = Number(element?.dataset?.damage);
-
-  if (!Number.isFinite(requestedDamage) || requestedDamage < 0) {
-    ui.notifications.error("Не удалось определить величину урона.");
-    return null;
-  }
+  const fallbackDamage = Number(element?.dataset?.damage);
+  const multiplier = Number(element?.dataset?.multiplier) === 2 ? 2 : 1;
 
   const token = controlledSingleToken();
   if (!token) return null;
@@ -1796,20 +2132,56 @@ export async function applyDamageFromChat(element) {
     return null;
   }
 
+  const sourceMessage = chatMessageFromElement(element);
+  const damageState = sourceMessage?.getFlag("fast-nri", "damageState") ?? null;
+
+  let resolution;
+  if (damageState?.supported) {
+    resolution = resolveDamageAgainstActor(damageState, actor, multiplier);
+  } else {
+    if (!Number.isFinite(fallbackDamage) || fallbackDamage < 0) {
+      ui.notifications.error("Не удалось определить величину урона.");
+      return null;
+    }
+
+    resolution = {
+      multiplier,
+      sourceParts: [],
+      survivingParts: [],
+      immuneParts: [],
+      activeMatchIds: [],
+      partsTotal: fallbackDamage / multiplier,
+      penalty: 0,
+      afterPenalty: fallbackDamage / multiplier,
+      afterMultiplier: fallbackDamage,
+      matchingResistances: [],
+      matchingVulnerabilities: [],
+      resistance: null,
+      vulnerability: null,
+      finalDamage: fallbackDamage,
+      fullCancel: false
+    };
+  }
+
   const previousHp = Number(actor.system?.hp?.value);
+  const previousTemp = Math.max(0, Number(actor.system?.hp?.temp) || 0);
+
   if (!Number.isFinite(previousHp)) {
     ui.notifications.error("У выделенного токена нет корректного значения HP.");
     return null;
   }
 
-  // HP никогда не может опуститься ниже 0.
-  const afterHp = Math.max(0, previousHp - requestedDamage);
-
-  // Фактически снятое HP. Например, при 5 HP и 12 урона снимается только 5 HP.
-  const appliedDamage = previousHp - afterHp;
+  const finalDamage = Math.max(0, Number(resolution.finalDamage) || 0);
+  const appliedToTemp = Math.min(previousTemp, finalDamage);
+  const remainingAfterTemp = Math.max(0, finalDamage - appliedToTemp);
+  const afterTemp = Math.max(0, previousTemp - appliedToTemp);
+  const afterHp = Math.max(0, previousHp - remainingAfterTemp);
+  const appliedToHp = previousHp - afterHp;
+  const appliedDamage = appliedToTemp + appliedToHp;
 
   try {
     await actor.update({
+      "system.hp.temp": afterTemp,
       "system.hp.value": afterHp
     });
   } catch (error) {
@@ -1821,14 +2193,23 @@ export async function applyDamageFromChat(element) {
   const tokenUuid = token.document?.uuid ?? "";
   const actorUuid = actor.uuid;
   const tokenName = token.name || actor.name || "Цель";
+  const resolutionHTML = damageResolutionHTML(resolution, {
+    tempAbsorbed: appliedToTemp,
+    hpLost: appliedToHp
+  });
 
   const content = appliedDamageMessageContent({
     tokenName,
-    damage: requestedDamage,
+    damage: finalDamage,
     tokenUuid,
     actorUuid,
     previousHp,
-    afterHp
+    afterHp,
+    previousTemp,
+    afterTemp,
+    appliedToHp,
+    appliedToTemp,
+    resolutionHTML
   });
 
   const message = await ChatMessage.create({
@@ -1840,10 +2221,16 @@ export async function applyDamageFromChat(element) {
         tokenUuid,
         actorUuid,
         tokenName,
-        requestedDamage,
+        requestedDamage: finalDamage,
         appliedDamage,
+        appliedToHp,
+        appliedToTemp,
         previousHp,
         afterHp,
+        previousTemp,
+        afterTemp,
+        multiplier,
+        resolution,
         undone: false
       }
     }
@@ -1853,10 +2240,15 @@ export async function applyDamageFromChat(element) {
     message,
     token,
     actor,
-    requestedDamage,
+    requestedDamage: finalDamage,
     appliedDamage,
+    appliedToHp,
+    appliedToTemp,
     previousHp,
-    afterHp
+    afterHp,
+    previousTemp,
+    afterTemp,
+    resolution
   };
 }
 
@@ -1910,6 +2302,11 @@ export async function undoAppliedDamage(element) {
         ),
         previousHp: Number(message.getFlag("fast-nri", "previousHp")),
         afterHp: Number(message.getFlag("fast-nri", "afterHp")),
+        previousTemp: Number(message.getFlag("fast-nri", "previousTemp")) || 0,
+        afterTemp: Number(message.getFlag("fast-nri", "afterTemp")) || 0,
+        appliedToHp: Number(message.getFlag("fast-nri", "appliedToHp")) || Number(message.getFlag("fast-nri", "appliedDamage")) || 0,
+        appliedToTemp: Number(message.getFlag("fast-nri", "appliedToTemp")) || 0,
+        resolution: message.getFlag("fast-nri", "resolution") ?? null,
         undone: Boolean(message.getFlag("fast-nri", "undone"))
       }
     : {
@@ -1920,6 +2317,11 @@ export async function undoAppliedDamage(element) {
         appliedDamage: Number(element?.dataset?.damage),
         previousHp: Number(element?.dataset?.previousHp),
         afterHp: Number(element?.dataset?.afterHp),
+        previousTemp: Number(element?.dataset?.previousTemp) || 0,
+        afterTemp: Number(element?.dataset?.afterTemp) || 0,
+        appliedToHp: Number(element?.dataset?.appliedToHp) || Number(element?.dataset?.damage) || 0,
+        appliedToTemp: Number(element?.dataset?.appliedToTemp) || 0,
+        resolution: null,
         undone: false
       };
 
@@ -1940,32 +2342,26 @@ export async function undoAppliedDamage(element) {
   }
 
   const currentHp = Number(actor.system?.hp?.value);
+  const currentTemp = Math.max(0, Number(actor.system?.hp?.temp) || 0);
   if (!Number.isFinite(currentHp)) {
     ui.notifications.error("Не удалось определить текущее HP.");
     return null;
   }
 
   const maxHp = Number(actor.system?.hp?.max);
-
-  // Отмена возвращает ровно то HP, которое сняло это конкретное сообщение.
-  // Так последующие урон/лечение не перезаписываются возвратом старого состояния.
-  let restoredHp = currentHp + stored.appliedDamage;
-
-  // Если максимальное HP задано корректно, отмена не должна поднять HP выше максимума.
-  if (Number.isFinite(maxHp)) {
-    restoredHp = Math.min(maxHp, restoredHp);
-  }
-
+  let restoredHp = currentHp + Math.max(0, Number(stored.appliedToHp) || 0);
+  if (Number.isFinite(maxHp)) restoredHp = Math.min(maxHp, restoredHp);
   restoredHp = Math.max(0, restoredHp);
 
-  // Фактическое изменение HP при отмене. Если после исходного урона цель
-  // уже лечили и max HP ограничивает возврат, floaty-text должен показывать
-  // именно реально возвращённое HP, а не исходную величину события.
-  const restoredAmount = Math.max(0, restoredHp - currentHp);
+  const restoredTemp = currentTemp + Math.max(0, Number(stored.appliedToTemp) || 0);
+  const restoredHpAmount = Math.max(0, restoredHp - currentHp);
+  const restoredTempAmount = Math.max(0, restoredTemp - currentTemp);
+  const restoredAmount = restoredHpAmount + restoredTempAmount;
 
   try {
     await actor.update({
-      "system.hp.value": restoredHp
+      "system.hp.value": restoredHp,
+      "system.hp.temp": restoredTemp
     });
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка отмены урона", error);
@@ -1985,6 +2381,14 @@ export async function undoAppliedDamage(element) {
       actorUuid: stored.actorUuid,
       previousHp: stored.previousHp,
       afterHp: stored.afterHp,
+      previousTemp: stored.previousTemp,
+      afterTemp: stored.afterTemp,
+      appliedToHp: stored.appliedToHp,
+      appliedToTemp: stored.appliedToTemp,
+      resolutionHTML: stored.resolution ? damageResolutionHTML(stored.resolution, {
+        tempAbsorbed: stored.appliedToTemp,
+        hpLost: stored.appliedToHp
+      }) : "",
       undone: true
     });
 
@@ -1993,7 +2397,10 @@ export async function undoAppliedDamage(element) {
         content,
         "flags.fast-nri.undone": true,
         "flags.fast-nri.restoredHp": restoredHp,
-        "flags.fast-nri.restoredAmount": restoredAmount
+        "flags.fast-nri.restoredAmount": restoredAmount,
+        "flags.fast-nri.restoredHpAmount": restoredHpAmount,
+        "flags.fast-nri.restoredTempAmount": restoredTempAmount,
+        "flags.fast-nri.restoredTemp": restoredTemp
       });
     } catch (error) {
       console.warn("Быстрая НРИ | HP возвращены, но сообщение не удалось обновить", error);

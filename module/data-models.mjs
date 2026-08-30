@@ -1,3 +1,5 @@
+import { CREATURE_TRAIT_IDS, RESISTANCE_TRAIT_IDS } from "./config.mjs";
+
 const {
   ArrayField,
   BooleanField,
@@ -43,6 +45,25 @@ const stringArray = () =>
     }
   );
 
+const traitValueSchema = (ids) =>
+  new SchemaField(
+    Object.fromEntries(ids.map(id => [id, integer(0)]))
+  );
+
+const damageComponentArray = () =>
+  new ArrayField(
+    new SchemaField({
+      formula: text("1d6"),
+      damageType: text("physical"),
+      traitIds: stringArray()
+    }),
+    {
+      required: true,
+      nullable: false,
+      initial: []
+    }
+  );
+
 function skillsSchema() {
   return new SchemaField({
     acrobatics: text(""),
@@ -78,7 +99,7 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
     raceName: text(""),
 
     // Базовые параметры, которые пока только хранятся и показываются в карточке.
-    size: text("1 клетка"),
+    size: text("medium"),
     initiativeBonus: integer(0),
     deathCounter: integer(0),
 
@@ -101,10 +122,26 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
       magic: integer(0)
     }),
 
-    // Пока свободный текст: формальный формат Уязвимостей/Иммунитетов
-    // будет определён отдельно. Поля есть у персонажей и существ.
+    // Старые текстовые поля 0.5.12 оставлены как резерв для безопасного
+    // чтения уже созданных Actor, но новый UI использует стабильные ID.
     vulnerabilities: text(""),
     immunities: text(""),
+
+    // Свойства существа показываются только Creature, но поле существует
+    // в общей схеме, чтобы структура Actor оставалась единообразной.
+    creatureTraitIds: stringArray(),
+
+    // Устойчивости и Уязвимости — числовые значения по признакам.
+    // Из всех совпавших за одно нанесение применяется только наибольшее значение.
+    resistanceIds: stringArray(),
+    resistanceValues: traitValueSchema(RESISTANCE_TRAIT_IDS),
+
+    vulnerabilityIds: stringArray(),
+    vulnerabilityValues: traitValueSchema(CREATURE_TRAIT_IDS),
+
+    // Иммунитет не имеет числового значения: совпавший признак удаляет
+    // конкретную часть урона из дальнейшего расчёта.
+    immunityIds: stringArray(),
 
     speed: integer(speed),
 
@@ -201,6 +238,16 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
         partial: text("0"),
         success: text("0"),
         great: text("0")
+      }),
+
+      // Состав каждого профиля урона. Каждый компонент получает собственный
+      // тип урона и набор свойств; каждый выпавший куб/фиксированный бонус
+      // внутри компонента наследует эти данные.
+      // Если массив профиля пуст, используется legacy system.damage.*.
+      damageComponents: new SchemaField({
+        partial: damageComponentArray(),
+        success: damageComponentArray(),
+        great: damageComponentArray()
       })
     };
   }

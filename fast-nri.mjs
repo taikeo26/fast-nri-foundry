@@ -5,6 +5,10 @@ import {
   registerTokenDefaultSettings
 } from "./module/token-defaults.mjs";
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
+import {
+  migrateDamageTraitsOnce,
+  registerDataMigrationSettings
+} from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
 
@@ -26,6 +30,7 @@ Hooks.once("init", () => {
   console.log("Быстрая НРИ 6.2 | Инициализация системы");
 
   registerTokenDefaultSettings();
+  registerDataMigrationSettings();
   activateTokenDefaults();
 
   CONFIG.Actor.dataModels = {
@@ -81,6 +86,7 @@ Hooks.once("ready", async () => {
   activateChatInteractions(document);
   activateAbilityChatInteractions(document);
   activateHpFeedback();
+  await migrateDamageTraitsOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
   ui.notifications.info("Быстрая НРИ 6.2 загружена");

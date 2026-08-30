@@ -60,15 +60,88 @@
       </div>
 
       <div class="fast-nri-three">
-        <label>Частичный
+        <label>Частичный — базовая формула
           <input type="text" name="system.damage.partial" value="{{system.damage.partial}}" />
         </label>
-        <label>Успех
+        <label>Успех — базовая формула
           <input type="text" name="system.damage.success" value="{{system.damage.success}}" />
         </label>
-        <label>Большой
+        <label>Большой — базовая формула
           <input type="text" name="system.damage.great" value="{{system.damage.great}}" />
         </label>
+      </div>
+
+      <div class="fast-nri-damage-composition">
+        <div class="fast-nri-damage-composition-heading">
+          <h3>Состав урона</h3>
+          <small>Если профиль содержит компоненты ниже, они заменяют его базовую формулу.</small>
+        </div>
+
+        {{#each damageComponentProfiles as |profile|}}
+          <section class="fast-nri-damage-component-profile">
+            <div class="fast-nri-damage-component-profile-heading">
+              <strong>{{profile.label}}</strong>
+              <button
+                type="button"
+                data-action="addDamageComponent"
+                data-profile="{{profile.id}}"
+                title="Добавить компонент урона"
+              >
+                <i class="fa-solid fa-plus"></i>
+                Компонент
+              </button>
+            </div>
+
+            {{#if profile.components.length}}
+              <div class="fast-nri-damage-component-list">
+                {{#each profile.components as |component|}}
+                  <div class="fast-nri-damage-component-row">
+                    <input
+                      type="text"
+                      value="{{component.formula}}"
+                      data-fast-nri-damage-component-field="formula"
+                      data-profile="{{profile.id}}"
+                      data-index="{{component.index}}"
+                      title="Формула компонента"
+                    />
+
+                    <select
+                      data-fast-nri-damage-component-field="damageType"
+                      data-profile="{{profile.id}}"
+                      data-index="{{component.index}}"
+                      title="Тип урона компонента"
+                    >
+                      <option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option>
+                      <option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option>
+                    </select>
+
+                    <multi-select
+                      data-fast-nri-damage-component-field="traitIds"
+                      data-profile="{{profile.id}}"
+                      data-index="{{component.index}}"
+                      title="Свойства этого компонента"
+                    >
+                      {{selectOptions ../../damageTraitChoices selected=component.traitIds}}
+                    </multi-select>
+
+                    <button
+                      type="button"
+                      class="fast-nri-damage-component-remove"
+                      data-action="removeDamageComponent"
+                      data-profile="{{profile.id}}"
+                      data-index="{{component.index}}"
+                      title="Удалить компонент"
+                    >
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                {{/each}}
+              </div>
+            {{else}}
+              <small class="fast-nri-help">Используется базовая формула профиля и общий тип урона оружия.</small>
+            {{/if}}
+          </section>
+        {{/each}}
       </div>
     </section>
   {{/if}}

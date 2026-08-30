@@ -2054,3 +2054,208 @@ body.theme-dark .fast-nri-hp-line label {
     grid-column: auto;
   }
 }
+
+
+/* ========================================================= */
+/* v0.5.13 - Creature traits, multi-selects, specializations  */
+/* ========================================================= */
+
+.fast-nri-actor-traits {
+  align-items: start;
+}
+
+.fast-nri-actor-traits .fast-nri-property-field,
+.fast-nri-section > .fast-nri-property-field {
+  min-width: 0;
+}
+
+.fast-nri-actor-traits multi-select,
+.fast-nri-section > .fast-nri-property-field multi-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.fast-nri-specialization-row {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 1.15fr);
+}
+
+.fast-nri-specialization-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.fast-nri-specialization-control input {
+  min-width: 0;
+  width: 100%;
+}
+
+.fast-nri-fixed-die-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid var(--fnri-border);
+  border-radius: 5px;
+  background: rgba(127, 127, 127, 0.075);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.fast-nri-vitals-expanded select[name="system.size"] {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .fast-nri-specialization-row {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .fast-nri-specialization-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ========================================================= */
+/* v0.5.14 - Per-part damage + mitigation pipeline            */
+/* ========================================================= */
+
+.fast-nri-trait-value-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.fast-nri-trait-value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 5px;
+}
+
+.fast-nri-trait-value-row input {
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+}
+
+.fast-nri-damage-composition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--fnri-border);
+}
+
+.fast-nri-damage-composition-heading h3 {
+  margin: 0;
+}
+
+.fast-nri-damage-component-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  border-radius: 6px;
+}
+
+.fast-nri-damage-component-profile-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fast-nri-damage-component-profile-heading button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.fast-nri-damage-component-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fast-nri-damage-component-row {
+  display: grid;
+  grid-template-columns: 110px 110px minmax(180px, 1fr) 34px;
+  align-items: center;
+  gap: 5px;
+}
+
+.fast-nri-damage-component-row > * {
+  min-width: 0;
+}
+
+.fast-nri-damage-component-remove {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.fast-nri-damage-part-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 3px;
+  border-radius: 5px;
+}
+
+.fast-nri-damage-part-traits {
+  max-width: 110px;
+  font-size: 0.58rem;
+  line-height: 1.1;
+  text-align: center;
+  opacity: 0.72;
+}
+
+.fast-nri-damage-part-current {
+  margin-left: 2px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.fast-nri-damage-part-stack.defense-zeroed {
+  background: rgba(75, 105, 145, 0.08);
+}
+
+.fast-nri-damage-part-stack.immune-removed {
+  opacity: 0.38;
+  text-decoration: line-through;
+}
+
+.fast-nri-damage-resolution {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+  padding: 5px 7px;
+  border-left: 3px solid rgba(120, 80, 80, 0.55);
+  background: rgba(127, 127, 127, 0.045);
+  font-size: 0.74rem;
+}
+
+@media (max-width: 620px) {
+  .fast-nri-damage-component-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fast-nri-damage-component-row multi-select {
+    grid-column: 1 / -1;
+  }
+}

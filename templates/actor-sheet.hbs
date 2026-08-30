@@ -90,7 +90,10 @@
 
         <div class="fast-nri-card">
           <h3>Размер</h3>
-          <input type="text" name="system.size" value="{{system.size}}" />
+          <select name="system.size">
+            <option value="medium" {{#unless (eq system.size "large")}}selected{{/unless}}>Средний</option>
+            <option value="large" {{#if (eq system.size "large")}}selected{{/if}}>Большой</option>
+          </select>
         </div>
 
         {{#unless isCreature}}
@@ -143,58 +146,74 @@
 
       <section class="fast-nri-section">
         <h2>Устойчивости</h2>
-        <div class="fast-nri-three fast-nri-resistances">
-          <label>Универсальная
-            <input type="number" name="system.resistances.universal" value="{{system.resistances.universal}}" />
-          </label>
-          <label>Физическая
-            <input type="number" name="system.resistances.physical" value="{{system.resistances.physical}}" />
-          </label>
-          <label>Магическая
-            <input type="number" name="system.resistances.magic" value="{{system.resistances.magic}}" />
-          </label>
-        </div>
+        <label class="fast-nri-property-field">
+          <multi-select name="system.resistanceIds">
+            {{selectOptions resistanceChoices selected=selectedResistanceIds}}
+          </multi-select>
+        </label>
+
+        {{#if resistanceRows.length}}
+          <div class="fast-nri-trait-value-list">
+            {{#each resistanceRows as |row|}}
+              <label class="fast-nri-trait-value-row">
+                <span>{{row.label}}</span>
+                <input
+                  type="number"
+                  min="0"
+                  name="system.resistanceValues.{{row.id}}"
+                  value="{{row.value}}"
+                />
+              </label>
+            {{/each}}
+          </div>
+        {{/if}}
       </section>
+
+      {{#if isCreature}}
+        <section class="fast-nri-section">
+          <h2>Свойства существа</h2>
+          <label class="fast-nri-property-field">
+            <multi-select name="system.creatureTraitIds">
+              {{selectOptions traitChoices selected=system.creatureTraitIds}}
+            </multi-select>
+          </label>
+        </section>
+      {{/if}}
 
       <section class="fast-nri-section">
         <h2>Уязвимости и иммунитеты</h2>
-        <div class="fast-nri-two fast-nri-traits-text">
-          <label>
-            Уязвимости
-            <textarea name="system.vulnerabilities" rows="2" placeholder="Нет">{{system.vulnerabilities}}</textarea>
-          </label>
-          <label>
+        <div class="fast-nri-two fast-nri-actor-traits">
+          <div class="fast-nri-property-field">
+            <label>Уязвимости</label>
+            <multi-select name="system.vulnerabilityIds">
+              {{selectOptions traitChoices selected=system.vulnerabilityIds}}
+            </multi-select>
+
+            {{#if vulnerabilityRows.length}}
+              <div class="fast-nri-trait-value-list">
+                {{#each vulnerabilityRows as |row|}}
+                  <label class="fast-nri-trait-value-row">
+                    <span>{{row.label}}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      name="system.vulnerabilityValues.{{row.id}}"
+                      value="{{row.value}}"
+                    />
+                  </label>
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
+
+          <label class="fast-nri-property-field">
             Иммунитеты
-            <textarea name="system.immunities" rows="2" placeholder="Нет">{{system.immunities}}</textarea>
+            <multi-select name="system.immunityIds">
+              {{selectOptions traitChoices selected=system.immunityIds}}
+            </multi-select>
           </label>
         </div>
       </section>
-
-      {{#unless isCreature}}
-        <section class="fast-nri-section">
-          <h2>Специализации</h2>
-          <div class="fast-nri-two fast-nri-specializations">
-            <label>
-              <span>Основная <strong>2d6</strong></span>
-              <input
-                type="text"
-                name="system.specializations.primary.name"
-                value="{{system.specializations.primary.name}}"
-                placeholder="Название специализации"
-              />
-            </label>
-            <label>
-              <span>Дополнительная <strong>2d4</strong></span>
-              <input
-                type="text"
-                name="system.specializations.secondary.name"
-                value="{{system.specializations.secondary.name}}"
-                placeholder="Название специализации"
-              />
-            </label>
-          </div>
-        </section>
-      {{/unless}}
 
       <section class="fast-nri-section">
         <h2>Базовые ресурсы</h2>
@@ -398,6 +417,41 @@
     <!-- НАВЫКИ                                                        -->
     <!-- ============================================================= -->
     <section class="fast-nri-tab-pane {{#if tabs.skills.active}}active{{/if}}" data-tab="skills" role="tabpanel">
+      {{#unless isCreature}}
+        <section class="fast-nri-section">
+          <h2>Специализации</h2>
+          <p class="fast-nri-help">Работают как отдельные проверки: основная — 2d6, дополнительная — 2d4.</p>
+
+          <div class="fast-nri-skills-grid fast-nri-specialization-grid">
+            {{#each specializationRows as |specialization|}}
+              <div class="fast-nri-skill-row fast-nri-specialization-row">
+                <button
+                  type="button"
+                  class="fast-nri-skill-roll"
+                  data-action="rollSpecialization"
+                  data-specialization="{{specialization.kind}}"
+                  title="Бросить {{specialization.formula}}"
+                >
+                  <i class="fa-solid fa-dice-d20"></i>
+                  <span>{{specialization.label}}</span>
+                </button>
+
+                <div class="fast-nri-specialization-control">
+                  <input
+                    type="text"
+                    name="system.specializations.{{specialization.kind}}.name"
+                    value="{{specialization.name}}"
+                    placeholder="Название"
+                    title="{{specialization.label}}"
+                  />
+                  <strong class="fast-nri-fixed-die-badge">{{specialization.die}}</strong>
+                </div>
+              </div>
+            {{/each}}
+          </div>
+        </section>
+      {{/unless}}
+
       <section class="fast-nri-section">
         <h2>Навыки</h2>
         <p class="fast-nri-help">Нажми на название навыка, чтобы выполнить проверку.</p>

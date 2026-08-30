@@ -1,7 +1,7 @@
 import { setItemEquipped, setItemHands } from "./equipment.mjs";
-import { ITEM_PROPERTIES } from "./config.mjs";
+import { CREATURE_TRAITS, ITEM_PROPERTIES, RESISTANCE_TRAITS } from "./config.mjs";
 import { useAbility } from "./ability-use.mjs";
-import { rollSkillCheck, rollWeaponAttack } from "./rolls.mjs";
+import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2, ItemSheetV2 } = foundry.applications.sheets;
@@ -41,6 +41,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       deleteItem: FastNriActorSheet.#deleteItem,
       createItem: FastNriActorSheet.#createItem,
       rollSkill: FastNriActorSheet.#rollSkill,
+      rollSpecialization: FastNriActorSheet.#rollSpecialization,
       rollWeaponAttack: FastNriActorSheet.#rollWeaponAttack,
       useAbility: FastNriActorSheet.#useAbility
     }
@@ -80,6 +81,53 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       };
     });
 
+
+    const specializationRows = [
+      {
+        id: "primary",
+        kind: "primary",
+        label: "Основная специализация",
+        name: this.actor.system.specializations?.primary?.name ?? "",
+        die: "2d6",
+        formula: "1d20 + 2d6"
+      },
+      {
+        id: "secondary",
+        kind: "secondary",
+        label: "Дополнительная специализация",
+        name: this.actor.system.specializations?.secondary?.name ?? "",
+        die: "2d4",
+        formula: "1d20 + 2d4"
+      }
+    ];
+
+    // 0.5.12 хранила три базовые Устойчивости отдельными полями.
+    // Подхватываем их как fallback, чтобы существующие Actor не потеряли значения.
+    const resistanceIds = new Set(this.actor.system.resistanceIds ?? []);
+    const legacyResistanceMap = {
+      universal: Number(this.actor.system.resistances?.universal) || 0,
+      physical: Number(this.actor.system.resistances?.physical) || 0,
+      magic: Number(this.actor.system.resistances?.magic) || 0
+    };
+
+    for (const [id, value] of Object.entries(legacyResistanceMap)) {
+      if (value > 0) resistanceIds.add(id);
+    }
+
+    const resistanceRows = Array.from(resistanceIds).map(id => ({
+      id,
+      label: RESISTANCE_TRAITS[id] ?? id,
+      value: Number(this.actor.system.resistanceValues?.[id])
+        || legacyResistanceMap[id]
+        || 0
+    }));
+
+    const vulnerabilityRows = Array.from(this.actor.system.vulnerabilityIds ?? []).map(id => ({
+      id,
+      label: CREATURE_TRAITS[id] ?? id,
+      value: Number(this.actor.system.vulnerabilityValues?.[id]) || 0
+    }));
+
     return {
       ...context,
       actor: this.actor,
@@ -99,7 +147,13 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       weapons: items.filter(item => item.type === "weapon"),
       equipment: items.filter(item => item.type === "equipment"),
       consumables: items.filter(item => item.type === "consumable"),
-      skillRows
+      skillRows,
+      specializationRows,
+      traitChoices: CREATURE_TRAITS,
+      resistanceChoices: RESISTANCE_TRAITS,
+      selectedResistanceIds: Array.from(resistanceIds),
+      resistanceRows,
+      vulnerabilityRows
     };
   }
 
@@ -237,6 +291,23 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     });
   }
 
+
+  static async #rollSpecialization(event, target) {
+    event.preventDefault();
+
+    const kind = target.dataset.specialization;
+    if (!["primary", "secondary"].includes(kind)) return;
+
+    const name = this.actor.system.specializations?.[kind]?.name ?? "";
+    const die = kind === "primary" ? "2d6" : "2d4";
+
+    await rollSpecializationCheck(this.actor, {
+      kind,
+      name,
+      die
+    });
+  }
+
   static async #createItem(event, target) {
     const type = target.dataset.itemType;
     if (!["weapon", "ability", "equipment", "consumable"].includes(type)) return;
@@ -290,12 +361,16 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     tag: "form",
     classes: ["fast-nri", "fast-nri-item-sheet", "standard-form"],
     position: {
-      width: 580,
-      height: 580
+      width: 700,
+      height: 720
     },
     form: {
       closeOnSubmit: false,
       submitOnChange: true
+    },
+    actions: {
+      addDamageComponent: FastNriItemSheet.#addDamageComponent,
+      removeDamageComponent: FastNriItemSheet.#removeDamageComponent
     }
   };
 
@@ -344,16 +419,109 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         }
       });
     }
+
+
+    for (const input of this.element.querySelectorAll("[data-fast-nri-damage-component-field]")) {
+      input.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        await this.#updateDamageComponent(event.currentTarget);
+      });
+    }
+  }
+
+  #componentArray(profile) {
+    const raw = this.item.system.damageComponents?.[profile] ?? [];
+    return Array.from(raw).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+  }
+
+  async #updateDamageComponent(element) {
+    const profile = element.dataset.profile;
+    const index = Number(element.dataset.index);
+    const field = element.dataset.fastNriDamageComponentField;
+    if (!["partial", "success", "great"].includes(profile)) return;
+    if (!Number.isInteger(index) || index < 0) return;
+    if (!["formula", "damageType", "traitIds"].includes(field)) return;
+
+    const components = this.#componentArray(profile);
+    if (!components[index]) return;
+
+    let value = element.value;
+    if (field === "traitIds") value = Array.from(value ?? []);
+    else value = String(value ?? "");
+
+    components[index][field] = value;
+    await this.item.update({ [`system.damageComponents.${profile}`]: components });
+  }
+
+  static async #addDamageComponent(event, target) {
+    event.preventDefault();
+    const profile = target.dataset.profile;
+    if (!["partial", "success", "great"].includes(profile)) return;
+
+    const raw = this.item.system.damageComponents?.[profile] ?? [];
+    const components = Array.from(raw).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+
+    components.push({
+      formula: "1d6",
+      damageType: String(this.item.system.damageType ?? "physical"),
+      traitIds: []
+    });
+
+    await this.item.update({ [`system.damageComponents.${profile}`]: components });
+  }
+
+  static async #removeDamageComponent(event, target) {
+    event.preventDefault();
+    const profile = target.dataset.profile;
+    const index = Number(target.dataset.index);
+    if (!["partial", "success", "great"].includes(profile)) return;
+    if (!Number.isInteger(index) || index < 0) return;
+
+    const raw = this.item.system.damageComponents?.[profile] ?? [];
+    const components = Array.from(raw).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+
+    components.splice(index, 1);
+    await this.item.update({ [`system.damageComponents.${profile}`]: components });
   }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
+
+    const damageComponentProfiles = [
+      ["partial", "Частичный"],
+      ["success", "Успех"],
+      ["great", "Большой"]
+    ].map(([id, label]) => ({
+      id,
+      label,
+      components: Array.from(this.item.system.damageComponents?.[id] ?? []).map((component, index) => ({
+        index,
+        formula: String(component?.formula ?? "1d6"),
+        damageType: String(component?.damageType ?? "physical"),
+        traitIds: Array.from(component?.traitIds ?? [])
+      }))
+    }));
 
     return {
       ...context,
       item: this.item,
       system: this.item.system,
       propertyChoices: ITEM_PROPERTIES,
+      damageTraitChoices: CREATURE_TRAITS,
+      damageComponentProfiles,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",
