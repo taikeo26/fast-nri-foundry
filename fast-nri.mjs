@@ -7,6 +7,7 @@ import {
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
 import { registerFastNriTokenVisuals } from "./module/token-visuals.mjs";
 import { registerFastNriTokenHud } from "./module/token-hud.mjs";
+import { activateFastNriEffectPanel } from "./module/effect-panel.mjs";
 import {
   activateEffectChatInteractions,
   activateEffectSystem,
@@ -102,6 +103,7 @@ Hooks.once("ready", async () => {
   activateHealthChatInteractions(document);
   activateEffectChatInteractions(document);
   activateEffectSystem();
+  activateFastNriEffectPanel();
   activateHpFeedback();
   await seedBuiltinEffectsOnce();
   await migrateDamageTraitsOnce();

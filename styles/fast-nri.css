@@ -2536,10 +2536,184 @@ body.theme-dark .fast-nri-hp-line label {
 }
 
 
-/* v0.5.27: Effect Items use Foundry's native Token HUD palette.
- * Deliberately keep the native palette's size, grid, hover and active styling.
- */
+/* ========================================================= */
+/* v0.5.28 - Clean Fast NRI HUD + applied-effect panel       */
+/* ========================================================= */
+
+/* Token HUD uses the native Foundry palette but contains only Effect Items. */
 #token-hud .status-effects .effect-control.fast-nri-effect-item.active {
   outline: 1px solid currentColor;
 }
 
+/*
+ * Panel of effects already applied to the single controlled token.
+ * Appended to #ui-top where possible, so it naturally sits at the
+ * upper-right edge of the canvas rather than inside the sidebar.
+ */
+.fast-nri-applied-effects-panel {
+  position: absolute;
+  z-index: 75;
+  top: 6px;
+  right: 8px;
+  width: max-content;
+  max-width: 52px;
+  pointer-events: auto;
+}
+
+.fast-nri-applied-effects-panel[hidden] {
+  display: none;
+}
+
+.fast-nri-applied-effects-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fast-nri-applied-effect-icon {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  padding: 2px;
+  border: 1px solid rgba(180, 180, 190, 0.38);
+  border-radius: 5px;
+  background: rgba(20, 21, 25, 0.84);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
+  cursor: pointer;
+}
+
+.fast-nri-applied-effect-icon:hover,
+.fast-nri-applied-effect-icon:focus-visible {
+  border-color: rgba(240, 210, 120, 0.9);
+  outline: none;
+  filter: brightness(1.12);
+}
+
+.fast-nri-applied-effect-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+}
+
+.fast-nri-panel-stack-badge,
+.fast-nri-panel-duration-badge {
+  position: absolute;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(25, 29, 36, 0.96);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+.fast-nri-panel-stack-badge {
+  top: -5px;
+  right: -5px;
+}
+
+.fast-nri-panel-duration-badge {
+  right: -5px;
+  bottom: -5px;
+}
+
+.fast-nri-applied-effect-tooltip {
+  position: fixed;
+  z-index: 10000;
+  width: min(330px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(180, 180, 190, 0.42);
+  border-radius: 7px;
+  background: rgba(27, 28, 33, 0.97);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.48);
+  color: var(--color-text-light-primary, #eee);
+  pointer-events: none;
+}
+
+.fast-nri-applied-effect-tooltip[hidden] {
+  display: none;
+}
+
+.fast-nri-effect-tooltip-header {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(170, 170, 180, 0.22);
+}
+
+.fast-nri-effect-tooltip-header img {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  object-fit: contain;
+}
+
+.fast-nri-effect-tooltip-header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.fast-nri-effect-tooltip-header strong {
+  font-size: 1rem;
+}
+
+.fast-nri-effect-tooltip-header small {
+  opacity: 0.72;
+}
+
+.fast-nri-effect-tooltip-description {
+  margin: 8px 0;
+  line-height: 1.35;
+}
+
+.fast-nri-effect-tooltip-description > :first-child {
+  margin-top: 0;
+}
+
+.fast-nri-effect-tooltip-description > :last-child {
+  margin-bottom: 0;
+}
+
+.fast-nri-effect-tooltip-empty {
+  opacity: 0.62;
+  font-style: italic;
+}
+
+.fast-nri-effect-tooltip-properties {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+}
+
+.fast-nri-effect-tooltip-properties > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 7px;
+}
+
+.fast-nri-effect-tooltip-properties dt {
+  opacity: 0.66;
+}
+
+.fast-nri-effect-tooltip-properties dd {
+  margin: 0;
+}
+
+.fast-nri-applied-effect-tooltip footer {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(170, 170, 180, 0.22);
+  font-size: 0.72rem;
+  opacity: 0.66;
+}

@@ -91,16 +91,6 @@ function currentCombatDisplayState() {
   };
 }
 
-async function handleCoreStatus(hud, event, statusId) {
-  if (!hud.actor || !statusId) return;
-
-  await hud.actor.toggleStatusEffect(statusId, {
-    overlay: event.button === 2
-  });
-
-  await hud.render({ force: true });
-}
-
 async function handleFastNriEffect(hud, event, statusId) {
   const actor = hud.actor;
   const source = sourceEffectFromHudId(statusId);
@@ -123,18 +113,13 @@ async function handleFastNriEffect(hud, event, statusId) {
 }
 
 /**
- * Replace only the Token HUD class, not its template.
+ * Use Foundry's native TokenHUD template and status palette, but provide only
+ * Fast NRI world-level Effect Items as choices.
  *
- * The palette remains Foundry's native status-effects palette. We append
- * world-level Fast NRI Effect Items to the choices returned by core.
+ * LMB -> apply / add stack / refresh timer
+ * RMB -> remove one stack; last stack deletes the Effect Item
  *
- * Core icons retain core behavior:
- *   LMB -> toggle status
- *   RMB -> toggle overlay
- *
- * Fast NRI Effect Item icons use soft automation:
- *   LMB -> apply / add stack / refresh timer
- *   RMB -> remove one stack; last stack deletes the effect
+ * Core Foundry status icons are intentionally hidden from this palette.
  */
 export function registerFastNriTokenHud() {
   const BaseTokenHUD = CONFIG.Token.hudClass;
@@ -146,21 +131,16 @@ export function registerFastNriTokenHud() {
           buttons: [0, 2],
           handler: async function(event, target) {
             const statusId = target.dataset.statusId;
+            if (!isFastNriHudEffectId(statusId)) return;
 
-            if (isFastNriHudEffectId(statusId)) {
-              await handleFastNriEffect(this, event, statusId);
-              return;
-            }
-
-            await handleCoreStatus(this, event, statusId);
+            await handleFastNriEffect(this, event, statusId);
           }
         }
       }
     };
 
     _getStatusEffectChoices() {
-      const core = super._getStatusEffectChoices();
-      const custom = {};
+      const choices = {};
       const combatState = currentCombatDisplayState();
 
       for (const source of worldEffectSources()) {
@@ -170,13 +150,10 @@ export function registerFastNriTokenHud() {
           combatState
         );
 
-        custom[choice.id] = choice;
+        choices[choice.id] = choice;
       }
 
-      return {
-        ...core,
-        ...custom
-      };
+      return choices;
     }
   }
 
