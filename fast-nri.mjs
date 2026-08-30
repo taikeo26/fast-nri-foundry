@@ -5,6 +5,7 @@ import {
   registerTokenDefaultSettings
 } from "./module/token-defaults.mjs";
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
+import { activateHealthChatInteractions } from "./module/health-actions.mjs";
 import {
   migrateDamageTraitsOnce,
   registerDataMigrationSettings
@@ -85,6 +86,7 @@ Hooks.once("ready", async () => {
   console.log("Быстрая НРИ 6.2 | Система готова");
   activateChatInteractions(document);
   activateAbilityChatInteractions(document);
+  activateHealthChatInteractions(document);
   activateHpFeedback();
   await migrateDamageTraitsOnce();
   await migrateTokenBarsOnce();

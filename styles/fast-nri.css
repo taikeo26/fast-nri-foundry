@@ -2259,3 +2259,53 @@ body.theme-dark .fast-nri-hp-line label {
     grid-column: 1 / -1;
   }
 }
+
+
+/* ========================================================= */
+/* v0.5.16 - Получение HP и автоматические результаты         */
+/* ========================================================= */
+.fast-nri-hp-gain-defense-grid { align-items: start; }
+.fast-nri-hp-gain-defense-grid > * { min-width: 0; }
+.fast-nri-hp-gain-defense-grid multi-select { width: 100%; }
+
+.fast-nri-ability-outcome-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--fnri-border);
+}
+
+.fast-nri-ability-outcome-config h3 { margin: 0; }
+.fast-nri-outcome-component-list { display: flex; flex-direction: column; gap: 6px; }
+.fast-nri-outcome-component-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(180px, 1.5fr) 34px;
+  gap: 6px;
+  align-items: center;
+}
+.fast-nri-outcome-component-row.is-damage {
+  grid-template-columns: minmax(90px, 0.65fr) minmax(105px, 0.65fr) minmax(180px, 1.4fr) 34px;
+}
+.fast-nri-outcome-component-row > * { min-width: 0; }
+
+.fast-nri-ability-outcome-action { margin-top: 7px; }
+.fast-nri-ability-outcome-action button { width: 100%; }
+
+.fast-nri-hp-gain-actions { display: flex; margin-top: 7px; }
+.fast-nri-hp-gain-actions button { flex: 1 1 auto; }
+
+.fast-nri-hp-application-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fast-nri-hp-application-message.undone { opacity: 0.62; text-decoration: line-through; }
+.fast-nri-hp-application-line { font-size: 0.9rem; }
+.fast-nri-undo-health-button { align-self: flex-start; }
+
+@media (max-width: 650px) {
+  .fast-nri-outcome-component-row,
+  .fast-nri-outcome-component-row.is-damage { grid-template-columns: 1fr; }
+}

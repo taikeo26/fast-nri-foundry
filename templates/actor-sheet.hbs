@@ -215,6 +215,56 @@
         </div>
       </section>
 
+      <section class="fast-nri-section fast-nri-hp-gain-defense-section">
+        <h2>Получение HP</h2>
+        <p class="fast-nri-help">
+          Отдельно от урона. Эти свойства применяются и к восстановлению обычных HP, и к временным HP.
+        </p>
+
+        <div class="fast-nri-three fast-nri-hp-gain-defense-grid">
+          <div class="fast-nri-property-field">
+            <label>Снижение Получения HP</label>
+            <multi-select name="system.hpGainReductionIds">
+              {{selectOptions hpGainDefenseChoices selected=system.hpGainReductionIds}}
+            </multi-select>
+            {{#if hpGainReductionRows.length}}
+              <div class="fast-nri-trait-value-list">
+                {{#each hpGainReductionRows as |row|}}
+                  <label class="fast-nri-trait-value-row">
+                    <span>{{row.label}}</span>
+                    <input type="number" min="0" name="system.hpGainReductionValues.{{row.id}}" value="{{row.value}}" />
+                  </label>
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
+
+          <div class="fast-nri-property-field">
+            <label>Бонус Получения HP</label>
+            <multi-select name="system.hpGainBonusIds">
+              {{selectOptions hpGainDefenseChoices selected=system.hpGainBonusIds}}
+            </multi-select>
+            {{#if hpGainBonusRows.length}}
+              <div class="fast-nri-trait-value-list">
+                {{#each hpGainBonusRows as |row|}}
+                  <label class="fast-nri-trait-value-row">
+                    <span>{{row.label}}</span>
+                    <input type="number" min="0" name="system.hpGainBonusValues.{{row.id}}" value="{{row.value}}" />
+                  </label>
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
+
+          <label class="fast-nri-property-field">
+            Иммунитеты к Получению HP
+            <multi-select name="system.hpGainImmunityIds">
+              {{selectOptions hpGainDefenseChoices selected=system.hpGainImmunityIds}}
+            </multi-select>
+          </label>
+        </div>
+      </section>
+
       <section class="fast-nri-section">
         <h2>Базовые ресурсы</h2>
         <div class="fast-nri-three fast-nri-resources">

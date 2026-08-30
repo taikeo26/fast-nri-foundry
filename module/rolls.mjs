@@ -1,5 +1,7 @@
 import {
   CREATURE_TRAITS,
+  HP_GAIN_DEFENSE_TRAITS,
+  HP_GAIN_SOURCE_TRAITS,
   ITEM_PROPERTY_IDS,
   RESISTANCE_TRAITS
 } from "./config.mjs";
@@ -1195,17 +1197,20 @@ function defenseSummaryHTML(state) {
 
 function damageCardHTML({
   weaponName,
+  sourceName = weaponName,
   profileLabel,
-  critical,
+  critical = false,
   state,
-  modifiersHTML = ""
+  modifiersHTML = "",
+  allowDefense = true,
+  allowDouble = true
 }) {
   const baseDamage = Math.max(0, Number(state?.currentTotal) || 0);
   const doubledDamage = baseDamage * 2;
 
   return `
     <div class="fast-nri-chat-roll fast-nri-damage-card">
-      ${rollCardHeader(`Урон: ${weaponName}`, "fa-burst")}
+      ${rollCardHeader(`Урон: ${sourceName}`, "fa-burst")}
 
       <div class="fast-nri-chat-damage-profile-name">
         ${esc(profileLabel)}
@@ -1224,16 +1229,18 @@ function damageCardHTML({
         </div>
       ` : ""}
 
-      <div class="fast-nri-damage-actions fast-nri-damage-actions-three">
-        <button
-          type="button"
-          class="fast-nri-defense-button"
-          data-fast-nri-defense
-          title="Использовать защитное действие"
-        >
-          <i class="fa-solid fa-shield-halved"></i>
-          <span>Защита</span>
-        </button>
+      <div class="fast-nri-damage-actions ${allowDefense && allowDouble ? "fast-nri-damage-actions-three" : ""}">
+        ${allowDefense ? `
+          <button
+            type="button"
+            class="fast-nri-defense-button"
+            data-fast-nri-defense
+            title="Использовать защитное действие"
+          >
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Защита</span>
+          </button>
+        ` : ""}
 
         <button
           type="button"
@@ -1251,21 +1258,23 @@ function damageCardHTML({
           <span>${state.fullCancel ? "Урон отменён" : "Нанести"}</span>
         </button>
 
-        <button
-          type="button"
-          class="fast-nri-apply-damage-button fast-nri-apply-damage-x2"
-          data-fast-nri-apply-damage
-          data-damage="${escAttr(doubledDamage)}"
-          data-multiplier="2"
-          ${state.fullCancel ? "disabled" : ""}
-          title="${state.fullCancel
-            ? "Действие полностью отменено"
-            : `Нанести ${escAttr(doubledDamage)} урона (×2)`
-          }"
-        >
-          <i class="fa-solid fa-xmark"></i>
-          <span>${state.fullCancel ? "×2 отменён" : "Нанести ×2"}</span>
-        </button>
+        ${allowDouble ? `
+          <button
+            type="button"
+            class="fast-nri-apply-damage-button fast-nri-apply-damage-x2"
+            data-fast-nri-apply-damage
+            data-damage="${escAttr(doubledDamage)}"
+            data-multiplier="2"
+            ${state.fullCancel ? "disabled" : ""}
+            title="${state.fullCancel
+              ? "Действие полностью отменено"
+              : `Нанести ${escAttr(doubledDamage)} урона (×2)`
+            }"
+          >
+            <i class="fa-solid fa-xmark"></i>
+            <span>${state.fullCancel ? "×2 отменён" : "Нанести ×2"}</span>
+          </button>
+        ` : ""}
       </div>
 
       ${modifiersHTML}
@@ -1474,6 +1483,331 @@ function controlledSingleDefenderToken() {
   }
 
   return controlled[0];
+}
+
+
+function outcomeComponentTraitIds(component, item, actor) {
+  const traits = new Set(component?.traitIds ?? []);
+  for (const id of actor?.system?.creatureTraitIds ?? []) traits.add(id);
+  return Array.from(traits);
+}
+
+function abilityOutcomeComponents(actor, item) {
+  const raw = Array.from(item?.system?.outcome?.components ?? []);
+  const components = raw.length ? raw : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
+
+  return components
+    .map(component => ({
+      formula: String(component?.formula ?? "").trim(),
+      damageType: component?.damageType === "magic" ? "magic" : "physical",
+      traitIds: outcomeComponentTraitIds(component, item, actor)
+    }))
+    .filter(component => component.formula);
+}
+
+function hpGainComponentFlavor(component) {
+  const labels = (component?.traitIds ?? []).map(id => HP_GAIN_SOURCE_TRAITS[id] ?? id);
+  return Array.from(new Set(labels)).join(" • ") || "Получение HP";
+}
+
+function plainHpGainFormula(components) {
+  return (components ?? []).map(component => `(${component.formula})`).join(" + ") || "0";
+}
+
+function flavoredHpGainFormula(components) {
+  const chunks = [];
+
+  for (const component of components ?? []) {
+    const parsed = new Roll(component.formula);
+    const flavor = hpGainComponentFlavor(component);
+
+    const formula = parsed.terms.map(term => {
+      if (term?.operator) return term.operator;
+      const raw = String(term?.formula ?? term?.expression ?? "").trim();
+      if (!raw) return "";
+      return `${raw}[${flavor}]`;
+    }).filter(Boolean).join(" ");
+
+    chunks.push(formula);
+  }
+
+  return chunks.join(" + ") || "0";
+}
+
+function hpGainComponentMap(components) {
+  const map = new Map();
+  for (const component of components ?? []) {
+    map.set(hpGainComponentFlavor(component), component);
+  }
+  return map;
+}
+
+function termHpGainMeta(term, componentMap) {
+  const flavor = String(term?.flavor ?? term?.options?.flavor ?? "").trim();
+  const component = flavor ? componentMap.get(flavor) : null;
+  return {
+    traitIds: Array.from(new Set(component?.traitIds ?? []))
+  };
+}
+
+function buildHpGainState(roll, { components = [] } = {}) {
+  const parts = [];
+  const penalties = [];
+  const componentMap = hpGainComponentMap(components);
+  let sign = 1;
+  let supported = true;
+  let sequence = 0;
+
+  for (const term of roll?.terms ?? []) {
+    const operator = String(term?.operator ?? "").trim();
+    if (operator) {
+      if (operator === "+") sign = 1;
+      else if (operator === "-") sign = -1;
+      else supported = false;
+      continue;
+    }
+
+    const meta = termHpGainMeta(term, componentMap);
+    const dieResults = activeDieResults(term);
+
+    if (dieResults) {
+      for (const dieResult of dieResults) {
+        const entry = {
+          id: `hp-part-${sequence++}`,
+          kind: "die",
+          faces: Number(term.faces),
+          value: dieResult.value,
+          rolledValue: dieResult.value,
+          currentValue: dieResult.value,
+          nativeLabel: dieResult.label,
+          nativeResultCSS: dieResult.css,
+          traitIds: meta.traitIds,
+          immuneRemoved: false
+        };
+        if (sign >= 0) parts.push(entry);
+        else penalties.push({ ...entry, id: `hp-penalty-${sequence++}` });
+      }
+      continue;
+    }
+
+    const numeric = finiteNumberOrNull(term?.number ?? term?.total);
+    if (numeric !== null) {
+      if (numeric > 0 && sign >= 0) {
+        parts.push({
+          id: `hp-part-${sequence++}`,
+          kind: "fixed",
+          faces: null,
+          value: numeric,
+          rolledValue: numeric,
+          currentValue: numeric,
+          traitIds: meta.traitIds,
+          immuneRemoved: false
+        });
+      } else if (numeric > 0 && sign < 0) {
+        penalties.push({
+          id: `hp-penalty-${sequence++}`,
+          kind: "fixed",
+          faces: null,
+          value: numeric,
+          rolledValue: numeric,
+          currentValue: numeric,
+          traitIds: meta.traitIds,
+          immuneRemoved: false
+        });
+      }
+      continue;
+    }
+
+    if (term?.formula || term?.expression) supported = false;
+  }
+
+  const partsTotal = parts.reduce((sum, part) => sum + Math.max(0, Number(part.currentValue) || 0), 0);
+  const penalty = penalties.reduce((sum, part) => sum + Math.max(0, Number(part.currentValue) || 0), 0);
+
+  return {
+    supported,
+    parts,
+    penalties,
+    partsTotal,
+    penalty,
+    currentTotal: Math.max(0, partsTotal - penalty),
+    originalRollTotal: Number(roll?.total) || 0
+  };
+}
+
+function hpGainPartLabel(part) {
+  if (part?.kind === "die") return `d${part.faces}: ${part.value}`;
+  return `фикс. +${part?.value ?? 0}`;
+}
+
+function hpGainPartsHTML(state) {
+  if (!state?.supported) {
+    return `<div class="fast-nri-damage-structure-warning"><i class="fa-solid fa-triangle-exclamation"></i>Не удалось разобрать Получение HP на отдельные части.</div>`;
+  }
+
+  const parts = (state.parts ?? []).map(part => {
+    const traits = (part.traitIds ?? []).map(id => HP_GAIN_SOURCE_TRAITS[id] ?? id);
+    const traitsHTML = `<small class="fast-nri-damage-part-traits">${traits.length ? traits.map(esc).join(" · ") : "Без свойств"}</small>`;
+
+    if (part.kind === "die") {
+      const nativeClasses = nativeDamageDieClasses(part);
+      return `
+        <span class="fast-nri-damage-part-stack">
+          <span class="fast-nri-damage-native-part" title="${escAttr(hpGainPartLabel(part))}">
+            <span class="fast-nri-damage-native-type">d${esc(part.faces)}:</span>
+            <span class="dice-tooltip fast-nri-inline-dice-tooltip">
+              <section class="tooltip-part"><div class="dice"><ol class="dice-rolls fast-nri-damage-native-rolls">
+                <li class="${escAttr(nativeClasses)}">${esc(part.nativeLabel ?? part.value)}</li>
+              </ol></div></section>
+            </span>
+          </span>
+          ${traitsHTML}
+        </span>`;
+    }
+
+    return `
+      <span class="fast-nri-damage-part-stack">
+        <span class="fast-nri-damage-fixed-part" title="${escAttr(hpGainPartLabel(part))}">
+          <span class="fast-nri-damage-native-type">+${esc(part.value)}:</span>
+          <strong class="fast-nri-fixed-result">${esc(part.value)}</strong>
+        </span>
+        ${traitsHTML}
+      </span>`;
+  }).join("");
+
+  return `
+    <section class="fast-nri-damage-parts-block fast-nri-hp-gain-parts-block">
+      <div class="fast-nri-damage-parts-title">Части Получения HP</div>
+      <div class="fast-nri-damage-equation">
+        <div class="fast-nri-damage-parts">${parts || `<span class="fast-nri-roll-empty">Нет положительных частей.</span>`}</div>
+        ${state.penalty > 0 ? `<span class="fast-nri-damage-adjustment">−${esc(state.penalty)}</span>` : ""}
+        <span class="fast-nri-damage-equation-arrow">→</span>
+        <strong class="fast-nri-damage-equation-total">${esc(state.currentTotal)}</strong>
+      </div>
+    </section>`;
+}
+
+function hpGainRollCardHTML({ item, kind, state, modifiersHTML = "" }) {
+  const healing = kind === "healing";
+  const title = healing ? "Восстановление HP" : "Временные HP";
+  const icon = healing ? "fa-heart-pulse" : "fa-shield-heart";
+  const action = healing ? "data-fast-nri-apply-healing" : "data-fast-nri-apply-temp-hp";
+  const button = healing ? "Восстановить HP" : "Дать временные HP";
+
+  return `
+    <div class="fast-nri-chat-roll fast-nri-hp-gain-card">
+      ${rollCardHeader(`${title}: ${item.name}`, icon)}
+      ${hpGainPartsHTML(state)}
+      <div class="fast-nri-hp-gain-actions">
+        <button type="button" ${action} data-amount="${escAttr(state.currentTotal)}">
+          <i class="fa-solid ${icon}"></i>
+          <span>${button}</span>
+        </button>
+      </div>
+      ${modifiersHTML}
+    </div>`;
+}
+
+export async function rollAbilityOutcome(actor, item) {
+  if (!actor || !item || item.type !== "ability") return null;
+
+  const kind = String(item.system?.outcome?.kind ?? "none");
+  if (!["damage", "healing", "tempHp"].includes(kind)) {
+    ui.notifications.info(`${item.name}: автоматический результат не настроен.`);
+    return null;
+  }
+
+  const components = abilityOutcomeComponents(actor, item);
+  if (!components.length) {
+    ui.notifications.warn(`${item.name}: добавь хотя бы один компонент результата.`);
+    return null;
+  }
+
+  if (kind === "damage") {
+    const formula = flavoredDamageFormula(components);
+    const displayFormula = plainDamageFormula(components);
+    const result = await prepareRoll({
+      actor,
+      label: `Урон: ${item.name}`,
+      baseFormula: formula,
+      baseSources: [{
+        formula: displayFormula,
+        label: item.name,
+        reason: item.system?.category === "spell" ? "Урон заклинания" : "Урон способности"
+      }],
+      showDC: false
+    });
+    if (!result) return null;
+
+    let state = buildDamageState(result.roll, {
+      components,
+      damageType: components[0]?.damageType ?? "physical",
+      traitIds: components[0]?.traitIds ?? []
+    });
+    state = recalculateDamageState(state);
+    const modifiersHTML = rollSourcesHTML(result);
+    const flavor = damageCardHTML({
+      sourceName: item.name,
+      profileLabel: item.system?.category === "spell" ? "Заклинание" : "Способность",
+      state,
+      modifiersHTML,
+      allowDefense: false,
+      allowDouble: false
+    });
+
+    return result.roll.toMessage({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      flavor,
+      flags: {
+        "fast-nri": {
+          kind: "damage",
+          actorUuid: actor.uuid,
+          itemUuid: item.uuid,
+          abilityOutcome: true,
+          critical: false,
+          rolledTotal: result.roll.total,
+          finalTotal: state.currentTotal,
+          modifierNotesHTML: modifiersHTML,
+          damageState: state
+        }
+      }
+    });
+  }
+
+  const formula = flavoredHpGainFormula(components);
+  const displayFormula = plainHpGainFormula(components);
+  const title = kind === "healing" ? "Восстановление HP" : "Временные HP";
+  const result = await prepareRoll({
+    actor,
+    label: `${title}: ${item.name}`,
+    baseFormula: formula,
+    baseSources: [{
+      formula: displayFormula,
+      label: item.name,
+      reason: "Получение HP"
+    }],
+    showDC: false
+  });
+  if (!result) return null;
+
+  const state = buildHpGainState(result.roll, { components });
+  const modifiersHTML = rollSourcesHTML(result);
+  const flavor = hpGainRollCardHTML({ item, kind, state, modifiersHTML });
+
+  return result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    flavor,
+    flags: {
+      "fast-nri": {
+        kind: kind === "healing" ? "healing" : "temp-hp",
+        actorUuid: actor.uuid,
+        itemUuid: item.uuid,
+        hpGainState: state,
+        rolledTotal: result.roll.total,
+        modifierNotesHTML: modifiersHTML
+      }
+    }
+  });
 }
 
 export async function rollDamageFromChat(element) {

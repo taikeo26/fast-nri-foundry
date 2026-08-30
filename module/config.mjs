@@ -80,3 +80,26 @@ export function resistanceTraitLabel(id) {
   return RESISTANCE_TRAITS[id] ?? creatureTraitLabel(id);
 }
 
+// Свойства источников Получения HP. Они намеренно отделены от
+// защит от урона: одно и то же свойство (например Святой) может
+// по-разному влиять на урон и на Получение HP.
+export const HP_GAIN_SOURCE_TRAITS = Object.freeze({
+  ...CREATURE_TRAITS,
+  healing: "Исцеление"
+});
+
+export const HP_GAIN_SOURCE_TRAIT_IDS = Object.freeze(Object.keys(HP_GAIN_SOURCE_TRAITS));
+
+// Для защит Получения HP добавляется универсальный вариант, который
+// подходит к любому источнику Получения HP.
+export const HP_GAIN_DEFENSE_TRAITS = Object.freeze({
+  universal: "Любое Получение HP",
+  ...HP_GAIN_SOURCE_TRAITS
+});
+
+export const HP_GAIN_DEFENSE_TRAIT_IDS = Object.freeze(Object.keys(HP_GAIN_DEFENSE_TRAITS));
+
+export function hpGainTraitLabel(id) {
+  return HP_GAIN_DEFENSE_TRAITS[id] ?? HP_GAIN_SOURCE_TRAITS[id] ?? id;
+}
+

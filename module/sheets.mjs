@@ -1,5 +1,11 @@
 import { setItemEquipped, setItemHands } from "./equipment.mjs";
-import { CREATURE_TRAITS, ITEM_PROPERTIES, RESISTANCE_TRAITS } from "./config.mjs";
+import {
+  CREATURE_TRAITS,
+  HP_GAIN_DEFENSE_TRAITS,
+  HP_GAIN_SOURCE_TRAITS,
+  ITEM_PROPERTIES,
+  RESISTANCE_TRAITS
+} from "./config.mjs";
 import { useAbility } from "./ability-use.mjs";
 import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
 
@@ -128,6 +134,18 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       value: Number(this.actor.system.vulnerabilityValues?.[id]) || 0
     }));
 
+    const hpGainReductionRows = Array.from(this.actor.system.hpGainReductionIds ?? []).map(id => ({
+      id,
+      label: HP_GAIN_DEFENSE_TRAITS[id] ?? id,
+      value: Number(this.actor.system.hpGainReductionValues?.[id]) || 0
+    }));
+
+    const hpGainBonusRows = Array.from(this.actor.system.hpGainBonusIds ?? []).map(id => ({
+      id,
+      label: HP_GAIN_DEFENSE_TRAITS[id] ?? id,
+      value: Number(this.actor.system.hpGainBonusValues?.[id]) || 0
+    }));
+
     return {
       ...context,
       actor: this.actor,
@@ -153,7 +171,10 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       resistanceChoices: RESISTANCE_TRAITS,
       selectedResistanceIds: Array.from(resistanceIds),
       resistanceRows,
-      vulnerabilityRows
+      vulnerabilityRows,
+      hpGainDefenseChoices: HP_GAIN_DEFENSE_TRAITS,
+      hpGainReductionRows,
+      hpGainBonusRows
     };
   }
 
@@ -370,7 +391,9 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     },
     actions: {
       addDamageComponent: FastNriItemSheet.#addDamageComponent,
-      removeDamageComponent: FastNriItemSheet.#removeDamageComponent
+      removeDamageComponent: FastNriItemSheet.#removeDamageComponent,
+      addOutcomeComponent: FastNriItemSheet.#addOutcomeComponent,
+      removeOutcomeComponent: FastNriItemSheet.#removeOutcomeComponent
     }
   };
 
@@ -426,6 +449,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.preventDefault();
         event.stopPropagation();
         await this.#updateDamageComponent(event.currentTarget);
+      });
+    }
+
+    for (const input of this.element.querySelectorAll("[data-fast-nri-outcome-component-field]")) {
+      input.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        await this.#updateOutcomeComponent(event.currentTarget);
       });
     }
   }
@@ -497,6 +528,77 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     await this.item.update({ [`system.damageComponents.${profile}`]: components });
   }
 
+
+  #outcomeComponentArray() {
+    const raw = Array.from(this.item.system.outcome?.components ?? []);
+    const components = raw.map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+
+    return components.length ? components : [{
+      formula: "1d6",
+      damageType: "physical",
+      traitIds: []
+    }];
+  }
+
+  async #updateOutcomeComponent(element) {
+    const index = Number(element.dataset.index);
+    const field = element.dataset.fastNriOutcomeComponentField;
+    if (!Number.isInteger(index) || index < 0) return;
+    if (!["formula", "damageType", "traitIds"].includes(field)) return;
+
+    const components = this.#outcomeComponentArray();
+    if (!components[index]) return;
+
+    let value = element.value;
+    if (field === "traitIds") value = Array.from(value ?? []);
+    else value = String(value ?? "");
+
+    components[index][field] = value;
+    await this.item.update({ "system.outcome.components": components });
+  }
+
+  static async #addOutcomeComponent(event) {
+    event.preventDefault();
+    const raw = Array.from(this.item.system.outcome?.components ?? []);
+    const components = raw.length
+      ? raw.map(component => ({
+          formula: String(component?.formula ?? "1d6"),
+          damageType: String(component?.damageType ?? "physical"),
+          traitIds: Array.from(component?.traitIds ?? [])
+        }))
+      : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
+
+    components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
+    await this.item.update({ "system.outcome.components": components });
+  }
+
+  static async #removeOutcomeComponent(event, target) {
+    event.preventDefault();
+    const index = Number(target.dataset.index);
+    if (!Number.isInteger(index) || index < 0) return;
+
+    const raw = Array.from(this.item.system.outcome?.components ?? []);
+    const components = raw.length
+      ? raw.map(component => ({
+          formula: String(component?.formula ?? "1d6"),
+          damageType: String(component?.damageType ?? "physical"),
+          traitIds: Array.from(component?.traitIds ?? [])
+        }))
+      : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
+
+    if (components.length <= 1) {
+      ui.notifications.info("У автоматического результата должен остаться хотя бы один компонент.");
+      return;
+    }
+
+    components.splice(index, 1);
+    await this.item.update({ "system.outcome.components": components });
+  }
+
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
 
@@ -515,6 +617,19 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       }))
     }));
 
+    const outcomeKind = String(this.item.system.outcome?.kind ?? "none");
+    const rawOutcomeComponents = Array.from(this.item.system.outcome?.components ?? []);
+    const outcomeComponents = (rawOutcomeComponents.length ? rawOutcomeComponents : [{
+      formula: "1d6",
+      damageType: "physical",
+      traitIds: []
+    }]).map((component, index) => ({
+      index,
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+
     return {
       ...context,
       item: this.item,
@@ -522,6 +637,11 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       propertyChoices: ITEM_PROPERTIES,
       damageTraitChoices: CREATURE_TRAITS,
       damageComponentProfiles,
+      outcomeKind,
+      outcomeIsDamage: outcomeKind === "damage",
+      outcomeIsHpGain: ["healing", "tempHp"].includes(outcomeKind),
+      outcomeComponents,
+      hpGainSourceTraitChoices: HP_GAIN_SOURCE_TRAITS,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",

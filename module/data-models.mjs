@@ -1,4 +1,4 @@
-import { CREATURE_TRAIT_IDS, RESISTANCE_TRAIT_IDS } from "./config.mjs";
+import { CREATURE_TRAIT_IDS, HP_GAIN_DEFENSE_TRAIT_IDS, RESISTANCE_TRAIT_IDS } from "./config.mjs";
 
 const {
   ArrayField,
@@ -51,6 +51,20 @@ const traitValueSchema = (ids) =>
   );
 
 const damageComponentArray = () =>
+  new ArrayField(
+    new SchemaField({
+      formula: text("1d6"),
+      damageType: text("physical"),
+      traitIds: stringArray()
+    }),
+    {
+      required: true,
+      nullable: false,
+      initial: []
+    }
+  );
+
+const outcomeComponentArray = () =>
   new ArrayField(
     new SchemaField({
       formula: text("1d6"),
@@ -142,6 +156,16 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
     // Иммунитет не имеет числового значения: совпавший признак удаляет
     // конкретную часть урона из дальнейшего расчёта.
     immunityIds: stringArray(),
+
+    // Получение HP — отдельный канал от урона. Он общий для
+    // восстановления обычных HP и выдачи временных HP.
+    hpGainReductionIds: stringArray(),
+    hpGainReductionValues: traitValueSchema(HP_GAIN_DEFENSE_TRAIT_IDS),
+
+    hpGainBonusIds: stringArray(),
+    hpGainBonusValues: traitValueSchema(HP_GAIN_DEFENSE_TRAIT_IDS),
+
+    hpGainImmunityIds: stringArray(),
 
     speed: integer(speed),
 
@@ -259,7 +283,17 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       ...itemBaseSchema(),
       category: text("ability"),
       timing: text("Действие"),
-      classResourceCost: integer(0)
+      classResourceCost: integer(0),
+
+      // Мягкая автоматизация результата использования.
+      // none    — только описание;
+      // damage  — урон;
+      // healing — восстановление обычных HP;
+      // tempHp  — получение временных HP.
+      outcome: new SchemaField({
+        kind: text("none"),
+        components: outcomeComponentArray()
+      })
     };
   }
 }

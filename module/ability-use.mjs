@@ -1,3 +1,5 @@
+import { rollAbilityOutcome } from "./rolls.mjs";
+
 function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
 }
@@ -10,6 +12,31 @@ function messageIdFromElement(element) {
   return element
     ?.closest(".chat-message, .message")
     ?.dataset?.messageId ?? null;
+}
+
+
+function abilityOutcomeActionHTML(actor, item) {
+  const kind = String(item.system?.outcome?.kind ?? "none");
+  const data = {
+    damage: ["Бросить урон", "fa-burst"],
+    healing: ["Бросить восстановление HP", "fa-heart-pulse"],
+    tempHp: ["Бросить временные HP", "fa-shield-heart"]
+  }[kind];
+  if (!data) return "";
+
+  return `
+    <div class="fast-nri-ability-outcome-action">
+      <button
+        type="button"
+        data-fast-nri-roll-ability-outcome
+        data-actor-uuid="${escAttr(actor.uuid)}"
+        data-item-uuid="${escAttr(item.uuid)}"
+        title="${escAttr(data[0])}"
+      >
+        <i class="fa-solid ${data[1]}"></i>
+        <span>${esc(data[0])}</span>
+      </button>
+    </div>`;
 }
 
 function resourceLineHTML({
@@ -79,6 +106,8 @@ function abilityCardHTML({
           ${description}
         </div>
       ` : ""}
+
+      ${abilityOutcomeActionHTML(actor, item)}
 
       ${cost > 0 ? `
         <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
@@ -265,6 +294,28 @@ export async function undoAbilityResource(element) {
 
 export function activateAbilityChatInteractions(root = document) {
   root.addEventListener("click", async event => {
+    const outcomeButton = event.target.closest("[data-fast-nri-roll-ability-outcome]");
+    if (outcomeButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (outcomeButton.dataset.fastNriBusy === "true") return;
+      outcomeButton.dataset.fastNriBusy = "true";
+
+      try {
+        const actor = await fromUuid(outcomeButton.dataset.actorUuid);
+        const item = await fromUuid(outcomeButton.dataset.itemUuid);
+        if (!actor || !item || item.type !== "ability") {
+          ui.notifications.error("Не удалось найти способность или заклинание.");
+          return;
+        }
+        await rollAbilityOutcome(actor, item);
+      } finally {
+        delete outcomeButton.dataset.fastNriBusy;
+      }
+      return;
+    }
+
     const undoButton = event.target.closest("[data-fast-nri-undo-resource]");
     if (!undoButton) return;
 

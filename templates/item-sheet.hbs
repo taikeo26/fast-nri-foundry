@@ -169,6 +169,86 @@
         Стоимость классового ресурса
         <input type="number" name="system.classResourceCost" value="{{system.classResourceCost}}" />
       </label>
+
+      <div class="fast-nri-ability-outcome-config">
+        <h3>Автоматический результат</h3>
+        <label>
+          Вид результата
+          <select name="system.outcome.kind">
+            <option value="none" {{#if (eq outcomeKind "none")}}selected{{/if}}>Нет</option>
+            <option value="damage" {{#if (eq outcomeKind "damage")}}selected{{/if}}>Урон</option>
+            <option value="healing" {{#if (eq outcomeKind "healing")}}selected{{/if}}>Восстановление HP</option>
+            <option value="tempHp" {{#if (eq outcomeKind "tempHp")}}selected{{/if}}>Временные HP</option>
+          </select>
+        </label>
+
+        {{#unless (eq outcomeKind "none")}}
+          <div class="fast-nri-damage-component-profile-heading">
+            <strong>Компоненты результата</strong>
+            <button type="button" data-action="addOutcomeComponent" title="Добавить компонент">
+              <i class="fa-solid fa-plus"></i>
+              Компонент
+            </button>
+          </div>
+
+          <div class="fast-nri-outcome-component-list">
+            {{#each outcomeComponents as |component|}}
+              <div class="fast-nri-outcome-component-row {{#if ../outcomeIsDamage}}is-damage{{else}}is-hp-gain{{/if}}">
+                <input
+                  type="text"
+                  value="{{component.formula}}"
+                  data-fast-nri-outcome-component-field="formula"
+                  data-index="{{component.index}}"
+                  title="Формула компонента"
+                />
+
+                {{#if ../outcomeIsDamage}}
+                  <select
+                    data-fast-nri-outcome-component-field="damageType"
+                    data-index="{{component.index}}"
+                    title="Тип урона компонента"
+                  >
+                    <option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option>
+                    <option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option>
+                  </select>
+
+                  <multi-select
+                    data-fast-nri-outcome-component-field="traitIds"
+                    data-index="{{component.index}}"
+                    title="Свойства компонента урона"
+                  >
+                    {{selectOptions ../damageTraitChoices selected=component.traitIds}}
+                  </multi-select>
+                {{else}}
+                  <multi-select
+                    data-fast-nri-outcome-component-field="traitIds"
+                    data-index="{{component.index}}"
+                    title="Свойства Получения HP"
+                  >
+                    {{selectOptions ../hpGainSourceTraitChoices selected=component.traitIds}}
+                  </multi-select>
+                {{/if}}
+
+                <button
+                  type="button"
+                  class="fast-nri-damage-component-remove"
+                  data-action="removeOutcomeComponent"
+                  data-index="{{component.index}}"
+                  title="Удалить компонент"
+                >
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            {{/each}}
+          </div>
+
+          {{#if outcomeIsHpGain}}
+            <small class="fast-nri-help">
+              Восстановление HP и временные HP используют один канал «Получение HP» и могут нести свойства, например Святой, Нечестивый или Исцеление.
+            </small>
+          {{/if}}
+        {{/unless}}
+      </div>
     </section>
   {{/if}}
 

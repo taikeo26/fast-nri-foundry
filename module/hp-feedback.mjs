@@ -1,5 +1,14 @@
 const DAMAGE_COLOR = "#e04848";
 const HEALING_COLOR = "#45b96b";
+const TEMP_HP_COLOR = "#4f9ee8";
+
+function foundryColor(value) {
+  try {
+    return Number(foundry.utils.Color.fromString(value));
+  } catch {
+    return value;
+  }
+}
 
 function finitePositive(value) {
   const number = Number(value);
@@ -37,8 +46,10 @@ export async function showHpChangeFeedback({ tokenUuid, amount, kind }) {
   if (!token || !canvas?.interface?.createScrollingText) return false;
 
   const isHealing = kind === "healing";
-  const content = `${isHealing ? "+" : "−"}${magnitude}`;
-  const fill = isHealing ? HEALING_COLOR : DAMAGE_COLOR;
+  const isTempHp = kind === "tempHp";
+  const positive = isHealing || isTempHp;
+  const content = `${positive ? "+" : "−"}${magnitude}`;
+  const fill = foundryColor(isTempHp ? TEMP_HP_COLOR : isHealing ? HEALING_COLOR : DAMAGE_COLOR);
 
   const center = token.center;
   const origin = {
@@ -56,7 +67,11 @@ export async function showHpChangeFeedback({ tokenUuid, amount, kind }) {
       textStyle: {
         fill,
         fontSize: 30,
-        fontWeight: "700"
+        fontWeight: "700",
+        stroke: {
+          color: foundryColor("#1b1b1b"),
+          width: 3
+        }
       }
     });
     return true;
@@ -88,6 +103,14 @@ async function feedbackFromCreatedMessage(message) {
     });
   }
 
+  if (kind === "temp-hp-applied") {
+    return showHpChangeFeedback({
+      tokenUuid,
+      amount: message.getFlag("fast-nri", "appliedTempIncrease"),
+      kind: "tempHp"
+    });
+  }
+
   // Общий signed delta для будущих chat HP actions.
   if (kind === "hp-change") {
     const delta = Number(message.getFlag("fast-nri", "hpDelta"));
@@ -104,16 +127,27 @@ async function feedbackFromCreatedMessage(message) {
 }
 
 async function feedbackFromUpdatedMessage(message, changed) {
-  if (message?.getFlag("fast-nri", "kind") !== "damage-applied") return false;
-
   const undone = foundry.utils.getProperty(changed, "flags.fast-nri.undone");
   if (undone !== true) return false;
 
-  return showHpChangeFeedback({
-    tokenUuid: message.getFlag("fast-nri", "tokenUuid"),
-    amount: message.getFlag("fast-nri", "restoredAmount"),
-    kind: "healing"
-  });
+  const kind = message?.getFlag("fast-nri", "kind");
+  if (kind === "damage-applied") {
+    return showHpChangeFeedback({
+      tokenUuid: message.getFlag("fast-nri", "tokenUuid"),
+      amount: message.getFlag("fast-nri", "restoredAmount"),
+      kind: "healing"
+    });
+  }
+
+  if (kind === "healing-applied") {
+    return showHpChangeFeedback({
+      tokenUuid: message.getFlag("fast-nri", "tokenUuid"),
+      amount: message.getFlag("fast-nri", "restoredAmount"),
+      kind: "damage"
+    });
+  }
+
+  return false;
 }
 
 export function activateHpFeedback() {
