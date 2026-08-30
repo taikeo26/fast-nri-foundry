@@ -460,11 +460,31 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.stopPropagation();
 
         const kind = event.currentTarget.dataset.outcomeKind;
-        if (!["damage", "healing", "tempHp"].includes(kind)) return;
+        if (!["damage", "healing", "tempHp"].includes(kind)) {
+          console.error(
+            "Быстрая НРИ | Переключатель результата не содержит корректный data-outcome-kind",
+            { kind, element: event.currentTarget }
+          );
+          ui.notifications.error(
+            "Не удалось сохранить включение результата: неизвестный тип."
+          );
+          return;
+        }
 
-        await this.item.update({
-          [`system.outcomes.${kind}.enabled`]: Boolean(event.currentTarget.checked)
-        });
+        try {
+          await this.item.update({
+            [`system.outcomes.${kind}.enabled`]: Boolean(event.currentTarget.checked)
+          });
+        } catch (error) {
+          console.error(
+            `Быстрая НРИ | Не удалось сохранить enabled для ${kind}`,
+            error
+          );
+          ui.notifications.error(
+            `Не удалось сохранить включение результата: ${error.message}`
+          );
+          throw error;
+        }
       });
     }
 
@@ -575,9 +595,38 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     const index = Number(element.dataset.index);
     const field = element.dataset.fastNriOutcomeComponentField;
 
-    if (!["damage", "healing", "tempHp"].includes(kind)) return;
-    if (!Number.isInteger(index) || index < 0) return;
-    if (!["formula", "damageType", "traitIds"].includes(field)) return;
+    if (!["damage", "healing", "tempHp"].includes(kind)) {
+      console.error(
+        "Быстрая НРИ | Компонент результата не содержит корректный data-outcome-kind",
+        { kind, index, field, element }
+      );
+      ui.notifications.error(
+        "Не удалось сохранить компонент результата: неизвестный тип результата."
+      );
+      return;
+    }
+
+    if (!Number.isInteger(index) || index < 0) {
+      console.error(
+        "Быстрая НРИ | Компонент результата не содержит корректный data-index",
+        { kind, index, field, element }
+      );
+      ui.notifications.error(
+        "Не удалось сохранить компонент результата: неизвестный номер компонента."
+      );
+      return;
+    }
+
+    if (!["formula", "damageType", "traitIds"].includes(field)) {
+      console.error(
+        "Быстрая НРИ | Неизвестное поле компонента результата",
+        { kind, index, field, element }
+      );
+      ui.notifications.error(
+        "Не удалось сохранить компонент результата: неизвестное поле."
+      );
+      return;
+    }
 
     const components = this.#outcomeComponentArray(kind);
     if (!components[index]) return;
@@ -587,9 +636,21 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     else value = String(value ?? "");
 
     components[index][field] = value;
-    await this.item.update({
-      [`system.outcomes.${kind}.components`]: components
-    });
+
+    try {
+      await this.item.update({
+        [`system.outcomes.${kind}.components`]: components
+      });
+    } catch (error) {
+      console.error(
+        `Быстрая НРИ | Не удалось сохранить ${kind}.${field}[${index}]`,
+        error
+      );
+      ui.notifications.error(
+        `Не удалось сохранить изменение результата: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   static async #addOutcome(event, target) {

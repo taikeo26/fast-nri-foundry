@@ -121,7 +121,7 @@
                       data-index="{{component.index}}"
                       title="Свойства этого компонента"
                     >
-                      {{selectOptions ../../damageTraitChoices selected=component.traitIds}}
+                      {{selectOptions @root.damageTraitChoices selected=component.traitIds}}
                     </multi-select>
 
                     <button
@@ -252,20 +252,20 @@
               {{#if outcome.enabled}}
                 <div class="fast-nri-outcome-component-list">
                   {{#each outcome.components as |component|}}
-                    <div class="fast-nri-outcome-component-row {{#if ../outcome.isDamage}}is-damage{{else}}is-hp-gain{{/if}}">
+                    <div class="fast-nri-outcome-component-row {{#if outcome.isDamage}}is-damage{{else}}is-hp-gain{{/if}}">
                       <input
                         type="text"
                         value="{{component.formula}}"
                         data-fast-nri-outcome-component-field="formula"
-                        data-outcome-kind="{{../outcome.kind}}"
+                        data-outcome-kind="{{outcome.kind}}"
                         data-index="{{component.index}}"
                         title="Формула компонента"
                       />
 
-                      {{#if ../outcome.isDamage}}
+                      {{#if outcome.isDamage}}
                         <select
                           data-fast-nri-outcome-component-field="damageType"
-                          data-outcome-kind="{{../outcome.kind}}"
+                          data-outcome-kind="{{outcome.kind}}"
                           data-index="{{component.index}}"
                           title="Тип урона компонента"
                         >
@@ -275,20 +275,20 @@
 
                         <multi-select
                           data-fast-nri-outcome-component-field="traitIds"
-                          data-outcome-kind="{{../outcome.kind}}"
+                          data-outcome-kind="{{outcome.kind}}"
                           data-index="{{component.index}}"
                           title="Свойства компонента урона"
                         >
-                          {{selectOptions ../../damageTraitChoices selected=component.traitIds}}
+                          {{selectOptions @root.damageTraitChoices selected=component.traitIds}}
                         </multi-select>
                       {{else}}
                         <multi-select
                           data-fast-nri-outcome-component-field="traitIds"
-                          data-outcome-kind="{{../outcome.kind}}"
+                          data-outcome-kind="{{outcome.kind}}"
                           data-index="{{component.index}}"
                           title="Свойства Получения HP"
                         >
-                          {{selectOptions ../../hpGainSourceTraitChoices selected=component.traitIds}}
+                          {{selectOptions @root.hpGainSourceTraitChoices selected=component.traitIds}}
                         </multi-select>
                       {{/if}}
 
@@ -296,7 +296,7 @@
                         type="button"
                         class="fast-nri-damage-component-remove"
                         data-action="removeOutcomeComponent"
-                        data-outcome-kind="{{../outcome.kind}}"
+                        data-outcome-kind="{{outcome.kind}}"
                         data-index="{{component.index}}"
                         title="Удалить компонент"
                       >
