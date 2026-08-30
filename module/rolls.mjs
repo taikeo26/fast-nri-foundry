@@ -297,6 +297,7 @@ async function prepareRoll({
   actor,
   label,
   baseFormula,
+  baseSources = [],
   defaultDC = null,
   showDC = true,
   contextHTML = "",
@@ -365,9 +366,19 @@ async function prepareRoll({
     return null;
   }
 
+  const normalizedBaseSources = (baseSources ?? [])
+    .map((source, index) => ({
+      id: source?.id || `base-${index}`,
+      formula: normalizeTerm(source?.formula),
+      label: String(source?.label ?? "Базовая часть"),
+      reason: String(source?.reason ?? "")
+    }))
+    .filter(source => source.formula);
+
   return {
     ...result,
     roll,
+    baseSources: normalizedBaseSources,
     naturalD20: getNaturalD20(roll)
   };
 }
@@ -394,22 +405,41 @@ function degreeHTML(degree) {
   `;
 }
 
-function modifierNotesHTML(result) {
-  const notes = [
-    ...result.automaticModifiers,
-    ...result.manualModifiers
-  ]
-    .filter(modifier => modifier.reason)
-    .map(modifier => `${esc(modifier.reason)}: <code>${esc(modifier.formula)}</code>`)
-    .join(" · ");
+function rollSourcesHTML(result) {
+  const rows = [];
 
-  if (!notes) return "";
+  for (const source of result?.baseSources ?? []) {
+    rows.push({ kind: "base", formula: source.formula, label: source.label || "Базовая часть", reason: source.reason || "" });
+  }
+
+  for (const modifier of result?.automaticModifiers ?? []) {
+    rows.push({ kind: "automatic", formula: modifier.formula, label: modifier.label || "Автоматический модификатор", reason: modifier.reason || "" });
+  }
+
+  for (const modifier of result?.manualModifiers ?? []) {
+    rows.push({ kind: "manual", formula: modifier.formula, label: modifier.reason || "Ручной модификатор", reason: modifier.reason ? "Добавлено вручную" : "" });
+  }
+
+  if (!rows.length) return "";
+  const kindLabel = { base: "Основа", automatic: "Эффект", manual: "Вручную" };
 
   return `
-    <div class="fast-nri-chat-modifiers">
-      <i class="fa-solid fa-sliders"></i>
-      <small>${notes}</small>
-    </div>
+    <section class="fast-nri-roll-sources">
+      <div class="fast-nri-roll-sources-title">
+        <i class="fa-solid fa-list-ul"></i>
+        <span>Из чего состоит бросок</span>
+      </div>
+      <div class="fast-nri-roll-source-list">
+        ${rows.map(row => `
+          <div class="fast-nri-roll-source-row fast-nri-roll-source-${escAttr(row.kind)}">
+            <span class="fast-nri-roll-source-kind">${esc(kindLabel[row.kind] ?? "")}</span>
+            <code class="fast-nri-roll-source-formula">${esc(row.formula)}</code>
+            <span class="fast-nri-roll-source-name">${esc(row.label)}</span>
+            ${row.reason ? `<small class="fast-nri-roll-source-reason">${esc(row.reason)}</small>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -426,12 +456,14 @@ export async function openPreRollDialog({
   actor,
   label,
   baseFormula,
+  baseSources = [],
   defaultDC = null
 }) {
   const result = await prepareRoll({
     actor,
     label,
     baseFormula,
+    baseSources,
     defaultDC,
     showDC: true
   });
@@ -454,7 +486,7 @@ export async function openPreRollDialog({
       ` : ""}
 
       ${degreeHTML(degree)}
-      ${modifierNotesHTML(result)}
+      ${rollSourcesHTML(result)}
     </div>
   `;
 
@@ -476,10 +508,16 @@ export async function rollSkillCheck(actor, skill) {
   const die = String(skill?.value ?? "").trim();
   const baseFormula = die ? `1d20 + ${die}` : "1d20";
 
+  const skillLabel = skill?.label ?? "Проверка навыка";
+
   return openPreRollDialog({
     actor,
-    label: skill?.label ?? "Проверка навыка",
-    baseFormula
+    label: skillLabel,
+    baseFormula,
+    baseSources: [
+      { formula: "1d20", label: "Базовый d20", reason: "Проверка" },
+      ...(die ? [{ formula: die, label: skillLabel, reason: "Куб навыка" }] : [])
+    ]
   });
 }
 
@@ -625,6 +663,10 @@ export async function rollWeaponAttack(actor, weapon) {
     actor,
     label: `Атака: ${weapon.name}`,
     baseFormula,
+    baseSources: [
+      { formula: "1d20", label: "Базовый d20", reason: "Атака" },
+      ...(combatDie ? [{ formula: combatDie, label: "Куб боя", reason: actor.name }] : [])
+    ],
     showDC: false,
     contextHTML: armorContextHTML(target)
   });
@@ -652,7 +694,7 @@ export async function rollWeaponAttack(actor, weapon) {
 
       ${degreeHTML(degree)}
       ${damageProfilesHTML(actor, weapon, degree, critical)}
-      ${modifierNotesHTML(result)}
+      ${rollSourcesHTML(result)}
     </div>
   `;
 
@@ -892,11 +934,17 @@ function damagePartsHTML(state) {
             ${esc(damagePartShortLabel(part))}:
           </span>
 
-          <ol class="dice-rolls fast-nri-damage-native-rolls">
-            <li class="${escAttr(nativeClasses)}">
-              ${esc(nativeLabel)}
-            </li>
-          </ol>
+          <span class="dice-tooltip fast-nri-inline-dice-tooltip">
+            <section class="tooltip-part">
+              <div class="dice">
+                <ol class="dice-rolls fast-nri-damage-native-rolls">
+                  <li class="${escAttr(nativeClasses)}">
+                    ${esc(nativeLabel)}
+                  </li>
+                </ol>
+              </div>
+            </section>
+          </span>
         </span>
       `;
     }
@@ -1189,6 +1237,15 @@ function selfDefenseCombatTerm(actor) {
   return "";
 }
 
+function selfDefenseCombatSource(actor, combatTerm) {
+  if (!combatTerm) return null;
+  if (hasAbility(actor, "Всегда готов")) return { formula: combatTerm, label: "Всегда готов", reason: "2d6 вместо Куба боя" };
+  const combatDie = String(actor?.system?.combatDie ?? "").trim();
+  if (combatDie) return { formula: combatTerm, label: "Куб боя", reason: actor.name };
+  if (actor?.type === "creature") return { formula: combatTerm, label: "Модификатор атаки", reason: "Существо Бестиария без Куба боя" };
+  return { formula: combatTerm, label: "Куб боя", reason: "" };
+}
+
 function equippedDefensiveItem(actor) {
   return actorAbilityItems(actor).find(item =>
     (item?.type === "weapon" || item?.type === "equipment")
@@ -1314,6 +1371,7 @@ export async function rollDamageFromChat(element) {
     actor,
     label: `Урон: ${weapon.name} — ${labels[profile] ?? profile}`,
     baseFormula: formula,
+    baseSources: [{ formula, label: `${weapon.name}: ${labels[profile] ?? profile}`, reason: "Профиль урона" }],
     showDC: false,
     contextHTML: critical ? `
       <section class="fast-nri-roll-context fast-nri-roll-context-critical">
@@ -1339,7 +1397,7 @@ export async function rollDamageFromChat(element) {
   damageState.effectDegree = confirmedAttackDegree;
   damageState = recalculateDamageState(damageState);
 
-  const modifiersHTML = modifierNotesHTML(result);
+  const modifiersHTML = rollSourcesHTML(result);
 
   const flavor = damageCardHTML({
     weaponName: weapon.name,
@@ -1488,10 +1546,17 @@ export async function selfDefenseFromChat(element) {
     damageState.originalEffectDegree
   );
 
+  const combatSource = selfDefenseCombatSource(defender, combatTerm);
+
   const result = await prepareRoll({
     actor: defender,
     label: `Самозащита: ${defenderToken.name}`,
     baseFormula,
+    baseSources: [
+      { formula: "1d20", label: "Базовый d20", reason: "Направленная защита" },
+      { formula: String(fortitude), label: "Стойкость", reason: defender.name },
+      ...(combatSource ? [combatSource] : [])
+    ],
     showDC: false,
     additionalModifiers: contextualModifiers,
     contextHTML: `
@@ -1590,7 +1655,7 @@ export async function selfDefenseFromChat(element) {
         <span>Защита: <strong>${esc(result.roll.total)}</strong></span>
         <span>Результат: <strong>${esc(defenseResultLabel(defenseResult))}</strong></span>
       </div>
-      ${modifierNotesHTML(result)}
+      ${rollSourcesHTML(result)}
     </div>
   `;
 

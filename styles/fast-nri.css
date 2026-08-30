@@ -1731,7 +1731,7 @@ body.theme-dark .fast-nri-defense-resolved {
 }
 
 /* ========================================================= */
-/* v0.5.7 - Foundry-native damage dice results               */
+/* v0.5.8 - Exact Foundry tooltip structure for damage dice  */
 /* ========================================================= */
 
 .fast-nri-damage-parts-block {
@@ -1751,7 +1751,7 @@ body.theme-dark .fast-nri-defense-resolved {
   display: flex;
   flex-flow: row wrap;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1764,87 +1764,119 @@ body.theme-dark .fast-nri-defense-resolved {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
-  min-height: 34px;
+  gap: 4px;
+  min-height: 42px;
 }
 
 .fast-nri-damage-native-type {
   font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 700;
-  opacity: 0.78;
+  font-size: 0.78rem;
+  font-weight: 800;
+  opacity: 0.82;
   white-space: nowrap;
 }
 
 /*
- * ВАЖНО:
- * Сам фон и визуальный вид настоящего куба НЕ рисуем.
- * <li> использует штатные Foundry-классы:
- *   roll die d4/d6/d8/d10/d12/d20 ...
+ * Точная штатная ancestry Foundry:
+ * .dice-tooltip > .tooltip-part > .dice > .dice-rolls > .roll.die
+ *
+ * Мы не задаём background / background-image / clip-path.
+ * Внешний вид физического куба полностью приходит из Foundry.
  */
-.fast-nri-damage-native-rolls {
-  display: inline-flex;
+.fast-nri-inline-dice-tooltip {
+  display: inline-block !important;
   flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fast-nri-inline-dice-tooltip > .tooltip-part {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fast-nri-inline-dice-tooltip .dice {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+}
+
+.fast-nri-inline-dice-tooltip .dice-rolls {
+  display: inline-flex;
   align-items: center;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.fast-nri-damage-native-rolls > .roll.die {
+.fast-nri-inline-dice-tooltip .dice-rolls > .roll.die {
   float: none;
-  margin: 0;
-}
+  flex: 0 0 auto;
 
-/*
- * Фиксированный положительный бонус является кубом урона по правилам
- * Fast NRI, но физического DiceTerm у Foundry для него нет.
- * Поэтому только он получает минимальную нейтральную системную плашку.
- */
-.fast-nri-fixed-result {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 30px;
-  min-height: 30px;
-  padding: 2px 6px;
-  border: 1px solid var(--color-border-light-2, #999);
-  border-radius: 4px;
-  background: var(--color-bg-option, rgba(0, 0, 0, 0.06));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  font-family: var(--font-mono, monospace);
-  font-size: 0.95rem;
-  font-weight: 900;
+  /*
+   * Foundry рисует сам куб. Мы только делаем его крупнее.
+   * Размер близок к раскрытому штатному tooltip, но чуть заметнее
+   * в нашей строке урона.
+   */
+  width: 38px;
+  height: 38px;
+  margin: 0;
+  line-height: 38px;
+  background-size: 38px 38px;
+  font-size: 1.05rem;
+  font-weight: 800;
 }
 
 .fast-nri-damage-native-part.removed,
 .fast-nri-damage-fixed-part.removed {
   opacity: 0.42;
-}
-
-.fast-nri-damage-native-part.removed,
-.fast-nri-damage-fixed-part.removed {
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
+}
+
+/*
+ * Фиксированный положительный бонус — куб урона Fast NRI,
+ * но не DiceTerm Foundry. Для него остаётся простая квадратная
+ * плашка без имитации физического куба.
+ */
+.fast-nri-fixed-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 2px 7px;
+  border: 1px solid var(--color-border-light-2, #999);
+  border-radius: 4px;
+  background: var(--color-bg-option, rgba(0, 0, 0, 0.06));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-mono, monospace);
+  font-size: 1.05rem;
+  font-weight: 900;
 }
 
 .fast-nri-damage-adjustment {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  min-height: 28px;
+  min-width: 36px;
+  min-height: 32px;
   padding: 2px 7px;
   border: 1px dashed rgba(100, 100, 100, 0.55);
   border-radius: 5px;
   font-family: var(--font-mono, monospace);
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   font-weight: 800;
 }
 
 .fast-nri-damage-equation-arrow {
   flex: 0 0 auto;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   font-weight: 900;
   opacity: 0.62;
 }
@@ -1854,13 +1886,13 @@ body.theme-dark .fast-nri-defense-resolved {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-width: 36px;
-  min-height: 32px;
-  padding: 2px 8px;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 2px 9px;
   border: 1px solid rgba(100, 58, 58, 0.55);
   border-radius: 5px;
   background: rgba(150, 70, 70, 0.065);
-  font-size: 1.02rem;
+  font-size: 1.15rem;
   font-weight: 900;
 }
 
@@ -1880,3 +1912,31 @@ body.theme-dark .fast-nri-damage-equation-total {
   border-color: rgba(220, 150, 150, 0.48);
   background: rgba(180, 95, 95, 0.08);
 }
+
+@media (max-width: 560px) {
+  .fast-nri-inline-dice-tooltip .dice-rolls > .roll.die,
+  .fast-nri-fixed-result {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    line-height: 34px;
+    background-size: 34px 34px;
+  }
+}
+
+
+/* ========================================================= */
+/* v0.5.9 - Roll value provenance                            */
+/* ========================================================= */
+.fast-nri-roll-sources { display:flex; flex-direction:column; gap:5px; margin-top:7px; padding-top:6px; border-top:1px solid rgba(100,100,100,.22); }
+.fast-nri-roll-sources-title { display:flex; align-items:center; gap:5px; color:#666; font-size:.72rem; font-weight:800; }
+.fast-nri-roll-source-list { display:flex; flex-direction:column; gap:3px; }
+.fast-nri-roll-source-row { display:grid; grid-template-columns:54px minmax(44px,auto) minmax(0,1fr); gap:3px 7px; align-items:baseline; min-width:0; padding:3px 5px; border-radius:4px; background:rgba(127,127,127,.045); font-size:.72rem; }
+.fast-nri-roll-source-kind { color:#777; font-size:.63rem; font-weight:700; text-transform:uppercase; }
+.fast-nri-roll-source-formula { justify-self:start; padding:1px 4px; white-space:nowrap; font-weight:800; }
+.fast-nri-roll-source-name { min-width:0; font-weight:700; overflow-wrap:anywhere; }
+.fast-nri-roll-source-reason { grid-column:3; color:#777; line-height:1.2; }
+.fast-nri-roll-source-automatic { background:rgba(88,105,145,.06); }
+.fast-nri-roll-source-manual { background:rgba(135,105,65,.06); }
+.theme-dark .fast-nri-roll-sources-title, body.theme-dark .fast-nri-roll-sources-title, .theme-dark .fast-nri-roll-source-kind, body.theme-dark .fast-nri-roll-source-kind, .theme-dark .fast-nri-roll-source-reason, body.theme-dark .fast-nri-roll-source-reason { color:#aaa; }
