@@ -6,6 +6,7 @@ import {
 } from "./module/token-defaults.mjs";
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
 import { registerFastNriTokenVisuals } from "./module/token-visuals.mjs";
+import { registerFastNriTokenHud } from "./module/token-hud.mjs";
 import {
   activateEffectChatInteractions,
   activateEffectSystem,
@@ -43,6 +44,7 @@ Hooks.once("init", () => {
   registerEffectSettings();
   activateTokenDefaults();
   registerFastNriTokenVisuals();
+  registerFastNriTokenHud();
 
   CONFIG.Actor.dataModels = {
     character: CharacterData,

@@ -2535,79 +2535,11 @@ body.theme-dark .fast-nri-hp-line label {
   white-space: nowrap;
 }
 
-/* PF2e-like compact panel for the single controlled token. */
-.fast-nri-effect-panel {
-  position: fixed;
-  z-index: 70;
-  top: 72px;
-  right: 330px;
-  max-width: min(520px, 55vw);
-  padding: 5px 7px;
-  border: 1px solid rgba(80, 80, 90, 0.55);
-  border-radius: 7px;
-  background: rgba(20, 22, 27, 0.82);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+
+/* v0.5.27: Effect Items use Foundry's native Token HUD palette.
+ * Deliberately keep the native palette's size, grid, hover and active styling.
+ */
+#token-hud .status-effects .effect-control.fast-nri-effect-item.active {
+  outline: 1px solid currentColor;
 }
 
-.fast-nri-effect-panel[hidden] {
-  display: none;
-}
-
-.fast-nri-effect-panel-title {
-  margin-bottom: 4px;
-  font-size: 0.72rem;
-  opacity: 0.72;
-}
-
-.fast-nri-effect-panel-icons {
-  display: flex;
-  flex-flow: row wrap;
-  gap: 5px;
-}
-
-.fast-nri-effect-panel-icon {
-  position: relative;
-  width: 46px;
-  height: 46px;
-  padding: 2px;
-  border: 1px solid rgba(160, 170, 185, 0.45);
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.24);
-}
-
-.fast-nri-effect-panel-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border: 0;
-}
-
-.fast-nri-effect-stack-badge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #20252d;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 18px;
-  text-align: center;
-}
-
-.fast-nri-effect-duration-badge {
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  bottom: 1px;
-  overflow: hidden;
-  padding: 1px 2px;
-  background: rgba(0, 0, 0, 0.72);
-  font-size: 8px;
-  line-height: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

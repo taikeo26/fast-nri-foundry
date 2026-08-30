@@ -298,12 +298,23 @@ function activeCombatDisplayState() {
   };
 }
 
-function sourceKeyFor(effect) {
-  return String(effect?.system?.sourceUuid || effect?.uuid || "").trim();
+export function effectSourceKey(effectOrUuid) {
+  if (typeof effectOrUuid === "string") {
+    return String(effectOrUuid).trim();
+  }
+
+  return String(
+    effectOrUuid?.system?.sourceUuid
+    || effectOrUuid?.uuid
+    || ""
+  ).trim();
 }
 
-function embeddedEffectWithSource(actor, sourceKey) {
-  return Array.from(actor?.items ?? []).find(item =>
+export function appliedEffectForSource(actor, effectOrUuid) {
+  const sourceKey = effectSourceKey(effectOrUuid);
+  if (!actor || !sourceKey) return null;
+
+  return Array.from(actor.items ?? []).find(item =>
     item.type === "effect"
     && String(item.system?.sourceUuid ?? "") === sourceKey
   ) ?? null;
@@ -399,7 +410,7 @@ export async function applyEffectToActor(sourceEffect, actor) {
     return null;
   }
 
-  const sourceKey = sourceKeyFor(sourceEffect);
+  const sourceKey = effectSourceKey(sourceEffect);
   if (!sourceKey) {
     ui.notifications.error("У эффекта отсутствует UUID источника.");
     return null;
@@ -416,7 +427,7 @@ export async function applyEffectToActor(sourceEffect, actor) {
     );
   }
 
-  const existing = embeddedEffectWithSource(actor, sourceKey);
+  const existing = appliedEffectForSource(actor, sourceKey);
 
   if (existing) {
     const next = addStackState(existing.system, timer);
@@ -427,7 +438,7 @@ export async function applyEffectToActor(sourceEffect, actor) {
     });
 
     await syncMirror(existing);
-    refreshEffectPanel();
+    refreshNativeEffectHud(actor);
 
     return existing;
   }
@@ -457,7 +468,7 @@ export async function applyEffectToActor(sourceEffect, actor) {
 
   if (embedded) {
     await syncMirror(embedded);
-    refreshEffectPanel();
+    refreshNativeEffectHud(actor);
   }
 
   return embedded;
@@ -469,8 +480,9 @@ export async function removeOneEffectStack(effect) {
   const next = removeOneStackState(effect.system);
 
   if (next.deleteEffect) {
+    const actor = effect.parent;
     await effect.delete();
-    refreshEffectPanel();
+    refreshNativeEffectHud(actor);
     return;
   }
 
@@ -480,7 +492,7 @@ export async function removeOneEffectStack(effect) {
   });
 
   await syncMirror(effect);
-  refreshEffectPanel();
+  refreshNativeEffectHud(effect.parent);
 }
 
 function isForwardTurnChange(prior, current) {
@@ -584,7 +596,7 @@ async function processCombatTurnChange(combat, prior, current) {
     await processActorExpiry(actor, events);
   }
 
-  refreshEffectPanel();
+  refreshNativeEffectHud();
 }
 
 function tokenAtCanvasPoint(x, y) {
@@ -750,89 +762,23 @@ export async function seedBuiltinEffectsOnce() {
   await game.settings.set(SYSTEM_ID, SEED_SETTING, true);
 }
 
-function controlledActor() {
-  const controlled = Array.from(canvas?.tokens?.controlled ?? []);
-  if (controlled.length !== 1) return null;
-  return controlled[0].actor ?? null;
-}
+/**
+ * Re-render Foundry's native Token HUD when it is currently open.
+ * This updates active highlights and stack/duration tooltips in-place.
+ */
+export function refreshNativeEffectHud(actor = null) {
+  const hud = canvas?.hud?.token;
+  if (!hud?.rendered) return;
 
-function effectPanelElement() {
-  let panel = document.getElementById("fast-nri-effect-panel");
-
-  if (!panel) {
-    panel = document.createElement("section");
-    panel.id = "fast-nri-effect-panel";
-    panel.className = "fast-nri-effect-panel";
-    document.body.append(panel);
-  }
-
-  return panel;
-}
-
-export function refreshEffectPanel() {
-  if (!game.ready) return;
-
-  const panel = effectPanelElement();
-  const actor = controlledActor();
-
-  if (!actor) {
-    panel.hidden = true;
-    panel.replaceChildren();
+  if (
+    actor?.uuid
+    && hud.actor?.uuid
+    && hud.actor.uuid !== actor.uuid
+  ) {
     return;
   }
 
-  const effects = Array.from(actor.items ?? [])
-    .filter(item => item.type === "effect")
-    .sort((a, b) => a.sort - b.sort);
-
-  if (!effects.length) {
-    panel.hidden = true;
-    panel.replaceChildren();
-    return;
-  }
-
-  panel.hidden = false;
-
-  const combatState = activeCombatDisplayState();
-
-  panel.innerHTML = `
-    <div class="fast-nri-effect-panel-title">${esc(actor.name)}</div>
-    <div class="fast-nri-effect-panel-icons">
-      ${effects.map(effect => {
-        const count = effectStackCount(effect);
-        const duration = runtimeDurationLabel(effect, combatState);
-
-        return `
-          <button
-            type="button"
-            class="fast-nri-effect-panel-icon"
-            data-effect-item-id="${escAttr(effect.id)}"
-            title="${escAttr(`${effect.name} • ${duration}\nПКМ: снять один стак`)}"
-          >
-            <img src="${escAttr(effect.img)}" alt="${escAttr(effect.name)}" />
-            ${count > 1 ? `<span class="fast-nri-effect-stack-badge">${esc(count)}</span>` : ""}
-            <span class="fast-nri-effect-duration-badge">${esc(duration)}</span>
-          </button>
-        `;
-      }).join("")}
-    </div>
-  `;
-
-  for (const button of panel.querySelectorAll("[data-effect-item-id]")) {
-    button.addEventListener("click", event => {
-      event.preventDefault();
-      const effect = actor.items.get(button.dataset.effectItemId);
-      effect?.sheet?.render?.({ force: true });
-    });
-
-    button.addEventListener("contextmenu", event => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      const effect = actor.items.get(button.dataset.effectItemId);
-      if (effect) void removeOneEffectStack(effect);
-    });
-  }
+  void hud.render({ force: true });
 }
 
 export function activateEffectChatInteractions(root = document) {
@@ -865,8 +811,6 @@ export function activateEffectSystem() {
     void processCombatTurnChange(combat, prior, current);
   });
 
-  Hooks.on("controlToken", () => refreshEffectPanel());
-  Hooks.on("canvasReady", () => refreshEffectPanel());
 
   Hooks.on("createItem", (item, options, userId) => {
     if (item.type !== "effect") return;
@@ -879,7 +823,7 @@ export function activateEffectSystem() {
       void syncMirror(item);
     }
 
-    refreshEffectPanel();
+    refreshNativeEffectHud(item.parent?.documentName === "Actor" ? item.parent : null);
   });
 
   Hooks.on("updateItem", (item, _changes, _options, userId) => {
@@ -889,7 +833,7 @@ export function activateEffectSystem() {
       void syncMirror(item);
     }
 
-    refreshEffectPanel();
+    refreshNativeEffectHud(item.parent?.documentName === "Actor" ? item.parent : null);
   });
 
   Hooks.on("deleteItem", (item, _options, userId) => {
@@ -899,7 +843,7 @@ export function activateEffectSystem() {
       void deleteMirror(item);
     }
 
-    refreshEffectPanel();
+    refreshNativeEffectHud(item.parent?.documentName === "Actor" ? item.parent : null);
   });
 
   Hooks.on("deleteActiveEffect", (activeEffect, _options, userId) => {
@@ -918,5 +862,5 @@ export function activateEffectSystem() {
     }
   });
 
-  refreshEffectPanel();
+  refreshNativeEffectHud();
 }
