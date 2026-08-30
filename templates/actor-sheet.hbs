@@ -257,9 +257,19 @@
 
         <div class="fast-nri-skills-grid">
           {{#each skillRows as |skill|}}
-            <label class="fast-nri-skill-row">
-              <span>{{skill.label}}</span>
-              <select name="system.skills.{{skill.id}}">
+            <div class="fast-nri-skill-row">
+              <button
+                type="button"
+                class="fast-nri-skill-roll"
+                data-action="rollSkill"
+                data-skill-id="{{skill.id}}"
+                title="Бросить {{skill.formula}}"
+              >
+                <i class="fa-solid fa-dice-d20"></i>
+                <span>{{skill.label}}</span>
+              </button>
+
+              <select name="system.skills.{{skill.id}}" title="Куб навыка">
                 <option value="" {{#unless skill.value}}selected{{/unless}}>—</option>
                 <option value="d4" {{#if (eq skill.value "d4")}}selected{{/if}}>d4</option>
                 <option value="d6" {{#if (eq skill.value "d6")}}selected{{/if}}>d6</option>
@@ -267,7 +277,7 @@
                 <option value="d10" {{#if (eq skill.value "d10")}}selected{{/if}}>d10</option>
                 <option value="d12" {{#if (eq skill.value "d12")}}selected{{/if}}>d12</option>
               </select>
-            </label>
+            </div>
           {{/each}}
         </div>
       </section>

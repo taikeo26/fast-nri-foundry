@@ -310,3 +310,168 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ========================================================= */
+/* v0.2.0 - Universal roll workflow / skill rolls             */
+/* ========================================================= */
+
+.fast-nri-skill-roll {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.fast-nri-skill-roll:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.fast-nri-skill-roll span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fast-nri-roll-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 440px;
+}
+
+.fast-nri-roll-dialog header {
+  font-size: 1.05rem;
+}
+
+.fast-nri-roll-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fast-nri-roll-block-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.fast-nri-base-formula,
+.fast-nri-final-formula {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid var(--fnri-border);
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+.fast-nri-auto-mod-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.fast-nri-auto-mod-row small {
+  grid-column: 2 / -1;
+  opacity: 0.7;
+}
+
+.fast-nri-manual-modifiers {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fast-nri-manual-mod-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(150px, 1.4fr) 30px;
+  gap: 6px;
+}
+
+.fast-nri-manual-mod-row button,
+.fast-nri-add-manual-mod {
+  min-height: 30px;
+}
+
+.fast-nri-roll-dc-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.fast-nri-roll-dc-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fast-nri-roll-dc-row small {
+  opacity: 0.7;
+}
+
+.fast-nri-final-formula-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--fnri-border);
+}
+
+.fast-nri-final-formula-row > span {
+  font-weight: 600;
+}
+
+.fast-nri-roll-empty {
+  padding: 6px 0;
+  opacity: 0.65;
+}
+
+.fast-nri-chat-roll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fast-nri-chat-degrees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.fast-nri-chat-degree {
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.45;
+  font-size: 0.78rem;
+}
+
+.fast-nri-chat-degree.recommended {
+  opacity: 1;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .fast-nri-roll-dialog {
+    min-width: 0;
+  }
+
+  .fast-nri-roll-dc-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fast-nri-manual-mod-row {
+    grid-template-columns: 1fr 1fr 30px;
+  }
+}

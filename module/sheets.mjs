@@ -1,3 +1,5 @@
+import { rollSkillCheck } from "./rolls.mjs";
+
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2, ItemSheetV2 } = foundry.applications.sheets;
 
@@ -34,7 +36,8 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     actions: {
       editItem: FastNriActorSheet.#editItem,
       deleteItem: FastNriActorSheet.#deleteItem,
-      createItem: FastNriActorSheet.#createItem
+      createItem: FastNriActorSheet.#createItem,
+      rollSkill: FastNriActorSheet.#rollSkill
     }
   };
 
@@ -62,11 +65,15 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       item => item.type === "ability" && item.system.category === "spell"
     );
 
-    const skillRows = SKILLS.map(([id, label]) => ({
-      id,
-      label,
-      value: this.actor.system.skills?.[id] ?? ""
-    }));
+    const skillRows = SKILLS.map(([id, label]) => {
+      const value = this.actor.system.skills?.[id] ?? "";
+      return {
+        id,
+        label,
+        value,
+        formula: value ? `1d20 + ${value}` : "1d20"
+      };
+    });
 
     return {
       ...context,
@@ -160,6 +167,23 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     }
 
     show(this._activeTab);
+  }
+
+  static async #rollSkill(event, target) {
+    event.preventDefault();
+
+    const skillId = target.dataset.skillId;
+    const skill = SKILLS.find(([id]) => id === skillId);
+    if (!skill) return;
+
+    const [id, label] = skill;
+    const value = this.actor.system.skills?.[id] ?? "";
+
+    await rollSkillCheck(this.actor, {
+      id,
+      label,
+      value
+    });
   }
 
   static async #createItem(event, target) {
