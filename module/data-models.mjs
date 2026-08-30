@@ -1,4 +1,6 @@
 const {
+  ArrayField,
+  BooleanField,
   HTMLField,
   NumberField,
   SchemaField,
@@ -19,6 +21,27 @@ const text = (initial = "") =>
     nullable: false,
     initial
   });
+
+const flag = (initial = false) =>
+  new BooleanField({
+    required: true,
+    nullable: false,
+    initial
+  });
+
+const stringArray = () =>
+  new ArrayField(
+    new StringField({
+      required: true,
+      nullable: false,
+      blank: false
+    }),
+    {
+      required: true,
+      nullable: false,
+      initial: []
+    }
+  );
 
 function skillsSchema() {
   return new SchemaField({
@@ -52,6 +75,9 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
     speed: integer(speed),
 
     combatDie: text(combatDie),
+
+    // Для существ Бестиария без Куба боя.
+    attackModifier: integer(0),
 
     armor: new SchemaField({
       partial: integer(5),
@@ -97,7 +123,7 @@ export class CreatureData extends foundry.abstract.TypeDataModel {
     return actorSchema({
       hp: 10,
       speed: 5,
-      combatDie: "1d6"
+      combatDie: ""
     });
   }
 }
@@ -118,6 +144,14 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
     return {
       ...itemBaseSchema(),
       range: text("Ближняя"),
+      // Канонические стабильные ID свойств.
+      propertyIds: stringArray(),
+
+      // Резервное текстовое поле для будущих предметных данных.
+      // Не используется как список свойств и пока не выводится в UI.
+      details: text(""),
+
+      held: flag(false),
       damageType: text("physical"),
       damage: new SchemaField({
         partial: text("0"),
@@ -143,7 +177,13 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       ...itemBaseSchema(),
-      category: text("")
+      category: text(""),
+      propertyIds: stringArray(),
+
+      // Резервное текстовое поле для будущих предметных данных.
+      // Не используется как список свойств и пока не выводится в UI.
+      details: text(""),
+      held: flag(false)
     };
   }
 }

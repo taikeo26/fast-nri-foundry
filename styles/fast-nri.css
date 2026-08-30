@@ -1451,3 +1451,227 @@ body.theme-dark .fast-nri-resource-use-text small {
 body.theme-dark .fast-nri-resource-shortage {
   color: #e6a16f !important;
 }
+
+
+/* ========================================================= */
+/* v0.5.0 - Structured damage + Self-defense                  */
+/* ========================================================= */
+
+.fast-nri-damage-parts-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 0;
+}
+
+.fast-nri-damage-parts-title {
+  color: #666;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.fast-nri-damage-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fast-nri-damage-part {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 2px 7px;
+  border: 1px solid #aaa;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.055);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fast-nri-damage-part.removed {
+  opacity: 0.48;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.fast-nri-damage-penalty {
+  color: #777;
+}
+
+.fast-nri-damage-structure-warning {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 7px;
+  color: #8a5b25;
+  border: 1px solid rgba(160, 110, 45, 0.4);
+  border-radius: 5px;
+  background: rgba(160, 110, 45, 0.07);
+  font-size: 0.75rem;
+}
+
+.fast-nri-damage-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 6px;
+  align-items: stretch;
+}
+
+.fast-nri-damage-actions .fast-nri-apply-damage-button {
+  width: auto;
+}
+
+.fast-nri-defense-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 8px;
+  color: #3d536f;
+  border: 1px solid #71869e;
+  border-radius: 5px;
+  background: rgba(85, 115, 150, 0.07);
+  font-weight: 700;
+}
+
+.fast-nri-defense-button:hover {
+  color: #283d58;
+  border-color: #506b89;
+  background: rgba(85, 115, 150, 0.14);
+}
+
+.fast-nri-defense-resolved {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 8px;
+  color: #666;
+  border: 1px solid #aaa;
+  border-radius: 5px;
+  background: rgba(127, 127, 127, 0.05);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.fast-nri-self-defense-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0;
+  padding: 6px 7px;
+  border-left: 3px solid #70869e;
+  border-radius: 4px;
+  background: rgba(85, 115, 150, 0.055);
+  font-size: 0.77rem;
+}
+
+.fast-nri-self-defense-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fast-nri-self-defense-full-cancel {
+  border-left-color: #4f8858;
+  background: rgba(70, 135, 80, 0.06);
+}
+
+.fast-nri-self-defense-failure {
+  border-left-color: #a35e5e;
+  background: rgba(165, 80, 80, 0.055);
+}
+
+.fast-nri-defense-roll-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  padding: 5px 0;
+  font-size: 0.78rem;
+}
+
+.fast-nri-defense-choice p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.fast-nri-defense-roll-context small {
+  display: block;
+}
+
+.fast-nri-apply-damage-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.theme-dark .fast-nri-damage-parts-title,
+body.theme-dark .fast-nri-damage-parts-title,
+.theme-dark .fast-nri-damage-penalty,
+body.theme-dark .fast-nri-damage-penalty {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-damage-part,
+body.theme-dark .fast-nri-damage-part {
+  border-color: #666;
+}
+
+.theme-dark .fast-nri-defense-button,
+body.theme-dark .fast-nri-defense-button {
+  color: #b9d0eb;
+  border-color: #657f9b;
+}
+
+.theme-dark .fast-nri-defense-resolved,
+body.theme-dark .fast-nri-defense-resolved {
+  color: #bbb;
+  border-color: #666;
+}
+
+
+/* ========================================================= */
+/* v0.5.1 - Item rule data                                   */
+/* ========================================================= */
+
+.fast-nri-checkbox-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.fast-nri-checkbox-label input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+
+/* ========================================================= */
+/* v0.5.2 - Native Foundry property multi-select             */
+/* ========================================================= */
+
+.fast-nri-property-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fast-nri-property-field multi-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.fast-nri-property-field multi-select select {
+  width: 100%;
+}
+
+.fast-nri-property-field multi-select .tags {
+  max-width: 100%;
+}

@@ -1,3 +1,4 @@
+import { ITEM_PROPERTIES } from "./config.mjs";
 import { useAbility } from "./ability-use.mjs";
 import { rollSkillCheck, rollWeaponAttack } from "./rolls.mjs";
 
@@ -82,6 +83,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       ...context,
       actor: this.actor,
       system: this.actor.system,
+      isCreature: this.actor.type === "creature",
 
       tabs: {
         main: { active: this._activeTab === "main" },
@@ -285,6 +287,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       ...context,
       item: this.item,
       system: this.item.system,
+      propertyChoices: ITEM_PROPERTIES,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",

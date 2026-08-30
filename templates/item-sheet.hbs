@@ -32,6 +32,20 @@
         </label>
       </div>
 
+
+      <div class="fast-nri-two">
+        <label class="fast-nri-property-field">
+          Свойства
+          <multi-select name="system.propertyIds">
+            {{selectOptions propertyChoices selected=system.propertyIds}}
+          </multi-select>
+        </label>
+        <label class="fast-nri-checkbox-label">
+          <input type="checkbox" name="system.held" {{#if system.held}}checked{{/if}} />
+          В руке
+        </label>
+      </div>
+
       <div class="fast-nri-three">
         <label>Частичный
           <input type="text" name="system.damage.partial" value="{{system.damage.partial}}" />
@@ -75,9 +89,22 @@
   {{#if isEquipment}}
     <section class="fast-nri-section">
       <h2>Снаряжение</h2>
-      <label>
-        Категория
-        <input type="text" name="system.category" value="{{system.category}}" />
+      <div class="fast-nri-two">
+        <label>
+          Категория
+          <input type="text" name="system.category" value="{{system.category}}" />
+        </label>
+        <label class="fast-nri-checkbox-label">
+          <input type="checkbox" name="system.held" {{#if system.held}}checked{{/if}} />
+          В руке
+        </label>
+      </div>
+
+      <label class="fast-nri-property-field">
+        Свойства
+        <multi-select name="system.propertyIds">
+          {{selectOptions propertyChoices selected=system.propertyIds}}
+        </multi-select>
       </label>
     </section>
   {{/if}}
