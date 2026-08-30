@@ -475,3 +475,186 @@
     grid-template-columns: 1fr 1fr 30px;
   }
 }
+
+
+/* ========================================================= */
+/* v0.2.1 - Colored degree-of-success result                 */
+/* ========================================================= */
+
+.fast-nri-degree-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  margin: 7px 0 5px;
+  padding: 7px 10px;
+  border: 1px solid;
+  border-left-width: 5px;
+  border-radius: 4px;
+  line-height: 1.15;
+}
+
+.fast-nri-degree-result-label {
+  opacity: 0.8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fast-nri-degree-result strong {
+  font-size: 1rem;
+}
+
+/* Большой успех */
+.fast-nri-degree-great {
+  color: #0b5d2a;
+  border-color: #2f8f4e;
+  background: rgba(47, 143, 78, 0.16);
+}
+
+/* Успех */
+.fast-nri-degree-success {
+  color: #185a91;
+  border-color: #3b82b4;
+  background: rgba(59, 130, 180, 0.16);
+}
+
+/* Частичный успех */
+.fast-nri-degree-partial {
+  color: #8a5400;
+  border-color: #c88918;
+  background: rgba(200, 137, 24, 0.18);
+}
+
+/* Провал */
+.fast-nri-degree-failure {
+  color: #8d2424;
+  border-color: #b83b3b;
+  background: rgba(184, 59, 59, 0.16);
+}
+
+/* Dark Foundry themes: keep text readable while preserving the same hue family. */
+.theme-dark .fast-nri-degree-great,
+body.theme-dark .fast-nri-degree-great {
+  color: #8fd6a4;
+}
+
+.theme-dark .fast-nri-degree-success,
+body.theme-dark .fast-nri-degree-success {
+  color: #9bc9ea;
+}
+
+.theme-dark .fast-nri-degree-partial,
+body.theme-dark .fast-nri-degree-partial {
+  color: #e9bf6a;
+}
+
+.theme-dark .fast-nri-degree-failure,
+body.theme-dark .fast-nri-degree-failure {
+  color: #efa0a0;
+}
+
+
+/* ========================================================= */
+/* v0.2.2 - Subtle chat card readability                     */
+/* ========================================================= */
+
+.fast-nri-chat-roll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 7px;
+  border: 1px solid rgba(92, 74, 110, 0.28);
+  border-radius: 6px;
+  background: rgba(92, 74, 110, 0.055);
+}
+
+.fast-nri-chat-roll-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -7px -7px 1px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(92, 74, 110, 0.22);
+  border-radius: 6px 6px 0 0;
+  background: rgba(92, 74, 110, 0.11);
+}
+
+.fast-nri-chat-roll-title i {
+  opacity: 0.72;
+}
+
+.fast-nri-chat-roll-title strong {
+  min-width: 0;
+  font-size: 0.96rem;
+}
+
+.fast-nri-chat-roll-meta {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 1px solid rgba(74, 102, 129, 0.24);
+  border-radius: 999px;
+  background: rgba(74, 102, 129, 0.08);
+}
+
+.fast-nri-chat-dc-label {
+  opacity: 0.74;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.fast-nri-chat-dc-value {
+  font-size: 0.92rem;
+}
+
+.fast-nri-chat-modifiers {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.075);
+}
+
+.fast-nri-chat-modifiers i {
+  margin-top: 2px;
+  opacity: 0.58;
+}
+
+.fast-nri-chat-modifiers small {
+  line-height: 1.3;
+  opacity: 0.86;
+}
+
+/* Keep the colored degree banner visually dominant. */
+.fast-nri-chat-roll .fast-nri-degree-result {
+  margin-top: 2px;
+  margin-bottom: 1px;
+}
+
+/* Slightly stronger contrast in dark themes without making the card bright. */
+.theme-dark .fast-nri-chat-roll,
+body.theme-dark .fast-nri-chat-roll {
+  border-color: rgba(177, 150, 201, 0.24);
+  background: rgba(177, 150, 201, 0.045);
+}
+
+.theme-dark .fast-nri-chat-roll-title,
+body.theme-dark .fast-nri-chat-roll-title {
+  border-bottom-color: rgba(177, 150, 201, 0.20);
+  background: rgba(177, 150, 201, 0.09);
+}
+
+.theme-dark .fast-nri-chat-roll-meta,
+body.theme-dark .fast-nri-chat-roll-meta {
+  border-color: rgba(152, 181, 206, 0.22);
+  background: rgba(152, 181, 206, 0.07);
+}

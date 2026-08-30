@@ -248,14 +248,10 @@ function attachDialogListeners(dialog, baseFormula, automaticModifiers) {
 function degreeHTML(degree) {
   if (!degree) return "";
 
-  const order = ["failure", "partial", "success", "great"];
   return `
-    <div class="fast-nri-chat-degrees">
-      ${order.map(key => `
-        <span class="fast-nri-chat-degree ${key === degree ? "recommended" : ""}">
-          ${DEGREE_LABELS[key]}
-        </span>
-      `).join("")}
+    <div class="fast-nri-degree-result fast-nri-degree-${degree}">
+      <span class="fast-nri-degree-result-label">Степень</span>
+      <strong>${DEGREE_LABELS[degree]}</strong>
     </div>
   `;
 }
@@ -329,11 +325,26 @@ export async function openPreRollDialog({
 
   const flavor = `
     <div class="fast-nri-chat-roll">
-      <strong>${esc(label)}</strong>
-      ${result.dc !== null ? `<div>Сложность: <strong>${result.dc}</strong></div>` : ""}
-      ${degree ? `<div>Рекомендуемая степень: <strong>${DEGREE_LABELS[degree]}</strong></div>` : ""}
+      <div class="fast-nri-chat-roll-title">
+        <i class="fa-solid fa-dice-d20"></i>
+        <strong>${esc(label)}</strong>
+      </div>
+
+      ${result.dc !== null ? `
+        <div class="fast-nri-chat-roll-meta">
+          <span class="fast-nri-chat-dc-label">Сложность</span>
+          <strong class="fast-nri-chat-dc-value">${result.dc}</strong>
+        </div>
+      ` : ""}
+
       ${degreeHTML(degree)}
-      ${modifierNotes ? `<small>${modifierNotes}</small>` : ""}
+
+      ${modifierNotes ? `
+        <div class="fast-nri-chat-modifiers">
+          <i class="fa-solid fa-sliders"></i>
+          <small>${modifierNotes}</small>
+        </div>
+      ` : ""}
     </div>
   `;
 
