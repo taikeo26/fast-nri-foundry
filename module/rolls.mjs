@@ -1958,6 +1958,11 @@ export async function undoAppliedDamage(element) {
 
   restoredHp = Math.max(0, restoredHp);
 
+  // Фактическое изменение HP при отмене. Если после исходного урона цель
+  // уже лечили и max HP ограничивает возврат, floaty-text должен показывать
+  // именно реально возвращённое HP, а не исходную величину события.
+  const restoredAmount = Math.max(0, restoredHp - currentHp);
+
   try {
     await actor.update({
       "system.hp.value": restoredHp
@@ -1987,7 +1992,8 @@ export async function undoAppliedDamage(element) {
       await message.update({
         content,
         "flags.fast-nri.undone": true,
-        "flags.fast-nri.restoredHp": restoredHp
+        "flags.fast-nri.restoredHp": restoredHp,
+        "flags.fast-nri.restoredAmount": restoredAmount
       });
     } catch (error) {
       console.warn("Быстрая НРИ | HP возвращены, но сообщение не удалось обновить", error);
@@ -1999,7 +2005,7 @@ export async function undoAppliedDamage(element) {
   return {
     actor,
     restoredHp,
-    restoredAmount: stored.appliedDamage
+    restoredAmount
   };
 }
 
