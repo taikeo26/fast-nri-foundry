@@ -40,10 +40,24 @@
             {{selectOptions propertyChoices selected=system.propertyIds}}
           </multi-select>
         </label>
-        <label class="fast-nri-checkbox-label">
-          <input type="checkbox" name="system.held" {{#if system.held}}checked{{/if}} />
-          В руке
-        </label>
+        <div class="fast-nri-item-equip-config">
+          <label class="fast-nri-checkbox-label">
+            <input
+              type="checkbox"
+              data-fast-nri-item-equipped
+              {{#if system.equipped}}checked{{/if}}
+            />
+            Одето
+          </label>
+
+          <label>
+            Занимает рук
+            <select data-fast-nri-item-hands>
+              <option value="1" {{#if (eq system.hands 1)}}selected{{/if}}>1</option>
+              <option value="2" {{#if (eq system.hands 2)}}selected{{/if}}>2</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="fast-nri-three">
@@ -94,10 +108,24 @@
           Категория
           <input type="text" name="system.category" value="{{system.category}}" />
         </label>
-        <label class="fast-nri-checkbox-label">
-          <input type="checkbox" name="system.held" {{#if system.held}}checked{{/if}} />
-          В руке
-        </label>
+        <div class="fast-nri-item-equip-config">
+          <label class="fast-nri-checkbox-label">
+            <input
+              type="checkbox"
+              data-fast-nri-item-equipped
+              {{#if system.equipped}}checked{{/if}}
+            />
+            Одето
+          </label>
+
+          <label>
+            Занимает рук
+            <select data-fast-nri-item-hands>
+              <option value="1" {{#if (eq system.hands 1)}}selected{{/if}}>1</option>
+              <option value="2" {{#if (eq system.hands 2)}}selected{{/if}}>2</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <label class="fast-nri-property-field">

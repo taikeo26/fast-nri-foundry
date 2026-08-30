@@ -1,3 +1,4 @@
+import { setItemEquipped, setItemHands } from "./equipment.mjs";
 import { ITEM_PROPERTIES } from "./config.mjs";
 import { useAbility } from "./ability-use.mjs";
 import { rollSkillCheck, rollWeaponAttack } from "./rolls.mjs";
@@ -143,6 +144,31 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       });
     }
 
+    for (const checkbox of this.element.querySelectorAll("[data-fast-nri-equipped-toggle]")) {
+      checkbox.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const itemId = event.currentTarget
+          .closest("[data-item-id]")
+          ?.dataset?.itemId;
+
+        const item = this.actor.items.get(itemId);
+        if (!item) return;
+
+        event.currentTarget.disabled = true;
+
+        try {
+          await setItemEquipped(item, event.currentTarget.checked);
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка экипировки Item", error);
+          ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
+        } finally {
+          event.currentTarget.disabled = false;
+        }
+      });
+    }
+
     console.log(`Быстрая НРИ | Лист Actor готов: ${this.actor.name}`);
   }
 
@@ -279,6 +305,46 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       template: "systems/fast-nri/templates/item-sheet.hbs"
     }
   };
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+
+    const equipped = this.element.querySelector("[data-fast-nri-item-equipped]");
+    if (equipped) {
+      equipped.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.disabled = true;
+
+        try {
+          await setItemEquipped(this.item, event.currentTarget.checked);
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка экипировки Item", error);
+          ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
+        } finally {
+          event.currentTarget.disabled = false;
+        }
+      });
+    }
+
+    const hands = this.element.querySelector("[data-fast-nri-item-hands]");
+    if (hands) {
+      hands.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.disabled = true;
+
+        try {
+          await setItemHands(this.item, event.currentTarget.value);
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка изменения занятых рук", error);
+          ui.notifications.error(`Не удалось изменить число рук: ${error.message}`);
+        } finally {
+          event.currentTarget.disabled = false;
+        }
+      });
+    }
+  }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);

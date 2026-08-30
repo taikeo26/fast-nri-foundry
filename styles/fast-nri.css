@@ -1675,3 +1675,57 @@ body.theme-dark .fast-nri-defense-resolved {
 .fast-nri-property-field multi-select .tags {
   max-width: 100%;
 }
+
+
+/* ========================================================= */
+/* v0.5.5 - Defense history, damage apply modes, equipment   */
+/* ========================================================= */
+
+.fast-nri-damage-actions-three {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.1fr);
+}
+
+.fast-nri-apply-damage-x2 {
+  font-weight: 800;
+}
+
+.fast-nri-equipped-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 0.72rem;
+}
+
+.fast-nri-equipped-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.fast-nri-item-equip-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.8fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.fast-nri-weapon-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto 28px;
+}
+
+.fast-nri-inventory .fast-nri-item-group:nth-of-type(2) .fast-nri-item-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto auto 28px;
+}
+
+@media (max-width: 560px) {
+  .fast-nri-damage-actions-three {
+    grid-template-columns: 1fr;
+  }
+
+  .fast-nri-item-equip-config {
+    grid-template-columns: 1fr;
+  }
+}

@@ -709,8 +709,7 @@ function activeDieResults(term) {
  * - защита работает с уже выпавшими/фиксированными результатами.
  */
 function buildDamageState(roll, {
-  damageType = "physical",
-  multiplier = 1
+  damageType = "physical"
 } = {}) {
   const parts = [];
   const penalties = [];
@@ -781,15 +780,14 @@ function buildDamageState(roll, {
     damageType,
     parts,
     penalties,
-    multiplier: Math.max(1, Number(multiplier) || 1),
     originalRollTotal: Number(roll?.total) || 0,
     currentBaseTotal: 0,
     currentTotal: 0,
     fullCancel: false,
     effectDegree: null,
     originalEffectDegree: null,
-    selfDefenseUsed: false,
-    defense: null
+    defense: null,
+    defenseHistory: []
   };
 
   return recalculateDamageState(state);
@@ -812,7 +810,7 @@ function recalculateDamageState(state) {
     .reduce((sum, part) => sum + Math.max(0, Number(part.value) || 0), 0);
 
   next.currentBaseTotal = Math.max(0, positive - penalty);
-  next.currentTotal = next.currentBaseTotal * Math.max(1, Number(next.multiplier) || 1);
+  next.currentTotal = next.currentBaseTotal;
   return next;
 }
 
@@ -869,7 +867,7 @@ function defenseSummaryHTML(state) {
   const defense = state?.defense;
   if (!defense) return "";
 
-  const removed = (state.parts ?? []).find(part => part.id === defense.removedPartId);
+  const removed = defense.removedPart ?? null;
   const beforeDegree = defense.effectDegreeBefore;
   const afterDegree = defense.effectDegreeAfter;
 
@@ -914,7 +912,8 @@ function damageCardHTML({
   state,
   modifiersHTML = ""
 }) {
-  const multiplier = Math.max(1, Number(state?.multiplier) || 1);
+  const baseDamage = Math.max(0, Number(state?.currentTotal) || 0);
+  const doubledDamage = baseDamage * 2;
 
   return `
     <div class="fast-nri-chat-roll fast-nri-damage-card">
@@ -927,53 +926,60 @@ function damageCardHTML({
       ${damagePartsHTML(state)}
       ${defenseSummaryHTML(state)}
 
-      ${critical && !state.fullCancel ? `
+      ${critical ? `
         <div class="fast-nri-critical-roll">
-          <i class="fa-solid fa-xmark"></i>
+          <i class="fa-solid fa-burst"></i>
           <strong>
-            Множитель после защит:
-            ${esc(state.currentBaseTotal)} × ${esc(multiplier)}
-            = ${esc(state.currentTotal)}
+            Исходная атака отмечена как критическая.
+            Множитель выбирается только при нанесении урона.
           </strong>
         </div>
       ` : ""}
 
       <div class="fast-nri-damage-total">
-        <span>${state.defense ? "Урон после защиты" : "Итоговый урон"}</span>
-        <strong>${esc(state.currentTotal)}</strong>
+        <span>${state.defense ? "Текущий урон" : "Итоговый урон"}</span>
+        <strong>${esc(baseDamage)}</strong>
       </div>
 
-      <div class="fast-nri-damage-actions">
-        ${state.selfDefenseUsed ? `
-          <span class="fast-nri-defense-resolved">
-            <i class="fa-solid fa-shield-halved"></i>
-            Самозащита выполнена
-          </span>
-        ` : `
-          <button
-            type="button"
-            class="fast-nri-defense-button"
-            data-fast-nri-defense
-            title="Использовать защитное действие"
-          >
-            <i class="fa-solid fa-shield-halved"></i>
-            <span>Защита</span>
-          </button>
-        `}
+      <div class="fast-nri-damage-actions fast-nri-damage-actions-three">
+        <button
+          type="button"
+          class="fast-nri-defense-button"
+          data-fast-nri-defense
+          title="Использовать защитное действие"
+        >
+          <i class="fa-solid fa-shield-halved"></i>
+          <span>Защита</span>
+        </button>
 
         <button
           type="button"
           class="fast-nri-apply-damage-button"
           data-fast-nri-apply-damage
-          data-damage="${escAttr(state.currentTotal)}"
+          data-damage="${escAttr(baseDamage)}"
           ${state.fullCancel ? "disabled" : ""}
           title="${state.fullCancel
             ? "Действие полностью отменено"
-            : `Нанести ${escAttr(state.currentTotal)} урона выделенному токену`
+            : `Нанести ${escAttr(baseDamage)} урона выделенному токену`
           }"
         >
           <i class="fa-solid fa-heart-crack"></i>
-          <span>${state.fullCancel ? "Урон отменён" : "Нанести урон"}</span>
+          <span>${state.fullCancel ? "Урон отменён" : "Нанести"}</span>
+        </button>
+
+        <button
+          type="button"
+          class="fast-nri-apply-damage-button fast-nri-apply-damage-x2"
+          data-fast-nri-apply-damage
+          data-damage="${escAttr(doubledDamage)}"
+          ${state.fullCancel ? "disabled" : ""}
+          title="${state.fullCancel
+            ? "Действие полностью отменено"
+            : `Нанести ${escAttr(doubledDamage)} урона (×2)`
+          }"
+        >
+          <i class="fa-solid fa-xmark"></i>
+          <span>${state.fullCancel ? "×2 отменён" : "Нанести ×2"}</span>
         </button>
       </div>
 
@@ -1092,10 +1098,10 @@ function selfDefenseCombatTerm(actor) {
   return "";
 }
 
-function heldDefensiveItem(actor) {
+function equippedDefensiveItem(actor) {
   return actorAbilityItems(actor).find(item =>
     (item?.type === "weapon" || item?.type === "equipment")
-    && item?.system?.held === true
+    && item?.system?.equipped === true
     && itemHasProperty(item, "defensive")
   ) ?? null;
 }
@@ -1103,10 +1109,10 @@ function heldDefensiveItem(actor) {
 function selfDefenseContextualModifiers(actor, weapon, effectDegree) {
   const modifiers = [];
 
-  const defensiveItem = heldDefensiveItem(actor);
+  const defensiveItem = equippedDefensiveItem(actor);
   if (defensiveItem) {
     modifiers.push({
-      id: `held-defensive-${defensiveItem.id}`,
+      id: `equipped-defensive-${defensiveItem.id}`,
       formula: "1d6",
       label: defensiveItem.name,
       reason: "Удерживаемый предмет: Защитное"
@@ -1223,7 +1229,7 @@ export async function rollDamageFromChat(element) {
         <i class="fa-solid fa-burst"></i>
         <div>
           <strong>Критический бросок атаки</strong>
-          <small>Множитель итогового урона применяется после Защитных действий.</small>
+          <small>В карточке урона будут отдельные кнопки обычного урона и ×2.</small>
         </div>
       </section>
     ` : ""
@@ -1232,8 +1238,7 @@ export async function rollDamageFromChat(element) {
   if (!result) return null;
 
   let damageState = buildDamageState(result.roll, {
-    damageType: weapon.system?.damageType || "physical",
-    multiplier: critical ? 2 : 1
+    damageType: weapon.system?.damageType || "physical"
   });
 
   // Нажатый профиль является явным подтверждением игроком исходной
@@ -1301,17 +1306,25 @@ export async function selfDefenseFromChat(element) {
   const targets = Array.from(game.user?.targets ?? []);
 
   // Роль определяет только текущий выбор игрока:
-  // нет target -> защищает себя;
-  // есть target -> пытается защищать эту цель.
+  // - target отсутствует -> выбранный Token защищает себя;
+  // - target совпадает с выбранным Token -> это тоже Самозащита;
+  // - единственный другой target -> Защита союзника.
   // Исходный target атаки здесь намеренно не проверяется.
   if (targets.length > 1) {
-    ui.notifications.warn("Для защиты выбери не больше одной цели. Для Самозащиты сними все цели.");
+    ui.notifications.warn("Для защиты выбери не больше одной цели.");
     return null;
   }
 
   if (targets.length === 1) {
-    ui.notifications.info("Выбрана цель для Защиты союзника. Эта ветка пока не реализована.");
-    return null;
+    const target = targets[0];
+    const sameToken =
+      target?.id === defenderToken.id
+      || target?.document?.uuid === defenderToken.document?.uuid;
+
+    if (!sameToken) {
+      ui.notifications.info("Выбран другой токен: это Защита союзника. Эта ветка пока не реализована.");
+      return null;
+    }
   }
 
   const defender = defenderToken.actor;
@@ -1326,11 +1339,6 @@ export async function selfDefenseFromChat(element) {
 
   if (!damageState) {
     ui.notifications.error("В этом сообщении нет структурированного результата урона.");
-    return null;
-  }
-
-  if (damageState.selfDefenseUsed) {
-    ui.notifications.warn("Самозащита для этого результата уже выполнена.");
     return null;
   }
 
@@ -1434,10 +1442,10 @@ export async function selfDefenseFromChat(element) {
     removedPart = selectedRemovalPart;
 
     if (removedPart) {
-      damageState.parts = damageState.parts.map(part =>
-        part.id === removedPart.id
-          ? { ...part, removed: true }
-          : part
+      // Новая карточка получает уже новый набор кубов.
+      // Исходную карточку и её damageState не изменяем.
+      damageState.parts = damageState.parts.filter(
+        part => part.id !== removedPart.id
       );
     }
 
@@ -1445,7 +1453,6 @@ export async function selfDefenseFromChat(element) {
     damageState.effectDegree = effectDegreeAfter;
   }
 
-  damageState.selfDefenseUsed = true;
   damageState.defense = {
     kind: "self-defense",
     tokenUuid: defenderToken.document?.uuid ?? null,
@@ -1458,14 +1465,20 @@ export async function selfDefenseFromChat(element) {
     attackNaturalD20,
     result: defenseResult,
     removedPartId: removedPart?.id ?? null,
+    removedPart: removedPart ? foundry.utils.deepClone(removedPart) : null,
     removalMode,
     contextualModifiers: result.automaticModifiers
       .filter(modifier => String(modifier.id ?? "").startsWith("context-")
-        || String(modifier.id ?? "").startsWith("held-defensive-")
+        || String(modifier.id ?? "").startsWith("equipped-defensive-")
         || String(modifier.id ?? "").startsWith("weapon-")),
     effectDegreeBefore,
     effectDegreeAfter
   };
+
+  damageState.defenseHistory = [
+    ...(damageState.defenseHistory ?? []),
+    foundry.utils.deepClone(damageState.defense)
+  ];
 
   damageState = recalculateDamageState(damageState);
 
@@ -1477,20 +1490,6 @@ export async function selfDefenseFromChat(element) {
     success: "Успех",
     great: "Большой"
   };
-
-  const flavor = damageCardHTML({
-    weaponName: weapon?.name ?? "Урон",
-    profileLabel: labels[profile] ?? profile ?? "",
-    critical,
-    state: damageState,
-    modifiersHTML
-  });
-
-  await message.update({
-    flavor,
-    "flags.fast-nri.damageState": damageState,
-    "flags.fast-nri.finalTotal": damageState.currentTotal
-  });
 
   const defenseFlavor = `
     <div class="fast-nri-chat-roll fast-nri-defense-roll-card">
@@ -1523,8 +1522,45 @@ export async function selfDefenseFromChat(element) {
     }
   });
 
+  // Ключевое правило UI: исходная карточка урона остаётся неизменной.
+  // После защиты создаётся новая карточка с унаследованными результатами
+  // и уже изменённым набором кубов.
+  const flavor = damageCardHTML({
+    weaponName: weapon?.name ?? "Урон",
+    profileLabel: labels[profile] ?? profile ?? "",
+    critical,
+    state: damageState,
+    modifiersHTML
+  });
+
+  const derivedMessage = await ChatMessage.create({
+    speaker: message.speaker,
+    content: flavor,
+    flags: {
+      "fast-nri": {
+        kind: "damage",
+        actorUuid: message.getFlag("fast-nri", "actorUuid"),
+        itemUuid: message.getFlag("fast-nri", "itemUuid"),
+        profile,
+        critical,
+        attackTotal: message.getFlag("fast-nri", "attackTotal"),
+        attackNaturalD20: message.getFlag("fast-nri", "attackNaturalD20"),
+        attackDegree: damageState.effectDegree,
+        automaticAttackDegree: message.getFlag("fast-nri", "automaticAttackDegree"),
+        originalTargetUuid: message.getFlag("fast-nri", "originalTargetUuid"),
+        sourceAttackMessageId: message.getFlag("fast-nri", "sourceAttackMessageId"),
+        sourceDamageMessageId: message.id,
+        rolledTotal: message.getFlag("fast-nri", "rolledTotal"),
+        finalTotal: damageState.currentTotal,
+        modifierNotesHTML: modifiersHTML,
+        damageState
+      }
+    }
+  });
+
   return {
-    message,
+    message: derivedMessage,
+    sourceMessage: message,
     defenderToken,
     roll: result.roll,
     result: defenseResult,

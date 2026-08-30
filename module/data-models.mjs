@@ -151,7 +151,17 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       // Не используется как список свойств и пока не выводится в UI.
       details: text(""),
 
-      held: flag(false),
+      // Игровой статус: предмет сейчас одет / удерживается.
+      equipped: flag(false),
+
+      // Сколько рук занимает предмет при экипировке.
+      // Игрок не выбирает "хват" во время игры: это характеристика Item.
+      hands: integer(1),
+
+      // Служебное время экипировки для правила "третий одноручный
+      // снимает самый давно экипированный одноручный".
+      equippedAt: integer(0),
+
       damageType: text("physical"),
       damage: new SchemaField({
         partial: text("0"),
@@ -183,7 +193,10 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
       // Резервное текстовое поле для будущих предметных данных.
       // Не используется как список свойств и пока не выводится в UI.
       details: text(""),
-      held: flag(false)
+
+      equipped: flag(false),
+      hands: integer(1),
+      equippedAt: integer(0)
     };
   }
 }

@@ -194,9 +194,15 @@
               <div class="fast-nri-item-row fast-nri-weapon-row item draggable" data-item-id="{{item.id}}">
                 <img src="{{item.img}}" alt="" />
                 <a data-action="editItem">{{item.name}}</a>
-                <small>
-                  {{#if item.system.held}}В руке · {{/if}}{{item.system.range}}
-                </small>
+                <small>{{item.system.range}}</small>
+                <label class="fast-nri-equipped-inline" title="Одето / в руке">
+                  <input
+                    type="checkbox"
+                    data-fast-nri-equipped-toggle
+                    {{#if item.system.equipped}}checked{{/if}}
+                  />
+                  <span>Одето</span>
+                </label>
                 <button
                   type="button"
                   class="fast-nri-attack-button"
@@ -219,9 +225,15 @@
               <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
                 <img src="{{item.img}}" alt="" />
                 <a data-action="editItem">{{item.name}}</a>
-                <small>
-                  {{#if item.system.held}}В руке · {{/if}}{{item.system.category}}
-                </small>
+                <small>{{item.system.category}}</small>
+                <label class="fast-nri-equipped-inline" title="Одето / в руке">
+                  <input
+                    type="checkbox"
+                    data-fast-nri-equipped-toggle
+                    {{#if item.system.equipped}}checked{{/if}}
+                  />
+                  <span>Одето</span>
+                </label>
                 <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
               </div>
             {{else}}
