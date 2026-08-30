@@ -9,6 +9,10 @@ function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
 }
 
+function escAttr(value) {
+  return esc(value).replaceAll('"', "&quot;");
+}
+
 function normalizeTerm(value) {
   const term = String(value ?? "").trim();
   if (!term) return "";
@@ -47,15 +51,27 @@ export function degreeVsDC(total, dc, naturalD20 = null) {
   return "great";
 }
 
+export function degreeVsArmor(total, armor, naturalD20 = null) {
+  if (naturalD20 === 1) return "failure";
+
+  const partial = Number(armor?.partial);
+  const success = Number(armor?.success);
+  const great = Number(armor?.great);
+
+  if (![partial, success, great].every(Number.isFinite)) return null;
+
+  if (total < partial) return "failure";
+  if (total < success) return "partial";
+  if (total < great) return "success";
+  return "great";
+}
+
 /**
- * Roll modifiers supplied by Active Effects.
+ * Future statuses may supply roll modifiers through:
  *
- * Future status compendiums can store:
  * flags.fast-nri.rollModifiers = [
  *   { formula: "1d4", label: "Вдохновение", reason: "Статус" }
  * ]
- *
- * This reader is already usable, but 0.2.0 does not yet create those effects.
  */
 function collectAutomaticModifiers(actor) {
   const modifiers = [];
@@ -83,7 +99,14 @@ function collectAutomaticModifiers(actor) {
   return modifiers;
 }
 
-function buildDialogHTML({ label, baseFormula, automaticModifiers, defaultDC }) {
+function buildDialogHTML({
+  label,
+  baseFormula,
+  automaticModifiers,
+  defaultDC,
+  showDC = true,
+  contextHTML = ""
+}) {
   const automatic = automaticModifiers.length
     ? automaticModifiers.map((modifier, index) => `
         <label class="fast-nri-auto-mod-row">
@@ -105,6 +128,8 @@ function buildDialogHTML({ label, baseFormula, automaticModifiers, defaultDC }) 
       <header>
         <strong>${esc(label)}</strong>
       </header>
+
+      ${contextHTML}
 
       <section class="fast-nri-roll-block">
         <label>Базовая формула</label>
@@ -137,19 +162,21 @@ function buildDialogHTML({ label, baseFormula, automaticModifiers, defaultDC }) 
         </div>
       </section>
 
-      <section class="fast-nri-roll-dc-row">
-        <label>
-          Сложность
-          <input
-            class="fast-nri-roll-dc"
-            type="number"
-            step="1"
-            placeholder="необязательно"
-            value="${defaultDC ?? ""}"
-          >
-        </label>
-        <small>Если оставить пустым — будет просто бросок без определения степени.</small>
-      </section>
+      ${showDC ? `
+        <section class="fast-nri-roll-dc-row">
+          <label>
+            Сложность
+            <input
+              class="fast-nri-roll-dc"
+              type="number"
+              step="1"
+              placeholder="необязательно"
+              value="${defaultDC ?? ""}"
+            >
+          </label>
+          <small>Если оставить пустым — будет просто бросок без определения степени.</small>
+        </section>
+      ` : ""}
 
       <section class="fast-nri-final-formula-row">
         <span>Итоговая формула</span>
@@ -159,7 +186,7 @@ function buildDialogHTML({ label, baseFormula, automaticModifiers, defaultDC }) 
   `;
 }
 
-function collectDialogState(dialog, baseFormula, automaticModifiers) {
+function collectDialogState(dialog, baseFormula, automaticModifiers, showDC = true) {
   const root = dialog.element;
 
   const activeAutomatic = [];
@@ -179,24 +206,28 @@ function collectDialogState(dialog, baseFormula, automaticModifiers) {
     if (formula) manual.push({ formula, reason });
   });
 
-  const dcRaw = root.querySelector(".fast-nri-roll-dc")?.value?.trim() ?? "";
-  const dc = dcRaw === "" ? null : Number(dcRaw);
+  let dc = null;
+  if (showDC) {
+    const dcRaw = root.querySelector(".fast-nri-roll-dc")?.value?.trim() ?? "";
+    const parsed = dcRaw === "" ? null : Number(dcRaw);
+    dc = Number.isFinite(parsed) ? parsed : null;
+  }
 
   return {
     formula: composeFormula(baseFormula, [...activeAutomatic, ...manual]),
     automaticModifiers: activeAutomatic,
     manualModifiers: manual,
-    dc: Number.isFinite(dc) ? dc : null
+    dc
   };
 }
 
-function attachDialogListeners(dialog, baseFormula, automaticModifiers) {
+function attachDialogListeners(dialog, baseFormula, automaticModifiers, showDC = true) {
   const root = dialog.element;
   const manualContainer = root.querySelector(".fast-nri-manual-modifiers");
   const finalFormula = root.querySelector(".fast-nri-final-formula");
 
   const updateFormula = () => {
-    const state = collectDialogState(dialog, baseFormula, automaticModifiers);
+    const state = collectDialogState(dialog, baseFormula, automaticModifiers, showDC);
     if (finalFormula) finalFormula.textContent = state.formula;
   };
 
@@ -245,22 +276,13 @@ function attachDialogListeners(dialog, baseFormula, automaticModifiers) {
   updateFormula();
 }
 
-function degreeHTML(degree) {
-  if (!degree) return "";
-
-  return `
-    <div class="fast-nri-degree-result fast-nri-degree-${degree}">
-      <span class="fast-nri-degree-result-label">Степень</span>
-      <strong>${DEGREE_LABELS[degree]}</strong>
-    </div>
-  `;
-}
-
-export async function openPreRollDialog({
+async function prepareRoll({
   actor,
   label,
   baseFormula,
-  defaultDC = null
+  defaultDC = null,
+  showDC = true,
+  contextHTML = ""
 }) {
   const automaticModifiers = collectAutomaticModifiers(actor);
   const { DialogV2 } = foundry.applications.api;
@@ -273,12 +295,14 @@ export async function openPreRollDialog({
       label,
       baseFormula,
       automaticModifiers,
-      defaultDC
+      defaultDC,
+      showDC,
+      contextHTML
     }),
     modal: true,
     rejectClose: false,
     render: (_event, dialog) => {
-      attachDialogListeners(dialog, baseFormula, automaticModifiers);
+      attachDialogListeners(dialog, baseFormula, automaticModifiers, showDC);
     },
     buttons: [
       {
@@ -287,7 +311,7 @@ export async function openPreRollDialog({
         icon: "fa-solid fa-dice-d20",
         default: true,
         callback: async (_event, _button, dialog) => {
-          return collectDialogState(dialog, baseFormula, automaticModifiers);
+          return collectDialogState(dialog, baseFormula, automaticModifiers, showDC);
         }
       },
       {
@@ -310,12 +334,37 @@ export async function openPreRollDialog({
     return null;
   }
 
-  const naturalD20 = getNaturalD20(roll);
-  const degree = result.dc === null
-    ? null
-    : degreeVsDC(roll.total, result.dc, naturalD20);
+  return {
+    ...result,
+    roll,
+    naturalD20: getNaturalD20(roll)
+  };
+}
 
-  const modifierNotes = [
+function degreeHTML(degree) {
+  if (!degree) return "";
+
+  const order = ["failure", "partial", "success", "great"];
+
+  return `
+    <div class="fast-nri-degree-section">
+      <div class="fast-nri-degree-caption">Степень</div>
+
+      <div class="fast-nri-chat-degrees">
+        ${order.map(key => `
+          <span
+            class="fast-nri-chat-degree fast-nri-degree-option-${key} ${key === degree ? "selected" : ""}"
+          >
+            ${DEGREE_LABELS[key]}
+          </span>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function modifierNotesHTML(result) {
+  const notes = [
     ...result.automaticModifiers,
     ...result.manualModifiers
   ]
@@ -323,12 +372,48 @@ export async function openPreRollDialog({
     .map(modifier => `${esc(modifier.reason)}: <code>${esc(modifier.formula)}</code>`)
     .join(" · ");
 
+  if (!notes) return "";
+
+  return `
+    <div class="fast-nri-chat-modifiers">
+      <i class="fa-solid fa-sliders"></i>
+      <small>${notes}</small>
+    </div>
+  `;
+}
+
+function rollCardHeader(label, icon = "fa-dice-d20") {
+  return `
+    <div class="fast-nri-chat-roll-title">
+      <i class="fa-solid ${icon}"></i>
+      <strong>${esc(label)}</strong>
+    </div>
+  `;
+}
+
+export async function openPreRollDialog({
+  actor,
+  label,
+  baseFormula,
+  defaultDC = null
+}) {
+  const result = await prepareRoll({
+    actor,
+    label,
+    baseFormula,
+    defaultDC,
+    showDC: true
+  });
+
+  if (!result) return null;
+
+  const degree = result.dc === null
+    ? null
+    : degreeVsDC(result.roll.total, result.dc, result.naturalD20);
+
   const flavor = `
     <div class="fast-nri-chat-roll">
-      <div class="fast-nri-chat-roll-title">
-        <i class="fa-solid fa-dice-d20"></i>
-        <strong>${esc(label)}</strong>
-      </div>
+      ${rollCardHeader(label)}
 
       ${result.dc !== null ? `
         <div class="fast-nri-chat-roll-meta">
@@ -338,26 +423,20 @@ export async function openPreRollDialog({
       ` : ""}
 
       ${degreeHTML(degree)}
-
-      ${modifierNotes ? `
-        <div class="fast-nri-chat-modifiers">
-          <i class="fa-solid fa-sliders"></i>
-          <small>${modifierNotes}</small>
-        </div>
-      ` : ""}
+      ${modifierNotesHTML(result)}
     </div>
   `;
 
-  await roll.toMessage({
+  await result.roll.toMessage({
     speaker: ChatMessage.getSpeaker({ actor }),
     flavor
   });
 
   return {
-    roll,
+    roll: result.roll,
     formula: result.formula,
     dc: result.dc,
-    naturalD20,
+    naturalD20: result.naturalD20,
     degree
   };
 }
@@ -370,5 +449,306 @@ export async function rollSkillCheck(actor, skill) {
     actor,
     label: skill?.label ?? "Проверка навыка",
     baseFormula
+  });
+}
+
+function getSingleTarget() {
+  const targets = Array.from(game.user?.targets ?? []);
+  if (targets.length !== 1) return null;
+  return targets[0];
+}
+
+function armorContextHTML(target) {
+  if (!target?.actor) {
+    return `
+      <section class="fast-nri-roll-context fast-nri-roll-context-warning">
+        <i class="fa-solid fa-crosshairs"></i>
+        <div>
+          <strong>Цель не выбрана</strong>
+          <small>Атака будет брошена, но степень автоматически не рассчитывается.</small>
+        </div>
+      </section>
+    `;
+  }
+
+  const armor = target.actor.system?.armor ?? {};
+  return `
+    <section class="fast-nri-roll-context">
+      <i class="fa-solid fa-crosshairs"></i>
+      <div>
+        <strong>${esc(target.name)}</strong>
+        <small>
+          КЗ:
+          ${esc(armor.partial ?? "—")} /
+          ${esc(armor.success ?? "—")} /
+          ${esc(armor.great ?? "—")}
+        </small>
+      </div>
+    </section>
+  `;
+}
+
+function armorMetaHTML(target) {
+  if (!target?.actor) {
+    return `
+      <div class="fast-nri-chat-target fast-nri-chat-target-missing">
+        <span>Цель не выбрана</span>
+      </div>
+    `;
+  }
+
+  const armor = target.actor.system?.armor ?? {};
+  return `
+    <div class="fast-nri-chat-target">
+      <span class="fast-nri-chat-target-name">${esc(target.name)}</span>
+      <span class="fast-nri-chat-armor">
+        КЗ ${esc(armor.partial ?? "—")} / ${esc(armor.success ?? "—")} / ${esc(armor.great ?? "—")}
+      </span>
+    </div>
+  `;
+}
+
+function damageProfilesHTML(actor, weapon, degree, critical) {
+  const profiles = [
+    ["partial", "Частичный", weapon.system?.damage?.partial],
+    ["success", "Успех", weapon.system?.damage?.success],
+    ["great", "Большой", weapon.system?.damage?.great]
+  ];
+
+  return `
+    <section class="fast-nri-hit-damage">
+      <div class="fast-nri-hit-damage-heading">
+        <span>Профиль урона</span>
+        ${critical ? `<strong class="fast-nri-critical-note">Крит: итоговый урон ×2</strong>` : ""}
+      </div>
+
+      <div class="fast-nri-hit-damage-buttons">
+        ${profiles.map(([key, label, rawFormula]) => {
+          const formula = String(rawFormula ?? "").trim() || "0";
+          const selected = degree === key;
+
+          return `
+            <button
+              type="button"
+              class="fast-nri-hit-damage-button fast-nri-hit-damage-${key} ${selected ? "selected" : ""}"
+              data-fast-nri-damage
+              data-actor-uuid="${escAttr(actor.uuid)}"
+              data-item-uuid="${escAttr(weapon.uuid)}"
+              data-profile="${key}"
+              data-formula="${escAttr(formula)}"
+              data-critical="${critical ? "true" : "false"}"
+              title="Бросить урон: ${escAttr(label)} — ${escAttr(formula)}"
+            >
+              <span class="fast-nri-hit-damage-degree">${esc(label)}</span>
+              <strong class="fast-nri-hit-damage-formula">${esc(formula)}</strong>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function attackResultHTML(weapon, target, degree, rollTotal) {
+  return `
+    <section class="fast-nri-hit-summary">
+      <div class="fast-nri-hit-weapon">
+        <span class="fast-nri-hit-label">Оружие</span>
+        <strong>${esc(weapon.name)}</strong>
+      </div>
+
+      ${target?.actor ? `
+        <div class="fast-nri-hit-target">
+          <span class="fast-nri-hit-label">Цель</span>
+          <strong>${esc(target.name)}</strong>
+        </div>
+      ` : ""}
+
+      <div class="fast-nri-hit-result">
+        <span class="fast-nri-hit-label">Результат</span>
+        <strong>${esc(rollTotal)}</strong>
+      </div>
+
+      ${degree ? `
+        <div class="fast-nri-hit-degree">
+          <span class="fast-nri-hit-label">Степень</span>
+          <strong>${DEGREE_LABELS[degree]}</strong>
+        </div>
+      ` : ""}
+    </section>
+  `;
+}
+
+export async function rollWeaponAttack(actor, weapon) {
+  if (!actor || !weapon || weapon.type !== "weapon") return null;
+
+  const combatDie = String(actor.system?.combatDie ?? "").trim();
+  const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
+  const target = getSingleTarget();
+
+  if ((game.user?.targets?.size ?? 0) > 1) {
+    ui.notifications.warn("Для одиночной атаки выбери одну цель. Бросок будет выполнен без автоматической степени.");
+  }
+
+  const result = await prepareRoll({
+    actor,
+    label: `Атака: ${weapon.name}`,
+    baseFormula,
+    showDC: false,
+    contextHTML: armorContextHTML(target)
+  });
+
+  if (!result) return null;
+
+  const degree = target?.actor
+    ? degreeVsArmor(result.roll.total, target.actor.system?.armor, result.naturalD20)
+    : null;
+
+  const critical = result.naturalD20 === 20;
+
+  const flavor = `
+    <div class="fast-nri-chat-roll fast-nri-attack-card">
+      ${rollCardHeader("Попадание", "fa-swords")}
+      ${attackResultHTML(weapon, target, degree, result.roll.total)}
+      ${armorMetaHTML(target)}
+
+      ${critical ? `
+        <div class="fast-nri-critical-roll">
+          <i class="fa-solid fa-burst"></i>
+          <strong>Натуральная 20</strong>
+        </div>
+      ` : ""}
+
+      ${degreeHTML(degree)}
+      ${damageProfilesHTML(actor, weapon, degree, critical)}
+      ${modifierNotesHTML(result)}
+    </div>
+  `;
+
+  await result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    flavor,
+    flags: {
+      "fast-nri": {
+        kind: "attack",
+        actorUuid: actor.uuid,
+        itemUuid: weapon.uuid,
+        targetUuid: target?.document?.uuid ?? null,
+        degree,
+        critical
+      }
+    }
+  });
+
+  return {
+    roll: result.roll,
+    formula: result.formula,
+    naturalD20: result.naturalD20,
+    target,
+    degree,
+    critical
+  };
+}
+
+export async function rollDamageFromChat(element) {
+  const actorUuid = element?.dataset?.actorUuid;
+  const itemUuid = element?.dataset?.itemUuid;
+  const profile = element?.dataset?.profile;
+  const formula = String(element?.dataset?.formula ?? "").trim();
+  const critical = element?.dataset?.critical === "true";
+
+  if (!actorUuid || !itemUuid || !formula) return;
+
+  const actor = await fromUuid(actorUuid);
+  const weapon = await fromUuid(itemUuid);
+
+  if (!actor || !weapon) {
+    ui.notifications.error("Не удалось найти персонажа или оружие для броска урона.");
+    return;
+  }
+
+  const labels = {
+    partial: "Частичный",
+    success: "Успех",
+    great: "Большой"
+  };
+
+  const result = await prepareRoll({
+    actor,
+    label: `Урон: ${weapon.name} — ${labels[profile] ?? profile}`,
+    baseFormula: formula,
+    showDC: false,
+    contextHTML: critical ? `
+      <section class="fast-nri-roll-context fast-nri-roll-context-critical">
+        <i class="fa-solid fa-burst"></i>
+        <div>
+          <strong>Критический бросок атаки</strong>
+          <small>После броска итоговый урон ×2.</small>
+        </div>
+      </section>
+    ` : ""
+  });
+
+  if (!result) return null;
+
+  let finalTotal = result.roll.total;
+  if (critical) finalTotal *= 2;
+
+  const flavor = `
+    <div class="fast-nri-chat-roll fast-nri-damage-card">
+      ${rollCardHeader(`Урон: ${weapon.name}`, "fa-burst")}
+      <div class="fast-nri-chat-damage-profile-name">
+        ${esc(labels[profile] ?? profile)}
+      </div>
+      ${critical ? `
+        <div class="fast-nri-critical-roll">
+          <i class="fa-solid fa-xmark"></i>
+          <strong>Критический урон: ${result.roll.total} × 2 = ${finalTotal}</strong>
+        </div>
+      ` : ""}
+      ${modifierNotesHTML(result)}
+    </div>
+  `;
+
+  await result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    flavor,
+    flags: {
+      "fast-nri": {
+        kind: "damage",
+        actorUuid: actor.uuid,
+        itemUuid: weapon.uuid,
+        profile,
+        critical,
+        rolledTotal: result.roll.total,
+        finalTotal
+      }
+    }
+  });
+
+  return {
+    roll: result.roll,
+    profile,
+    critical,
+    finalTotal
+  };
+}
+
+export function activateChatInteractions(root = document) {
+  root.addEventListener("click", async event => {
+    const button = event.target.closest("[data-fast-nri-damage]");
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (button.dataset.fastNriBusy === "true") return;
+    button.dataset.fastNriBusy = "true";
+
+    try {
+      await rollDamageFromChat(button);
+    } finally {
+      delete button.dataset.fastNriBusy;
+    }
   });
 }

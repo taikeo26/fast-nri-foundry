@@ -1,4 +1,4 @@
-import { rollSkillCheck } from "./rolls.mjs";
+import { rollSkillCheck, rollWeaponAttack } from "./rolls.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2, ItemSheetV2 } = foundry.applications.sheets;
@@ -37,7 +37,8 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       editItem: FastNriActorSheet.#editItem,
       deleteItem: FastNriActorSheet.#deleteItem,
       createItem: FastNriActorSheet.#createItem,
-      rollSkill: FastNriActorSheet.#rollSkill
+      rollSkill: FastNriActorSheet.#rollSkill,
+      rollWeaponAttack: FastNriActorSheet.#rollWeaponAttack
     }
   };
 
@@ -167,6 +168,16 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     }
 
     show(this._activeTab);
+  }
+
+  static async #rollWeaponAttack(event, target) {
+    event.preventDefault();
+
+    const itemId = target.closest("[data-item-id]")?.dataset.itemId;
+    const weapon = this.actor.items.get(itemId);
+
+    if (!weapon || weapon.type !== "weapon") return;
+    await rollWeaponAttack(this.actor, weapon);
   }
 
   static async #rollSkill(event, target) {

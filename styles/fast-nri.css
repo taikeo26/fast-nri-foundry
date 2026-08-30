@@ -687,3 +687,457 @@ body.theme-dark .fast-nri-degree-result-label,
 body.theme-dark .fast-nri-degree-result strong {
   color: #f4f4f4 !important;
 }
+
+
+/* ========================================================= */
+/* v0.2.5 - Degree row: selected outline/text only           */
+/* ========================================================= */
+
+.fast-nri-degree-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 2px;
+}
+
+.fast-nri-degree-caption {
+  color: #666;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.fast-nri-chat-degrees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+
+/* All non-selected results stay neutral gray. */
+.fast-nri-chat-degree {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 7px;
+  color: #777 !important;
+  border: 1px solid #b7b7b7 !important;
+  border-radius: 4px;
+  background: transparent !important;
+  opacity: 1 !important;
+  font-size: 0.79rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+/* Only the automatically calculated degree gets a colored border + text. */
+.fast-nri-chat-degree.selected {
+  background: transparent !important;
+  font-weight: 700;
+}
+
+/* Провал */
+.fast-nri-degree-option-failure.selected {
+  color: #a12d2d !important;
+  border-color: #b73b3b !important;
+}
+
+/* Частичный успех */
+.fast-nri-degree-option-partial.selected {
+  color: #976000 !important;
+  border-color: #b77a12 !important;
+}
+
+/* Успех */
+.fast-nri-degree-option-success.selected {
+  color: #24699a !important;
+  border-color: #347eaf !important;
+}
+
+/* Большой успех */
+.fast-nri-degree-option-great.selected {
+  color: #27723e !important;
+  border-color: #338b4d !important;
+}
+
+/* Dark theme */
+.theme-dark .fast-nri-degree-caption,
+body.theme-dark .fast-nri-degree-caption {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-chat-degree,
+body.theme-dark .fast-nri-chat-degree {
+  color: #999 !important;
+  border-color: #666 !important;
+}
+
+.theme-dark .fast-nri-degree-option-failure.selected,
+body.theme-dark .fast-nri-degree-option-failure.selected {
+  color: #ef8d8d !important;
+  border-color: #c65b5b !important;
+}
+
+.theme-dark .fast-nri-degree-option-partial.selected,
+body.theme-dark .fast-nri-degree-option-partial.selected {
+  color: #e4b861 !important;
+  border-color: #c18f31 !important;
+}
+
+.theme-dark .fast-nri-degree-option-success.selected,
+body.theme-dark .fast-nri-degree-option-success.selected {
+  color: #8fc7eb !important;
+  border-color: #5a9bc7 !important;
+}
+
+.theme-dark .fast-nri-degree-option-great.selected,
+body.theme-dark .fast-nri-degree-option-great.selected {
+  color: #8bd0a0 !important;
+  border-color: #55a56c !important;
+}
+
+/*
+ * Old single-result banner styles remain harmless because
+ * degreeHTML no longer renders .fast-nri-degree-result.
+ */
+
+
+/* ========================================================= */
+/* v0.3.0 - Weapon attacks and damage profiles               */
+/* ========================================================= */
+
+.fast-nri-weapon-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto 30px 28px;
+}
+
+.fast-nri-item-action {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--fnri-border);
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.fast-nri-item-action:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.fast-nri-roll-context {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid rgba(92, 74, 110, 0.25);
+  border-radius: 5px;
+  background: rgba(92, 74, 110, 0.06);
+}
+
+.fast-nri-roll-context > i {
+  text-align: center;
+  opacity: 0.7;
+}
+
+.fast-nri-roll-context > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fast-nri-roll-context small {
+  opacity: 0.75;
+}
+
+.fast-nri-roll-context-warning {
+  border-color: rgba(165, 112, 24, 0.4);
+  background: rgba(190, 136, 36, 0.08);
+}
+
+.fast-nri-roll-context-critical {
+  border-color: rgba(46, 128, 72, 0.4);
+  background: rgba(46, 128, 72, 0.08);
+}
+
+.fast-nri-chat-target {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 1px;
+}
+
+.fast-nri-chat-target-name {
+  font-weight: 700;
+}
+
+.fast-nri-chat-armor {
+  color: #666;
+  font-size: 0.76rem;
+}
+
+.fast-nri-chat-target-missing {
+  color: #8a610d;
+  font-size: 0.8rem;
+}
+
+.fast-nri-critical-roll {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  color: #714d00;
+  border: 1px solid #c8952d;
+  border-radius: 4px;
+  background: rgba(200, 149, 45, 0.08);
+  font-size: 0.82rem;
+}
+
+.fast-nri-damage-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(127, 127, 127, 0.18);
+}
+
+.fast-nri-damage-profiles-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.fast-nri-critical-note {
+  color: #8a610d;
+  font-size: 0.72rem;
+}
+
+.fast-nri-damage-profile-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fast-nri-damage-profile {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 82px;
+  padding: 4px 7px;
+  color: #666;
+  border: 1px solid #b7b7b7;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+.fast-nri-damage-profile code {
+  color: inherit;
+  font-size: 0.78rem;
+}
+
+.fast-nri-damage-profile:hover {
+  color: #333;
+  border-color: #777;
+  background: rgba(127, 127, 127, 0.06);
+}
+
+.fast-nri-damage-profile.selected {
+  color: #24699a;
+  border-color: #347eaf;
+  font-weight: 700;
+}
+
+.fast-nri-chat-damage-profile-name {
+  color: #555;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.theme-dark .fast-nri-chat-armor,
+body.theme-dark .fast-nri-chat-armor {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-damage-profile,
+body.theme-dark .fast-nri-damage-profile {
+  color: #999;
+  border-color: #666;
+}
+
+.theme-dark .fast-nri-damage-profile:hover,
+body.theme-dark .fast-nri-damage-profile:hover {
+  color: #ddd;
+  border-color: #aaa;
+}
+
+.theme-dark .fast-nri-damage-profile.selected,
+body.theme-dark .fast-nri-damage-profile.selected {
+  color: #8fc7eb;
+  border-color: #5a9bc7;
+}
+
+.theme-dark .fast-nri-chat-damage-profile-name,
+body.theme-dark .fast-nri-chat-damage-profile-name {
+  color: #bbb;
+}
+
+
+/* ========================================================= */
+/* v0.3.1 - Hit card + three weapon damage buttons           */
+/* ========================================================= */
+
+.fast-nri-hit-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  padding: 5px 0;
+}
+
+.fast-nri-hit-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fast-nri-hit-label {
+  color: #777;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.fast-nri-hit-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.86rem;
+}
+
+.fast-nri-hit-damage {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(127, 127, 127, 0.22);
+}
+
+.fast-nri-hit-damage-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  color: #666;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.fast-nri-hit-damage-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.fast-nri-hit-damage-button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 5px 6px;
+  color: #777;
+  border: 1px solid #b7b7b7;
+  border-radius: 4px;
+  background: transparent;
+  text-align: center;
+}
+
+.fast-nri-hit-damage-button:hover {
+  color: #333;
+  border-color: #777;
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.fast-nri-hit-damage-degree {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fast-nri-hit-damage-formula {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* Only the profile matching the calculated hit degree is highlighted. */
+.fast-nri-hit-damage-partial.selected {
+  color: #976000;
+  border-color: #b77a12;
+}
+
+.fast-nri-hit-damage-success.selected {
+  color: #24699a;
+  border-color: #347eaf;
+}
+
+.fast-nri-hit-damage-great.selected {
+  color: #27723e;
+  border-color: #338b4d;
+}
+
+/* Failure has no damage profile: all three remain gray. */
+
+.theme-dark .fast-nri-hit-label,
+body.theme-dark .fast-nri-hit-label,
+.theme-dark .fast-nri-hit-damage-heading,
+body.theme-dark .fast-nri-hit-damage-heading {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-hit-damage-button,
+body.theme-dark .fast-nri-hit-damage-button {
+  color: #999;
+  border-color: #666;
+}
+
+.theme-dark .fast-nri-hit-damage-button:hover,
+body.theme-dark .fast-nri-hit-damage-button:hover {
+  color: #ddd;
+  border-color: #aaa;
+}
+
+.theme-dark .fast-nri-hit-damage-partial.selected,
+body.theme-dark .fast-nri-hit-damage-partial.selected {
+  color: #e4b861;
+  border-color: #c18f31;
+}
+
+.theme-dark .fast-nri-hit-damage-success.selected,
+body.theme-dark .fast-nri-hit-damage-success.selected {
+  color: #8fc7eb;
+  border-color: #5a9bc7;
+}
+
+.theme-dark .fast-nri-hit-damage-great.selected,
+body.theme-dark .fast-nri-hit-damage-great.selected {
+  color: #8bd0a0;
+  border-color: #55a56c;
+}
+
+@media (max-width: 430px) {
+  .fast-nri-hit-damage-buttons {
+    grid-template-columns: 1fr;
+  }
+}

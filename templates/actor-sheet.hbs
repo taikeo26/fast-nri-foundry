@@ -175,10 +175,18 @@
           <div class="fast-nri-item-group">
             <h3>Оружие</h3>
             {{#each weapons as |item|}}
-              <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+              <div class="fast-nri-item-row fast-nri-weapon-row item draggable" data-item-id="{{item.id}}">
                 <img src="{{item.img}}" alt="" />
                 <a data-action="editItem">{{item.name}}</a>
                 <small>{{item.system.range}}</small>
+                <button
+                  type="button"
+                  class="fast-nri-item-action"
+                  data-action="rollWeaponAttack"
+                  title="Атаковать"
+                >
+                  <i class="fa-solid fa-dice-d20"></i>
+                </button>
                 <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
               </div>
             {{else}}
@@ -253,7 +261,7 @@
     <section class="fast-nri-tab-pane {{#if tabs.skills.active}}active{{/if}}" data-tab="skills" role="tabpanel">
       <section class="fast-nri-section">
         <h2>Навыки</h2>
-        <p class="fast-nri-help">Пока это ручные значения. Броски добавим следующим этапом.</p>
+        <p class="fast-nri-help">Нажми на название навыка, чтобы выполнить проверку.</p>
 
         <div class="fast-nri-skills-grid">
           {{#each skillRows as |skill|}}

@@ -1,3 +1,5 @@
+import { activateChatInteractions } from "./module/rolls.mjs";
+
 import {
   CharacterData,
   CreatureData,
@@ -65,5 +67,6 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   console.log("Быстрая НРИ 6.2 | Система готова");
+  activateChatInteractions(document);
   ui.notifications.info("Быстрая НРИ 6.2 загружена");
 });
