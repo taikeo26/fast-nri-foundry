@@ -78,6 +78,13 @@ const outcomeComponentArray = () =>
     }
   );
 
+
+const outcomeChannelSchema = () =>
+  new SchemaField({
+    enabled: flag(false),
+    components: outcomeComponentArray()
+  });
+
 function skillsSchema() {
   return new SchemaField({
     acrobatics: text(""),
@@ -285,14 +292,29 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       timing: text("Действие"),
       classResourceCost: integer(0),
 
-      // Мягкая автоматизация результата использования.
-      // none    — только описание;
-      // damage  — урон;
-      // healing — восстановление обычных HP;
-      // tempHp  — получение временных HP.
+      // Legacy-поле 0.5.16 оставлено для чтения уже созданных Item.
+      // Новый UI и runtime используют независимые каналы outcomes ниже.
       outcome: new SchemaField({
         kind: text("none"),
         components: outcomeComponentArray()
+      }),
+
+      // Одна способность/заклинание может иметь несколько разных результатов
+      // одновременно: например Лечение + Временные HP, или Урон + Лечение.
+      outcomes: new SchemaField({
+        damage: outcomeChannelSchema(),
+        healing: outcomeChannelSchema(),
+        tempHp: outcomeChannelSchema()
+      }),
+
+      // Не вся способность, наносящая урон, является Атакой.
+      // Если этот блок включён, перед результатами выполняется одна
+      // исходная проверка Атаки против КЗ. Её результат можно передать
+      // карточке урона для Направленной защиты.
+      attackCheck: new SchemaField({
+        enabled: flag(false),
+        formula: text("1d20 + {combatDie}"),
+        directedDefense: flag(false)
       })
     };
   }

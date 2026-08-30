@@ -1,4 +1,4 @@
-import { rollAbilityOutcome } from "./rolls.mjs";
+import { rollAbilityAttackCheck, rollAbilityOutcome } from "./rolls.mjs";
 
 function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -15,28 +15,24 @@ function messageIdFromElement(element) {
 }
 
 
-function abilityOutcomeActionHTML(actor, item) {
-  const kind = String(item.system?.outcome?.kind ?? "none");
-  const data = {
-    damage: ["Бросить урон", "fa-burst"],
-    healing: ["Бросить восстановление HP", "fa-heart-pulse"],
-    tempHp: ["Бросить временные HP", "fa-shield-heart"]
-  }[kind];
-  if (!data) return "";
+function configuredOutcomeKinds(item) {
+  const config = item.system?.outcomes ?? {};
+  const result = [];
 
-  return `
-    <div class="fast-nri-ability-outcome-action">
-      <button
-        type="button"
-        data-fast-nri-roll-ability-outcome
-        data-actor-uuid="${escAttr(actor.uuid)}"
-        data-item-uuid="${escAttr(item.uuid)}"
-        title="${escAttr(data[0])}"
-      >
-        <i class="fa-solid ${data[1]}"></i>
-        <span>${esc(data[0])}</span>
-      </button>
-    </div>`;
+  for (const kind of ["damage", "healing", "tempHp"]) {
+    if (config?.[kind]?.enabled) result.push(kind);
+  }
+
+  // Backward-compatible read for 0.5.16 Items.
+  const legacyKind = String(item.system?.outcome?.kind ?? "none");
+  if (
+    ["damage", "healing", "tempHp"].includes(legacyKind)
+    && !result.includes(legacyKind)
+  ) {
+    result.push(legacyKind);
+  }
+
+  return result;
 }
 
 function resourceLineHTML({
@@ -106,8 +102,6 @@ function abilityCardHTML({
           ${description}
         </div>
       ` : ""}
-
-      ${abilityOutcomeActionHTML(actor, item)}
 
       ${cost > 0 ? `
         <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
@@ -203,6 +197,73 @@ export async function useAbility(actor, item) {
     }
   });
 
+  // Одно использование способности/заклинания создаёт отдельную
+  // результатную карту для каждого включённого автоматического результата.
+  //
+  // Порядок configuredOutcomeKinds фиксирован:
+  // Урон → Лечение → Временные HP.
+  //
+  // Каждый результат получает собственный universal pre-roll. Отмена
+  // одного pre-roll не отменяет другие результаты этой же способности.
+  const outcomeResults = [];
+  const outcomeKinds = configuredOutcomeKinds(item);
+
+  // Исходная Атака выполняется один раз и относится только к каналу Урона.
+  // Если игрок отменил её pre-roll, Урон пропускается, но Лечение и
+  // Временные HP этой же способности продолжают выполняться.
+  let sourceAttack = null;
+  let sourceAttackCancelled = false;
+
+  if (
+    outcomeKinds.includes("damage")
+    && item.system?.attackCheck?.enabled
+  ) {
+    sourceAttack = await rollAbilityAttackCheck(actor, item);
+    sourceAttackCancelled = !sourceAttack;
+  }
+
+  for (const kind of outcomeKinds) {
+    if (kind === "damage" && sourceAttackCancelled) continue;
+    try {
+      const outcomeMessage = await rollAbilityOutcome(
+        actor,
+        item,
+        kind,
+        kind === "damage" ? sourceAttack : null
+      );
+      if (outcomeMessage) {
+        outcomeResults.push({
+          kind,
+          messageId: outcomeMessage.id ?? outcomeMessage._id ?? null
+        });
+      }
+    } catch (error) {
+      console.error(
+        `Быстрая НРИ | Ошибка автоматического результата ${kind} для ${item.name}`,
+        error
+      );
+      ui.notifications.error(
+        `${item.name}: не удалось создать один из автоматических результатов. Остальные результаты продолжают выполняться.`
+      );
+    }
+  }
+
+  // История использования хранит, какие результатные сообщения были созданы.
+  // Это не связывает их жёстко: каждая карта остаётся самостоятельной.
+  if (outcomeResults.length) {
+    try {
+      await message.update({
+        "flags.fast-nri.outcomeMessages": outcomeResults,
+        "flags.fast-nri.sourceAttackMessageId": sourceAttack?.message?.id ?? null
+      });
+    } catch (error) {
+      console.warn(
+        "Быстрая НРИ | Не удалось сохранить ссылки на результатные карты",
+        error
+      );
+    }
+  }
+
   return {
     message,
     actor,
@@ -211,7 +272,8 @@ export async function useAbility(actor, item) {
     before,
     after,
     spent,
-    shortage
+    shortage,
+    outcomeResults
   };
 }
 
@@ -309,7 +371,7 @@ export function activateAbilityChatInteractions(root = document) {
           ui.notifications.error("Не удалось найти способность или заклинание.");
           return;
         }
-        await rollAbilityOutcome(actor, item);
+        await rollAbilityOutcome(actor, item, outcomeButton.dataset.outcomeKind);
       } finally {
         delete outcomeButton.dataset.fastNriBusy;
       }

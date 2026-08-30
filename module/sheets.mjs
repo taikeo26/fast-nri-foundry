@@ -392,6 +392,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     actions: {
       addDamageComponent: FastNriItemSheet.#addDamageComponent,
       removeDamageComponent: FastNriItemSheet.#removeDamageComponent,
+      addOutcome: FastNriItemSheet.#addOutcome,
+      removeOutcome: FastNriItemSheet.#removeOutcome,
       addOutcomeComponent: FastNriItemSheet.#addOutcomeComponent,
       removeOutcomeComponent: FastNriItemSheet.#removeOutcomeComponent
     }
@@ -449,6 +451,20 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.preventDefault();
         event.stopPropagation();
         await this.#updateDamageComponent(event.currentTarget);
+      });
+    }
+
+    for (const input of this.element.querySelectorAll("[data-fast-nri-outcome-enabled]")) {
+      input.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const kind = event.currentTarget.dataset.outcomeKind;
+        if (!["damage", "healing", "tempHp"].includes(kind)) return;
+
+        await this.item.update({
+          [`system.outcomes.${kind}.enabled`]: Boolean(event.currentTarget.checked)
+        });
       });
     }
 
@@ -529,8 +545,18 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   }
 
 
-  #outcomeComponentArray() {
-    const raw = Array.from(this.item.system.outcome?.components ?? []);
+  #legacyOutcomeFor(kind) {
+    const legacy = this.item.system.outcome ?? {};
+    if (String(legacy.kind ?? "none") !== kind) return [];
+    return Array.from(legacy.components ?? []);
+  }
+
+  #outcomeComponentArray(kind) {
+    if (!["damage", "healing", "tempHp"].includes(kind)) return [];
+
+    const modern = Array.from(this.item.system.outcomes?.[kind]?.components ?? []);
+    const raw = modern.length ? modern : this.#legacyOutcomeFor(kind);
+
     const components = raw.map(component => ({
       formula: String(component?.formula ?? "1d6"),
       damageType: String(component?.damageType ?? "physical"),
@@ -545,12 +571,15 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   }
 
   async #updateOutcomeComponent(element) {
+    const kind = element.dataset.outcomeKind;
     const index = Number(element.dataset.index);
     const field = element.dataset.fastNriOutcomeComponentField;
+
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
     if (!Number.isInteger(index) || index < 0) return;
     if (!["formula", "damageType", "traitIds"].includes(field)) return;
 
-    const components = this.#outcomeComponentArray();
+    const components = this.#outcomeComponentArray(kind);
     if (!components[index]) return;
 
     let value = element.value;
@@ -558,12 +587,58 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     else value = String(value ?? "");
 
     components[index][field] = value;
-    await this.item.update({ "system.outcome.components": components });
+    await this.item.update({
+      [`system.outcomes.${kind}.components`]: components
+    });
   }
 
-  static async #addOutcomeComponent(event) {
+  static async #addOutcome(event, target) {
     event.preventDefault();
-    const raw = Array.from(this.item.system.outcome?.components ?? []);
+    const kind = target.dataset.outcomeKind;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+
+    const current = Array.from(this.item.system.outcomes?.[kind]?.components ?? []);
+    const legacy = String(this.item.system.outcome?.kind ?? "none") === kind
+      ? Array.from(this.item.system.outcome?.components ?? [])
+      : [];
+
+    const components = (current.length ? current : legacy).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+
+    if (!components.length) {
+      components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
+    }
+
+    await this.item.update({
+      [`system.outcomes.${kind}.enabled`]: true,
+      [`system.outcomes.${kind}.components`]: components
+    });
+  }
+
+  static async #removeOutcome(event, target) {
+    event.preventDefault();
+    const kind = target.dataset.outcomeKind;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+
+    await this.item.update({
+      [`system.outcomes.${kind}.enabled`]: false
+    });
+  }
+
+  static async #addOutcomeComponent(event, target) {
+    event.preventDefault();
+    const kind = target.dataset.outcomeKind;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+
+    const modern = Array.from(this.item.system.outcomes?.[kind]?.components ?? []);
+    const legacy = String(this.item.system.outcome?.kind ?? "none") === kind
+      ? Array.from(this.item.system.outcome?.components ?? [])
+      : [];
+    const raw = modern.length ? modern : legacy;
+
     const components = raw.length
       ? raw.map(component => ({
           formula: String(component?.formula ?? "1d6"),
@@ -573,15 +648,27 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
 
     components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
-    await this.item.update({ "system.outcome.components": components });
+
+    await this.item.update({
+      [`system.outcomes.${kind}.enabled`]: true,
+      [`system.outcomes.${kind}.components`]: components
+    });
   }
 
   static async #removeOutcomeComponent(event, target) {
     event.preventDefault();
+    const kind = target.dataset.outcomeKind;
     const index = Number(target.dataset.index);
+
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
     if (!Number.isInteger(index) || index < 0) return;
 
-    const raw = Array.from(this.item.system.outcome?.components ?? []);
+    const modern = Array.from(this.item.system.outcomes?.[kind]?.components ?? []);
+    const legacy = String(this.item.system.outcome?.kind ?? "none") === kind
+      ? Array.from(this.item.system.outcome?.components ?? [])
+      : [];
+    const raw = modern.length ? modern : legacy;
+
     const components = raw.length
       ? raw.map(component => ({
           formula: String(component?.formula ?? "1d6"),
@@ -591,12 +678,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
 
     if (components.length <= 1) {
-      ui.notifications.info("У автоматического результата должен остаться хотя бы один компонент.");
+      ui.notifications.info("У включённого результата должен остаться хотя бы один компонент.");
       return;
     }
 
     components.splice(index, 1);
-    await this.item.update({ "system.outcome.components": components });
+    await this.item.update({
+      [`system.outcomes.${kind}.components`]: components
+    });
   }
 
   async _prepareContext(options) {
@@ -617,18 +706,55 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       }))
     }));
 
-    const outcomeKind = String(this.item.system.outcome?.kind ?? "none");
-    const rawOutcomeComponents = Array.from(this.item.system.outcome?.components ?? []);
-    const outcomeComponents = (rawOutcomeComponents.length ? rawOutcomeComponents : [{
-      formula: "1d6",
-      damageType: "physical",
-      traitIds: []
-    }]).map((component, index) => ({
-      index,
-      formula: String(component?.formula ?? "1d6"),
-      damageType: String(component?.damageType ?? "physical"),
-      traitIds: Array.from(component?.traitIds ?? [])
-    }));
+    const legacyKind = String(this.item.system.outcome?.kind ?? "none");
+    const legacyComponents = Array.from(this.item.system.outcome?.components ?? []);
+
+    const outcomeLabels = {
+      damage: {
+        label: "Урон",
+        icon: "fa-burst"
+      },
+      healing: {
+        label: "Лечение",
+        icon: "fa-heart-pulse"
+      },
+      tempHp: {
+        label: "Временные HP",
+        icon: "fa-shield-heart"
+      }
+    };
+
+    const outcomeChannels = ["damage", "healing", "tempHp"].map(kind => {
+      const modern = this.item.system.outcomes?.[kind] ?? {};
+      const modernComponents = Array.from(modern.components ?? []);
+      const legacyMatches = legacyKind === kind;
+      const raw = modernComponents.length
+        ? modernComponents
+        : legacyMatches
+          ? legacyComponents
+          : [];
+
+      const components = (raw.length ? raw : [{
+        formula: "1d6",
+        damageType: "physical",
+        traitIds: []
+      }]).map((component, index) => ({
+        index,
+        formula: String(component?.formula ?? "1d6"),
+        damageType: String(component?.damageType ?? "physical"),
+        traitIds: Array.from(component?.traitIds ?? [])
+      }));
+
+      return {
+        kind,
+        label: outcomeLabels[kind].label,
+        icon: outcomeLabels[kind].icon,
+        enabled: Boolean(modern.enabled) || legacyMatches,
+        isDamage: kind === "damage",
+        isHpGain: kind === "healing" || kind === "tempHp",
+        components
+      };
+    });
 
     return {
       ...context,
@@ -637,10 +763,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       propertyChoices: ITEM_PROPERTIES,
       damageTraitChoices: CREATURE_TRAITS,
       damageComponentProfiles,
-      outcomeKind,
-      outcomeIsDamage: outcomeKind === "damage",
-      outcomeIsHpGain: ["healing", "tempHp"].includes(outcomeKind),
-      outcomeComponents,
+      outcomeChannels,
       hpGainSourceTraitChoices: HP_GAIN_SOURCE_TRAITS,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",

@@ -1492,9 +1492,29 @@ function outcomeComponentTraitIds(component, item, actor) {
   return Array.from(traits);
 }
 
-function abilityOutcomeComponents(actor, item) {
-  const raw = Array.from(item?.system?.outcome?.components ?? []);
-  const components = raw.length ? raw : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
+function abilityOutcomeChannel(item, kind) {
+  const modern = item?.system?.outcomes?.[kind] ?? null;
+  const legacy = item?.system?.outcome ?? null;
+
+  // Backward-compatible read of items configured in 0.5.16.
+  const legacyMatches = String(legacy?.kind ?? "none") === kind;
+  const modernComponents = Array.from(modern?.components ?? []);
+  const legacyComponents = legacyMatches
+    ? Array.from(legacy?.components ?? [])
+    : [];
+
+  return {
+    enabled: Boolean(modern?.enabled) || legacyMatches,
+    components: modernComponents.length ? modernComponents : legacyComponents
+  };
+}
+
+function abilityOutcomeComponents(actor, item, kind) {
+  const channel = abilityOutcomeChannel(item, kind);
+  const raw = Array.from(channel.components ?? []);
+  const components = raw.length
+    ? raw
+    : [{ formula: "1d6", damageType: "physical", traitIds: [] }];
 
   return components
     .map(component => ({
@@ -1708,16 +1728,145 @@ function hpGainRollCardHTML({ item, kind, state, modifiersHTML = "" }) {
     </div>`;
 }
 
-export async function rollAbilityOutcome(actor, item) {
+
+function expandAbilityAttackFormula(actor, rawFormula) {
+  const combatDie = String(actor?.system?.combatDie ?? "").trim();
+  const replacement = combatDie || "0";
+  const formula = String(rawFormula ?? "1d20 + {combatDie}")
+    .replaceAll("{combatDie}", replacement)
+    .replaceAll("@combatDie", replacement)
+    .trim();
+
+  return formula || "1d20";
+}
+
+function abilityAttackFormulaSources(actor, rawFormula, expandedFormula) {
+  const raw = String(rawFormula ?? "").trim();
+
+  if (raw.includes("{combatDie}") || raw.includes("@combatDie")) {
+    const combatDie = String(actor?.system?.combatDie ?? "").trim();
+    return [
+      {
+        formula: expandedFormula,
+        label: "Атака против КЗ",
+        reason: combatDie
+          ? `Формула способности; Куб боя ${combatDie}`
+          : "Формула способности; Куб боя отсутствует"
+      }
+    ];
+  }
+
+  return [{
+    formula: expandedFormula,
+    label: "Атака против КЗ",
+    reason: "Формула способности/заклинания"
+  }];
+}
+
+export async function rollAbilityAttackCheck(actor, item) {
   if (!actor || !item || item.type !== "ability") return null;
 
-  const kind = String(item.system?.outcome?.kind ?? "none");
+  const config = item.system?.attackCheck ?? {};
+  if (!config.enabled) return null;
+
+  const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
+  const formula = expandAbilityAttackFormula(actor, rawFormula);
+  const target = getSingleTarget();
+
+  if ((game.user?.targets?.size ?? 0) > 1) {
+    ui.notifications.warn(
+      "Для одиночной Атаки способности выбери одну цель. Проверка будет выполнена без автоматической степени."
+    );
+  }
+
+  const result = await prepareRoll({
+    actor,
+    label: `Атака: ${item.name}`,
+    baseFormula: formula,
+    baseSources: abilityAttackFormulaSources(actor, rawFormula, formula),
+    showDC: false,
+    contextHTML: armorContextHTML(target)
+  });
+
+  if (!result) return null;
+
+  const degree = target?.actor
+    ? degreeVsArmor(
+        result.roll.total,
+        target.actor.system?.armor,
+        result.naturalD20
+      )
+    : null;
+
+  const critical = result.naturalD20 === 20;
+
+  const flavor = `
+    <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-attack-card">
+      ${rollCardHeader(`Атака: ${item.name}`, "fa-wand-magic-sparkles")}
+      <div class="fast-nri-attack-summary">
+        <span>Результат: <strong>${esc(result.roll.total)}</strong></span>
+        ${target?.name ? `<span>Цель: <strong>${esc(target.name)}</strong></span>` : ""}
+      </div>
+      ${armorMetaHTML(target)}
+      ${critical ? `
+        <div class="fast-nri-critical-roll">
+          <i class="fa-solid fa-burst"></i>
+          <strong>Натуральная 20</strong>
+        </div>
+      ` : ""}
+      ${degreeHTML(degree)}
+      ${rollSourcesHTML(result)}
+    </div>
+  `;
+
+  const message = await result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    flavor,
+    flags: {
+      "fast-nri": {
+        kind: "ability-attack",
+        actorUuid: actor.uuid,
+        itemUuid: item.uuid,
+        targetUuid: target?.document?.uuid ?? null,
+        degree,
+        critical,
+        rollTotal: result.roll.total,
+        naturalD20: result.naturalD20,
+        directedDefense: Boolean(config.directedDefense)
+      }
+    }
+  });
+
+  return {
+    message,
+    roll: result.roll,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    degree,
+    critical,
+    targetUuid: target?.document?.uuid ?? null,
+    directedDefense: Boolean(config.directedDefense)
+  };
+}
+
+export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null) {
+  if (!actor || !item || item.type !== "ability") return null;
+
+  const fallbackKind = String(item.system?.outcome?.kind ?? "none");
+  const kind = String(requestedKind ?? fallbackKind);
+
   if (!["damage", "healing", "tempHp"].includes(kind)) {
     ui.notifications.info(`${item.name}: автоматический результат не настроен.`);
     return null;
   }
 
-  const components = abilityOutcomeComponents(actor, item);
+  const channel = abilityOutcomeChannel(item, kind);
+  if (!channel.enabled) {
+    ui.notifications.info(`${item.name}: этот результат не включён.`);
+    return null;
+  }
+
+  const components = abilityOutcomeComponents(actor, item, kind);
   if (!components.length) {
     ui.notifications.warn(`${item.name}: добавь хотя бы один компонент результата.`);
     return null;
@@ -1744,15 +1893,27 @@ export async function rollAbilityOutcome(actor, item) {
       damageType: components[0]?.damageType ?? "physical",
       traitIds: components[0]?.traitIds ?? []
     });
+
+    // Если у способности была исходная Атака против КЗ, её степень
+    // становится исходной степенью Эффекта для Направленной защиты.
+    state.originalEffectDegree = sourceAttack?.degree ?? null;
+    state.effectDegree = sourceAttack?.degree ?? null;
     state = recalculateDamageState(state);
+
     const modifiersHTML = rollSourcesHTML(result);
+    const directedDefense = Boolean(
+      sourceAttack
+      && item.system?.attackCheck?.directedDefense
+    );
+
     const flavor = damageCardHTML({
       sourceName: item.name,
       profileLabel: item.system?.category === "spell" ? "Заклинание" : "Способность",
+      critical: Boolean(sourceAttack?.critical),
       state,
       modifiersHTML,
-      allowDefense: false,
-      allowDouble: false
+      allowDefense: directedDefense,
+      allowDouble: Boolean(sourceAttack)
     });
 
     return result.roll.toMessage({
@@ -1764,7 +1925,15 @@ export async function rollAbilityOutcome(actor, item) {
           actorUuid: actor.uuid,
           itemUuid: item.uuid,
           abilityOutcome: true,
-          critical: false,
+          outcomeKind: kind,
+          critical: Boolean(sourceAttack?.critical),
+          attackTotal: sourceAttack?.total ?? null,
+          attackNaturalD20: sourceAttack?.naturalD20 ?? null,
+          attackDegree: sourceAttack?.degree ?? null,
+          automaticAttackDegree: sourceAttack?.degree ?? null,
+          originalTargetUuid: sourceAttack?.targetUuid ?? null,
+          sourceAttackMessageId: sourceAttack?.message?.id ?? null,
+          directedDefense,
           rolledTotal: result.roll.total,
           finalTotal: state.currentTotal,
           modifierNotesHTML: modifiersHTML,
@@ -1802,6 +1971,7 @@ export async function rollAbilityOutcome(actor, item) {
         kind: kind === "healing" ? "healing" : "temp-hp",
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
+        outcomeKind: kind,
         hpGainState: state,
         rolledTotal: result.roll.total,
         modifierNotesHTML: modifiersHTML
@@ -2687,10 +2857,25 @@ export async function undoAppliedDamage(element) {
   if (Number.isFinite(maxHp)) restoredHp = Math.min(maxHp, restoredHp);
   restoredHp = Math.max(0, restoredHp);
 
-  const restoredTemp = currentTemp + Math.max(0, Number(stored.appliedToTemp) || 0);
+  const tempRemovedByThisDamage = Math.max(0, Number(stored.appliedToTemp) || 0);
+
+  // Временные HP не складываются. Если после этого урона цель уже получила
+  // более высокое новое значение временных HP, старый Undo не имеет права
+  // прибавить к нему снятые ранее временные HP.
+  const newerTempGrantDetected = currentTemp > Math.max(0, Number(stored.afterTemp) || 0);
+  const restoredTemp = newerTempGrantDetected
+    ? currentTemp
+    : currentTemp + tempRemovedByThisDamage;
+
   const restoredHpAmount = Math.max(0, restoredHp - currentHp);
   const restoredTempAmount = Math.max(0, restoredTemp - currentTemp);
   const restoredAmount = restoredHpAmount + restoredTempAmount;
+
+  if (newerTempGrantDetected && tempRemovedByThisDamage > 0) {
+    ui.notifications.info(
+      "Обычные HP возвращены. Старые временные HP не восстановлены, потому что после этого урона цель получила более высокое значение временных HP."
+    );
+  }
 
   try {
     await actor.update({

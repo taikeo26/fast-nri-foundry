@@ -1,14 +1,6 @@
-const DAMAGE_COLOR = "#e04848";
+const DAMAGE_COLOR = "#ff2d2d";
 const HEALING_COLOR = "#45b96b";
 const TEMP_HP_COLOR = "#4f9ee8";
-
-function foundryColor(value) {
-  try {
-    return Number(foundry.utils.Color.fromString(value));
-  } catch {
-    return value;
-  }
-}
 
 function finitePositive(value) {
   const number = Number(value);
@@ -49,7 +41,7 @@ export async function showHpChangeFeedback({ tokenUuid, amount, kind }) {
   const isTempHp = kind === "tempHp";
   const positive = isHealing || isTempHp;
   const content = `${positive ? "+" : "−"}${magnitude}`;
-  const fill = foundryColor(isTempHp ? TEMP_HP_COLOR : isHealing ? HEALING_COLOR : DAMAGE_COLOR);
+  const fill = isTempHp ? TEMP_HP_COLOR : isHealing ? HEALING_COLOR : DAMAGE_COLOR;
 
   const center = token.center;
   const origin = {
@@ -66,10 +58,10 @@ export async function showHpChangeFeedback({ tokenUuid, amount, kind }) {
       jitter: 0.08,
       textStyle: {
         fill,
-        fontSize: 30,
-        fontWeight: "700",
+        fontSize: 32,
+        fontWeight: "800",
         stroke: {
-          color: foundryColor("#1b1b1b"),
+          color: "#1b1b1b",
           width: 3
         }
       }
@@ -152,7 +144,19 @@ async function feedbackFromUpdatedMessage(message, changed) {
 
 export function activateHpFeedback() {
   Hooks.on("createChatMessage", (message) => {
-    void feedbackFromCreatedMessage(message);
+    void (async () => {
+      const shown = await feedbackFromCreatedMessage(message);
+      if (!shown) return;
+
+      try {
+        await message.setFlag("fast-nri", "customHpFeedbackShown", true);
+      } catch (error) {
+        console.debug(
+          "Быстрая НРИ | HP feedback показан, но диагностический flag не записан",
+          error
+        );
+      }
+    })();
   });
 
   Hooks.on("updateChatMessage", (message, changed) => {
