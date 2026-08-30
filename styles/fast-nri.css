@@ -1729,3 +1729,154 @@ body.theme-dark .fast-nri-defense-resolved {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========================================================= */
+/* v0.5.7 - Foundry-native damage dice results               */
+/* ========================================================= */
+
+.fast-nri-damage-parts-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.fast-nri-damage-parts-title {
+  color: #666;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.fast-nri-damage-equation {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.fast-nri-damage-equation .fast-nri-damage-parts {
+  display: contents;
+}
+
+.fast-nri-damage-native-part,
+.fast-nri-damage-fixed-part {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  min-height: 34px;
+}
+
+.fast-nri-damage-native-type {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.78;
+  white-space: nowrap;
+}
+
+/*
+ * ВАЖНО:
+ * Сам фон и визуальный вид настоящего куба НЕ рисуем.
+ * <li> использует штатные Foundry-классы:
+ *   roll die d4/d6/d8/d10/d12/d20 ...
+ */
+.fast-nri-damage-native-rolls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fast-nri-damage-native-rolls > .roll.die {
+  float: none;
+  margin: 0;
+}
+
+/*
+ * Фиксированный положительный бонус является кубом урона по правилам
+ * Fast NRI, но физического DiceTerm у Foundry для него нет.
+ * Поэтому только он получает минимальную нейтральную системную плашку.
+ */
+.fast-nri-fixed-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-light-2, #999);
+  border-radius: 4px;
+  background: var(--color-bg-option, rgba(0, 0, 0, 0.06));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.fast-nri-damage-native-part.removed,
+.fast-nri-damage-fixed-part.removed {
+  opacity: 0.42;
+}
+
+.fast-nri-damage-native-part.removed,
+.fast-nri-damage-fixed-part.removed {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.fast-nri-damage-adjustment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 28px;
+  padding: 2px 7px;
+  border: 1px dashed rgba(100, 100, 100, 0.55);
+  border-radius: 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.fast-nri-damage-equation-arrow {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  font-weight: 900;
+  opacity: 0.62;
+}
+
+.fast-nri-damage-equation-total {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 2px 8px;
+  border: 1px solid rgba(100, 58, 58, 0.55);
+  border-radius: 5px;
+  background: rgba(150, 70, 70, 0.065);
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.theme-dark .fast-nri-damage-parts-title,
+body.theme-dark .fast-nri-damage-parts-title {
+  color: #aaa;
+}
+
+.theme-dark .fast-nri-fixed-result,
+body.theme-dark .fast-nri-fixed-result {
+  border-color: var(--color-border-dark-3, #666);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.theme-dark .fast-nri-damage-equation-total,
+body.theme-dark .fast-nri-damage-equation-total {
+  border-color: rgba(220, 150, 150, 0.48);
+  background: rgba(180, 95, 95, 0.08);
+}

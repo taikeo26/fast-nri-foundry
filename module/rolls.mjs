@@ -697,8 +697,35 @@ function activeDieResults(term) {
 
   return term.results
     .filter(result => result?.active !== false && !result?.discarded)
-    .map(result => Number(result?.result))
-    .filter(Number.isFinite);
+    .map(result => {
+      const value = Number(result?.result);
+      if (!Number.isFinite(value)) return null;
+
+      let label = String(value);
+      let css = [];
+
+      try {
+        label = String(term.getResultLabel?.(result) ?? value);
+      } catch (error) {
+        console.warn("Быстрая НРИ | Не удалось получить native label куба", error);
+      }
+
+      try {
+        css = Array.from(term.getResultCSS?.(result) ?? [])
+          .filter(Boolean)
+          .map(value => String(value))
+          .filter(value => /^[A-Za-z0-9_-]+$/.test(value));
+      } catch (error) {
+        console.warn("Быстрая НРИ | Не удалось получить native CSS куба", error);
+      }
+
+      return {
+        value,
+        label,
+        css
+      };
+    })
+    .filter(Boolean);
 }
 
 /**
@@ -729,12 +756,14 @@ function buildDamageState(roll, {
 
     const dieResults = activeDieResults(term);
     if (dieResults) {
-      for (const value of dieResults) {
+      for (const dieResult of dieResults) {
         const entry = {
           id: `part-${sequence++}`,
           kind: "die",
           faces: Number(term.faces),
-          value,
+          value: dieResult.value,
+          nativeLabel: dieResult.label,
+          nativeResultCSS: dieResult.css,
           damageType,
           removed: false
         };
@@ -819,6 +848,26 @@ function damagePartLabel(part) {
   return `фикс. +${part?.value ?? 0}`;
 }
 
+function damagePartShortLabel(part) {
+  if (part?.kind === "die") return `d${part.faces}`;
+  return `+${part?.value ?? 0}`;
+}
+
+function nativeDamageDieClasses(part) {
+  if (part?.kind !== "die") return "";
+
+  const classes = new Set([
+    "roll",
+    "die",
+    `d${Number(part.faces) || 0}`,
+    ...(part.nativeResultCSS ?? [])
+  ]);
+
+  return Array.from(classes)
+    .filter(value => /^[A-Za-z0-9_-]+$/.test(value))
+    .join(" ");
+}
+
 function damagePartsHTML(state) {
   if (!state?.supported) {
     return `
@@ -829,29 +878,76 @@ function damagePartsHTML(state) {
     `;
   }
 
-  const parts = (state.parts ?? []).map(part => `
-    <span
-      class="fast-nri-damage-part ${part.removed ? "removed" : ""}"
-      title="${part.removed ? "Удалено защитой" : "Куб урона"}"
-    >
-      ${esc(damagePartLabel(part))}
-    </span>
-  `).join("");
+  const parts = (state.parts ?? []).map(part => {
+    if (part.kind === "die") {
+      const nativeLabel = part.nativeLabel ?? part.value;
+      const nativeClasses = nativeDamageDieClasses(part);
+
+      return `
+        <span
+          class="fast-nri-damage-native-part ${part.removed ? "removed" : ""}"
+          title="${part.removed ? "Удалено защитой" : escAttr(damagePartLabel(part))}"
+        >
+          <span class="fast-nri-damage-native-type">
+            ${esc(damagePartShortLabel(part))}:
+          </span>
+
+          <ol class="dice-rolls fast-nri-damage-native-rolls">
+            <li class="${escAttr(nativeClasses)}">
+              ${esc(nativeLabel)}
+            </li>
+          </ol>
+        </span>
+      `;
+    }
+
+    return `
+      <span
+        class="fast-nri-damage-fixed-part ${part.removed ? "removed" : ""}"
+        title="${part.removed ? "Удалено защитой" : escAttr(damagePartLabel(part))}"
+      >
+        <span class="fast-nri-damage-native-type">
+          ${esc(damagePartShortLabel(part))}:
+        </span>
+        <strong class="fast-nri-fixed-result">
+          ${esc(part.value)}
+        </strong>
+      </span>
+    `;
+  }).join("");
 
   const penalty = (state.penalties ?? [])
     .reduce((sum, part) => sum + Math.max(0, Number(part.value) || 0), 0);
 
+  const total = Math.max(0, Number(state.currentTotal) || 0);
+
   return `
     <section class="fast-nri-damage-parts-block">
       <div class="fast-nri-damage-parts-title">Кубы урона</div>
-      <div class="fast-nri-damage-parts">
-        ${parts || `<span class="fast-nri-roll-empty">Нет положительных кубов урона.</span>`}
+
+      <div class="fast-nri-damage-equation">
+        <div class="fast-nri-damage-parts">
+          ${parts || `<span class="fast-nri-roll-empty">Нет положительных кубов урона.</span>`}
+        </div>
+
+        ${penalty > 0 ? `
+          <span
+            class="fast-nri-damage-adjustment"
+            title="Штраф применяется после Защитных действий"
+          >
+            −${esc(penalty)}
+          </span>
+        ` : ""}
+
+        <span class="fast-nri-damage-equation-arrow" aria-hidden="true">→</span>
+
+        <strong
+          class="fast-nri-damage-equation-total"
+          title="Текущий итоговый урон"
+        >
+          ${esc(total)}
+        </strong>
       </div>
-      ${penalty > 0 ? `
-        <small class="fast-nri-damage-penalty">
-          Штраф после защит: −${esc(penalty)}
-        </small>
-      ` : ""}
     </section>
   `;
 }
@@ -935,11 +1031,6 @@ function damageCardHTML({
           </strong>
         </div>
       ` : ""}
-
-      <div class="fast-nri-damage-total">
-        <span>${state.defense ? "Текущий урон" : "Итоговый урон"}</span>
-        <strong>${esc(baseDamage)}</strong>
-      </div>
 
       <div class="fast-nri-damage-actions fast-nri-damage-actions-three">
         <button
