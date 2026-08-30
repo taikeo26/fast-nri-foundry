@@ -5,7 +5,19 @@
     <div class="fast-nri-identity">
       <input class="fast-nri-name" type="text" name="name" value="{{actor.name}}" />
       <div class="fast-nri-subline">
-        <span>{{actor.type}}</span>
+        <span>{{#if isCreature}}Существо{{else}}Персонаж{{/if}}</span>
+
+        {{#unless isCreature}}
+          <label>
+            Класс
+            <input type="text" name="system.className" value="{{system.className}}" placeholder="—" />
+          </label>
+          <label>
+            Раса
+            <input type="text" name="system.raceName" value="{{system.raceName}}" placeholder="—" />
+          </label>
+        {{/unless}}
+
         <label>
           Уровень
           <input type="number" name="system.level" value="{{system.level}}" />
@@ -38,13 +50,23 @@
     <!-- ОСНОВНОЕ                                                     -->
     <!-- ============================================================= -->
     <section class="fast-nri-tab-pane {{#if tabs.main.active}}active{{/if}}" data-tab="main" role="tabpanel">
-      <section class="fast-nri-vitals">
-        <div class="fast-nri-card">
+      <section class="fast-nri-vitals fast-nri-vitals-expanded">
+        <div class="fast-nri-card fast-nri-hp-card">
           <h3>HP</h3>
-          <div class="fast-nri-inline">
-            <input type="number" name="system.hp.value" value="{{system.hp.value}}" />
-            <span>/</span>
-            <input type="number" name="system.hp.max" value="{{system.hp.max}}" />
+          <div class="fast-nri-hp-line">
+            <label title="Текущие HP">
+              <span>Тек.</span>
+              <input type="number" name="system.hp.value" value="{{system.hp.value}}" />
+            </label>
+            <span class="fast-nri-hp-separator">/</span>
+            <label title="Максимальные HP">
+              <span>Макс.</span>
+              <input type="number" name="system.hp.max" value="{{system.hp.max}}" />
+            </label>
+            <label class="fast-nri-temp-hp" title="Временные HP">
+              <span>Врем.</span>
+              <input type="number" name="system.hp.temp" value="{{system.hp.temp}}" />
+            </label>
           </div>
         </div>
 
@@ -57,6 +79,26 @@
           <h3>Куб боя</h3>
           <input type="text" name="system.combatDie" value="{{system.combatDie}}" />
         </div>
+
+        <div class="fast-nri-card">
+          <h3>Инициатива</h3>
+          <label class="fast-nri-card-inline-label">
+            <span>Бонус</span>
+            <input type="number" name="system.initiativeBonus" value="{{system.initiativeBonus}}" />
+          </label>
+        </div>
+
+        <div class="fast-nri-card">
+          <h3>Размер</h3>
+          <input type="text" name="system.size" value="{{system.size}}" />
+        </div>
+
+        {{#unless isCreature}}
+          <div class="fast-nri-card">
+            <h3>Счётчик смерти</h3>
+            <input type="number" name="system.deathCounter" value="{{system.deathCounter}}" />
+          </div>
+        {{/unless}}
 
         {{#if isCreature}}
           <div class="fast-nri-card">
@@ -98,6 +140,61 @@
           </label>
         </div>
       </section>
+
+      <section class="fast-nri-section">
+        <h2>Устойчивости</h2>
+        <div class="fast-nri-three fast-nri-resistances">
+          <label>Универсальная
+            <input type="number" name="system.resistances.universal" value="{{system.resistances.universal}}" />
+          </label>
+          <label>Физическая
+            <input type="number" name="system.resistances.physical" value="{{system.resistances.physical}}" />
+          </label>
+          <label>Магическая
+            <input type="number" name="system.resistances.magic" value="{{system.resistances.magic}}" />
+          </label>
+        </div>
+      </section>
+
+      <section class="fast-nri-section">
+        <h2>Уязвимости и иммунитеты</h2>
+        <div class="fast-nri-two fast-nri-traits-text">
+          <label>
+            Уязвимости
+            <textarea name="system.vulnerabilities" rows="2" placeholder="Нет">{{system.vulnerabilities}}</textarea>
+          </label>
+          <label>
+            Иммунитеты
+            <textarea name="system.immunities" rows="2" placeholder="Нет">{{system.immunities}}</textarea>
+          </label>
+        </div>
+      </section>
+
+      {{#unless isCreature}}
+        <section class="fast-nri-section">
+          <h2>Специализации</h2>
+          <div class="fast-nri-two fast-nri-specializations">
+            <label>
+              <span>Основная <strong>2d6</strong></span>
+              <input
+                type="text"
+                name="system.specializations.primary.name"
+                value="{{system.specializations.primary.name}}"
+                placeholder="Название специализации"
+              />
+            </label>
+            <label>
+              <span>Дополнительная <strong>2d4</strong></span>
+              <input
+                type="text"
+                name="system.specializations.secondary.name"
+                value="{{system.specializations.secondary.name}}"
+                placeholder="Название специализации"
+              />
+            </label>
+          </div>
+        </section>
+      {{/unless}}
 
       <section class="fast-nri-section">
         <h2>Базовые ресурсы</h2>

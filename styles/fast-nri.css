@@ -1940,3 +1940,117 @@ body.theme-dark .fast-nri-damage-equation-total {
 .fast-nri-roll-source-automatic { background:rgba(88,105,145,.06); }
 .fast-nri-roll-source-manual { background:rgba(135,105,65,.06); }
 .theme-dark .fast-nri-roll-sources-title, body.theme-dark .fast-nri-roll-sources-title, .theme-dark .fast-nri-roll-source-kind, body.theme-dark .fast-nri-roll-source-kind, .theme-dark .fast-nri-roll-source-reason, body.theme-dark .fast-nri-roll-source-reason { color:#aaa; }
+
+
+/* ========================================================= */
+/* v0.5.12 - Complete actor data pass                        */
+/* ========================================================= */
+
+.fast-nri-subline {
+  row-gap: 6px;
+}
+
+.fast-nri-subline label:has(input[type="text"]) input {
+  width: 120px;
+}
+
+.fast-nri-vitals-expanded {
+  grid-template-columns: 2fr repeat(3, minmax(110px, 1fr));
+}
+
+.fast-nri-hp-card {
+  min-width: 0;
+}
+
+.fast-nri-hp-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fast-nri-hp-line label {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: #666;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.fast-nri-hp-line input {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.fast-nri-hp-separator {
+  padding-bottom: 5px;
+  font-weight: 800;
+  opacity: 0.58;
+}
+
+.fast-nri-temp-hp {
+  margin-left: 4px;
+}
+
+.fast-nri-card-inline-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+}
+
+.fast-nri-card-inline-label input {
+  min-width: 0;
+}
+
+.fast-nri-resistances input {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.fast-nri-traits-text label,
+.fast-nri-specializations label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+
+.fast-nri-traits-text textarea {
+  min-height: 52px;
+}
+
+.fast-nri-specializations strong {
+  font-family: var(--font-mono, monospace);
+}
+
+.theme-dark .fast-nri-hp-line label,
+body.theme-dark .fast-nri-hp-line label {
+  color: #aaa;
+}
+
+@media (max-width: 760px) {
+  .fast-nri-vitals-expanded {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fast-nri-hp-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .fast-nri-vitals-expanded {
+    grid-template-columns: 1fr;
+  }
+
+  .fast-nri-hp-card {
+    grid-column: auto;
+  }
+}

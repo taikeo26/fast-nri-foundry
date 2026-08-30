@@ -69,8 +69,42 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
 
     hp: new SchemaField({
       value: integer(hp),
-      max: integer(hp)
+      max: integer(hp),
+      temp: integer(0)
     }),
+
+    // Идентичность персонажа. Для существ поля могут оставаться пустыми.
+    className: text(""),
+    raceName: text(""),
+
+    // Базовые параметры, которые пока только хранятся и показываются в карточке.
+    size: text("1 клетка"),
+    initiativeBonus: integer(0),
+    deathCounter: integer(0),
+
+    // Две специализации персонажа. Их кубы фиксированы правилами:
+    // основная — 2d6, дополнительная — 2d4.
+    specializations: new SchemaField({
+      primary: new SchemaField({
+        name: text("")
+      }),
+      secondary: new SchemaField({
+        name: text("")
+      })
+    }),
+
+    // В Fast NRI теперь только три Устойчивости:
+    // универсальная, физическая и магическая.
+    resistances: new SchemaField({
+      universal: integer(0),
+      physical: integer(0),
+      magic: integer(0)
+    }),
+
+    // Пока свободный текст: формальный формат Уязвимостей/Иммунитетов
+    // будет определён отдельно. Поля есть у персонажей и существ.
+    vulnerabilities: text(""),
+    immunities: text(""),
 
     speed: integer(speed),
 

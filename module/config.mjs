@@ -17,6 +17,7 @@ export const ITEM_PROPERTIES = Object.freeze({
   reload: "Перезарядка",
   firearm: "Огнестрельное",
   trip: "Подсечка",
+  poison: "Яд",
   defensive: "Защитное",
   deadly: "Смертельное",
   longRange: "Дальнобойное"
