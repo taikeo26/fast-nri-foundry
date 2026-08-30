@@ -42,6 +42,9 @@
     <button type="button" class="fast-nri-tab-button {{#if tabs.skills.active}}active{{/if}}" data-tab="skills" role="tab">
       Навыки
     </button>
+    <button type="button" class="fast-nri-tab-button {{#if tabs.effects.active}}active{{/if}}" data-tab="effects" role="tab">
+      Эффекты
+    </button>
   </nav>
 
   <main class="fast-nri-tab-content">
@@ -529,6 +532,55 @@
                 <option value="d12" {{#if (eq skill.value "d12")}}selected{{/if}}>d12</option>
               </select>
             </div>
+          {{/each}}
+        </div>
+      </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- ЭФФЕКТЫ                                                       -->
+    <!-- ============================================================= -->
+    <section class="fast-nri-tab-pane {{#if tabs.effects.active}}active{{/if}}" data-tab="effects" role="tabpanel">
+      <section class="fast-nri-section">
+        <div class="fast-nri-section-heading">
+          <div>
+            <h2>Эффекты</h2>
+            <p class="fast-nri-help">
+              Перетащите Effect из чата на токен или в эту область.
+              ПКМ по наложенному эффекту снимает один стак.
+            </p>
+          </div>
+        </div>
+
+        <div class="fast-nri-drop-zone fast-nri-effect-actor-drop-zone">
+          Перетащите эффект сюда
+        </div>
+
+        <div class="fast-nri-applied-effect-list">
+          {{#each effectItems as |row|}}
+            <div
+              class="fast-nri-applied-effect-row"
+              data-item-id="{{row.id}}"
+              data-fast-nri-applied-effect-id="{{row.id}}"
+              title="ПКМ: снять один стак"
+            >
+              <img src="{{row.img}}" alt="" />
+
+              <div class="fast-nri-applied-effect-info">
+                <strong>{{row.name}}</strong>
+                <small>{{row.durationLabel}}</small>
+              </div>
+
+              {{#if row.stackCount}}
+                <span class="fast-nri-applied-effect-stack">×{{row.stackCount}}</span>
+              {{/if}}
+
+              <button type="button" data-action="editItem" title="Открыть">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+            </div>
+          {{else}}
+            <div class="fast-nri-empty">Эффектов нет.</div>
           {{/each}}
         </div>
       </section>

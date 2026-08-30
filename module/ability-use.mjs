@@ -1,4 +1,5 @@
 import { rollAbilityAttackCheck, rollAbilityOutcome } from "./rolls.mjs";
+import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
 
 function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -42,7 +43,8 @@ function resourceLineHTML({
   after,
   spent,
   shortage,
-  undone = false
+  undone = false,
+  linkedEffects = []
 }) {
   if (!(cost > 0)) return "";
 
@@ -100,6 +102,13 @@ function abilityCardHTML({
       ${description ? `
         <div class="fast-nri-ability-description">
           ${description}
+        </div>
+      ` : ""}
+
+      ${linkedEffects.length ? `
+        <div class="fast-nri-ability-linked-effects">
+          <small>Эффекты — перетащите на токен:</small>
+          ${linkedEffects.map(effect => effectChatCardHTML(effect, { compact: true })).join("")}
         </div>
       ` : ""}
 
@@ -168,6 +177,10 @@ export async function useAbility(actor, item) {
     }
   }
 
+  const linkedEffects = await resolveEffectDocuments(
+    item.system?.effectUuids ?? []
+  );
+
   const content = abilityCardHTML({
     actor,
     item,
@@ -176,7 +189,8 @@ export async function useAbility(actor, item) {
     after,
     spent,
     shortage,
-    undone: false
+    undone: false,
+    linkedEffects
   });
 
   const message = await ChatMessage.create({
@@ -329,6 +343,10 @@ export async function undoAbilityResource(element) {
   const after = Number(message.getFlag("fast-nri", "after")) || 0;
   const shortage = Number(message.getFlag("fast-nri", "shortage")) || 0;
 
+  const linkedEffects = await resolveEffectDocuments(
+    item.system?.effectUuids ?? []
+  );
+
   const content = abilityCardHTML({
     actor,
     item,
@@ -337,7 +355,8 @@ export async function undoAbilityResource(element) {
     after,
     spent,
     shortage,
-    undone: true
+    undone: true,
+    linkedEffects
   });
 
   await message.update({

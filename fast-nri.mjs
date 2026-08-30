@@ -6,6 +6,12 @@ import {
 } from "./module/token-defaults.mjs";
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
 import { registerFastNriTokenVisuals } from "./module/token-visuals.mjs";
+import {
+  activateEffectChatInteractions,
+  activateEffectSystem,
+  registerEffectSettings,
+  seedBuiltinEffectsOnce
+} from "./module/effect-system.mjs";
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
 import {
   migrateDamageTraitsOnce,
@@ -20,7 +26,8 @@ import {
   WeaponData,
   AbilityData,
   EquipmentData,
-  ConsumableData
+  ConsumableData,
+  EffectData
 } from "./module/data-models.mjs";
 
 import {
@@ -33,6 +40,7 @@ Hooks.once("init", () => {
 
   registerTokenDefaultSettings();
   registerDataMigrationSettings();
+  registerEffectSettings();
   activateTokenDefaults();
   registerFastNriTokenVisuals();
 
@@ -45,7 +53,8 @@ Hooks.once("init", () => {
     weapon: WeaponData,
     ability: AbilityData,
     equipment: EquipmentData,
-    consumable: ConsumableData
+    consumable: ConsumableData,
+    effect: EffectData
   };
 
   CONFIG.Actor.trackableAttributes = {
@@ -80,7 +89,7 @@ Hooks.once("init", () => {
     foundry.documents.Item,
     game.system.id,
     FastNriItemSheet,
-    { types: ["weapon", "ability", "equipment", "consumable"], makeDefault: true }
+    { types: ["weapon", "ability", "equipment", "consumable", "effect"], makeDefault: true }
   );
 });
 
@@ -89,7 +98,10 @@ Hooks.once("ready", async () => {
   activateChatInteractions(document);
   activateAbilityChatInteractions(document);
   activateHealthChatInteractions(document);
+  activateEffectChatInteractions(document);
+  activateEffectSystem();
   activateHpFeedback();
+  await seedBuiltinEffectsOnce();
   await migrateDamageTraitsOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();

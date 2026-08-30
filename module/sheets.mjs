@@ -6,6 +6,19 @@ import {
   ITEM_PROPERTIES,
   RESISTANCE_TRAITS
 } from "./config.mjs";
+import {
+  EFFECT_DURATION_MODES,
+  EFFECT_EXPIRY_PHASES,
+  EFFECT_KINDS,
+  EFFECT_STACKING_MODES,
+  applyEffectToActor,
+  durationDefinitionLabel,
+  effectStackCount,
+  postEffectToChat,
+  removeOneEffectStack,
+  resolveEffectDocuments,
+  runtimeDurationLabel
+} from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
 import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
 
@@ -76,6 +89,20 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     const spells = items.filter(
       item => item.type === "ability" && item.system.category === "spell"
     );
+
+    const effectItems = items
+      .filter(item => item.type === "effect")
+      .map(item => ({
+        item,
+        id: item.id,
+        name: item.name,
+        img: item.img,
+        stackCount: effectStackCount(item),
+        durationLabel: runtimeDurationLabel(item, game.combat?.started ? {
+          combatId: game.combat.id,
+          round: Number(game.combat.round) || 0
+        } : null)
+      }));
 
     const skillRows = SKILLS.map(([id, label]) => {
       const value = this.actor.system.skills?.[id] ?? "";
@@ -157,11 +184,13 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         abilities: { active: this._activeTab === "abilities" },
         inventory: { active: this._activeTab === "inventory" },
         spells: { active: this._activeTab === "spells" },
-        skills: { active: this._activeTab === "skills" }
+        skills: { active: this._activeTab === "skills" },
+        effects: { active: this._activeTab === "effects" }
       },
 
       abilities,
       spells,
+      effectItems,
       weapons: items.filter(item => item.type === "weapon"),
       equipment: items.filter(item => item.type === "equipment"),
       consumables: items.filter(item => item.type === "consumable"),
@@ -176,6 +205,17 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       hpGainReductionRows,
       hpGainBonusRows
     };
+  }
+
+  async _onDropItem(event, data) {
+    const dropped = await Item.implementation.fromDropData(data);
+
+    if (dropped?.type === "effect") {
+      await applyEffectToActor(dropped, this.actor);
+      return [];
+    }
+
+    return super._onDropItem(event, data);
   }
 
   async _onRender(context, options) {
@@ -240,6 +280,18 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
           ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
         } finally {
           event.currentTarget.disabled = false;
+        }
+      });
+    }
+
+    for (const row of this.element.querySelectorAll("[data-fast-nri-applied-effect-id]")) {
+      row.addEventListener("contextmenu", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const effect = this.actor.items.get(row.dataset.fastNriAppliedEffectId);
+        if (effect?.type === "effect") {
+          void removeOneEffectStack(effect);
         }
       });
     }
@@ -331,7 +383,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
 
   static async #createItem(event, target) {
     const type = target.dataset.itemType;
-    if (!["weapon", "ability", "equipment", "consumable"].includes(type)) return;
+    if (!["weapon", "ability", "equipment", "consumable", "effect"].includes(type)) return;
 
     const category = target.dataset.itemCategory || "";
 
@@ -339,7 +391,8 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       weapon: "Новое оружие",
       ability: category === "spell" ? "Новое заклинание" : "Новая способность",
       equipment: "Новое снаряжение",
-      consumable: "Новый расходник"
+      consumable: "Новый расходник",
+      effect: "Новый эффект"
     };
 
     const data = {
@@ -395,7 +448,9 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       addOutcome: FastNriItemSheet.#addOutcome,
       removeOutcome: FastNriItemSheet.#removeOutcome,
       addOutcomeComponent: FastNriItemSheet.#addOutcomeComponent,
-      removeOutcomeComponent: FastNriItemSheet.#removeOutcomeComponent
+      removeOutcomeComponent: FastNriItemSheet.#removeOutcomeComponent,
+      sendEffectToChat: FastNriItemSheet.#sendEffectToChat,
+      removeLinkedEffect: FastNriItemSheet.#removeLinkedEffect
     }
   };
 
@@ -493,6 +548,45 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.preventDefault();
         event.stopPropagation();
         await this.#updateOutcomeComponent(event.currentTarget);
+      });
+    }
+
+    const effectDropZone = this.element.querySelector("[data-fast-nri-effect-link-dropzone]");
+    if (effectDropZone) {
+      effectDropZone.addEventListener("dragover", event => {
+        event.preventDefault();
+        effectDropZone.classList.add("is-dragover");
+      });
+
+      effectDropZone.addEventListener("dragleave", () => {
+        effectDropZone.classList.remove("is-dragover");
+      });
+
+      effectDropZone.addEventListener("drop", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        effectDropZone.classList.remove("is-dragover");
+
+        try {
+          const dragData = foundry.applications.ux.TextEditor.implementation
+            .getDragEventData(event);
+
+          const dropped = await Item.implementation.fromDropData(dragData);
+
+          if (!dropped || dropped.type !== "effect") {
+            ui.notifications.warn("Сюда можно привязать только Effect.");
+            return;
+          }
+
+          const uuids = Array.from(this.item.system?.effectUuids ?? []);
+          if (!uuids.includes(dropped.uuid)) {
+            uuids.push(dropped.uuid);
+            await this.item.update({ "system.effectUuids": uuids });
+          }
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка привязки Effect", error);
+          ui.notifications.error(`Не удалось привязать эффект: ${error.message}`);
+        }
       });
     }
   }
@@ -749,6 +843,34 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     });
   }
 
+  static async #sendEffectToChat(event) {
+    event.preventDefault();
+
+    if (this.item.type !== "effect") return;
+
+    await postEffectToChat(this.item, {
+      actor: this.item.parent?.documentName === "Actor"
+        ? this.item.parent
+        : null
+    });
+  }
+
+  static async #removeLinkedEffect(event, target) {
+    event.preventDefault();
+
+    if (this.item.type !== "ability") return;
+
+    const uuid = target.dataset.effectUuid;
+    if (!uuid) return;
+
+    const next = Array.from(this.item.system?.effectUuids ?? [])
+      .filter(value => value !== uuid);
+
+    await this.item.update({
+      "system.effectUuids": next
+    });
+  }
+
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
 
@@ -817,6 +939,17 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       };
     });
 
+    const linkedEffects = this.item.type === "ability"
+      ? await resolveEffectDocuments(this.item.system?.effectUuids ?? [])
+      : [];
+
+    const linkedEffectRows = linkedEffects.map(effect => ({
+      uuid: effect.uuid,
+      name: effect.name,
+      img: effect.img,
+      durationLabel: durationDefinitionLabel(effect.system)
+    }));
+
     return {
       ...context,
       item: this.item,
@@ -830,6 +963,27 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",
       isConsumable: this.item.type === "consumable",
+      isEffect: this.item.type === "effect",
+      linkedEffectRows,
+      effectKindChoices: EFFECT_KINDS,
+      effectDurationChoices: EFFECT_DURATION_MODES,
+      effectExpiryChoices: EFFECT_EXPIRY_PHASES,
+      effectStackingChoices: EFFECT_STACKING_MODES,
+      effectDurationLabel:
+        this.item.type === "effect"
+          ? durationDefinitionLabel(this.item.system)
+          : "",
+      effectRuntimeStackCount:
+        this.item.type === "effect"
+          ? effectStackCount(this.item)
+          : 0,
+      effectRuntimeDuration:
+        this.item.type === "effect" && this.item.isEmbedded
+          ? runtimeDurationLabel(this.item, game.combat?.started ? {
+              combatId: game.combat.id,
+              round: Number(game.combat.round) || 0
+            } : null)
+          : "",
       abilityIsSpell:
         this.item.type === "ability" && this.item.system.category === "spell"
     };

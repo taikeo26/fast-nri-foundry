@@ -85,6 +85,27 @@ const outcomeChannelSchema = () =>
     components: outcomeComponentArray()
   });
 
+
+const effectTimerArray = () =>
+  new ArrayField(
+    new SchemaField({
+      id: text(""),
+      durationMode: text("manual"),
+      combatId: text(""),
+      combatantId: text(""),
+      appliedRound: integer(0),
+      appliedTurn: integer(-1),
+      expiresRound: integer(0),
+      phase: text("manual"),
+      untracked: flag(false)
+    }),
+    {
+      required: true,
+      nullable: false,
+      initial: []
+    }
+  );
+
 function skillsSchema() {
   return new SchemaField({
     acrobatics: text(""),
@@ -315,7 +336,11 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         enabled: flag(false),
         formula: text("1d20 + {combatDie}"),
         directedDefense: flag(false)
-      })
+      }),
+
+      // Ссылки на Effect Item. При использовании способности они выводятся
+      // в chat-card как перетаскиваемые эффекты.
+      effectUuids: stringArray()
     };
   }
 }
@@ -343,6 +368,38 @@ export class ConsumableData extends foundry.abstract.TypeDataModel {
     return {
       ...itemBaseSchema(),
       quantity: integer(1)
+    };
+  }
+}
+export class EffectData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    return {
+      ...itemBaseSchema(),
+
+      // condition / buff / debuff — пока только организация и отображение.
+      effectKind: text("condition"),
+
+      // Мягкая автоматизация длительности.
+      duration: new SchemaField({
+        mode: text("manual"),
+        rounds: integer(1),
+        expiry: text("turnStart")
+      }),
+
+      // none        — повторное применение только обновляет длительность;
+      // shared      — один таймер на все стаки, новый стак обновляет таймер;
+      // independent — каждый стак имеет собственный таймер.
+      stacking: new SchemaField({
+        mode: text("none")
+      }),
+
+      // Источник и runtime используются только у Effect, встроенного в Actor.
+      sourceUuid: text(""),
+      runtime: new SchemaField({
+        stackCount: integer(0),
+        mirrorEffectId: text(""),
+        timers: effectTimerArray()
+      })
     };
   }
 }

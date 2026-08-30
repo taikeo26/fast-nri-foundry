@@ -14,9 +14,11 @@ function clamp(value, min, max) {
  * Order:
  *   current HP (green) -> missing normal HP (empty gap) -> temporary HP (blue)
  *
- * Normally the bar represents maxHP + tempHP. If temporary HP would occupy
- * more than 70% of the whole bar, blue is capped at 70% and the entire
- * ordinary-HP scale (current + missing) is compressed into the remaining 30%.
+ * The whole bar represents maxHP + tempHP = 100%.
+ * Temporary HP therefore occupy tempHP / (maxHP + tempHP).
+ * Blue is capped at 70% only as a visual ceiling for extreme temp HP.
+ * Current and missing ordinary HP preserve currentHP / maxHP inside
+ * the ordinary-HP portion.
  */
 export function calculateHpBarLayout({ value = 0, max = 0, temp = 0 } = {}) {
   const maxHp = Math.max(0, Number(max) || 0);
@@ -40,11 +42,19 @@ export function calculateHpBarLayout({ value = 0, max = 0, temp = 0 } = {}) {
     };
   }
 
-  const rawTotal = maxHp + tempHp;
-  const rawBlue = tempHp / rawTotal;
+  // Canonical visual rule:
+  // max normal HP + current temporary HP = 100% of the bar.
+  //
+  // Example: max 100 + temp 20 => total visual maximum 120,
+  // so temp occupies 20 / 120 = 16.67%.
+  const effectiveMaximum = maxHp + tempHp;
+  const rawBlue = tempHp / effectiveMaximum;
   const blue = Math.min(rawBlue, MAX_TEMP_SHARE);
-  const ordinaryShare = 1 - blue;
 
+  // If blue did not hit the 70% visual ceiling, ordinary HP naturally
+  // occupies maxHp / (maxHp + tempHp). If it did hit the ceiling, the
+  // entire ordinary-HP scale is compressed into the remaining 30%.
+  const ordinaryShare = 1 - blue;
   const hpRatio = currentHp / maxHp;
   const green = ordinaryShare * hpRatio;
   const gap = ordinaryShare * (1 - hpRatio);

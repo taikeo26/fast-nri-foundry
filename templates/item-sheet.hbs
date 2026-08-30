@@ -6,10 +6,12 @@
       <input class="fast-nri-name" type="text" name="name" value="{{item.name}}" />
       <div class="fast-nri-subline">
         <span>{{item.type}}</span>
-        <label>
-          Уровень
-          <input type="number" name="system.level" value="{{system.level}}" />
-        </label>
+        {{#unless isEffect}}
+          <label>
+            Уровень
+            <input type="number" name="system.level" value="{{system.level}}" />
+          </label>
+        {{/unless}}
       </div>
     </div>
   </header>
@@ -318,6 +320,43 @@
         </div>
       </div>
       </div>
+
+      <div class="fast-nri-ability-effect-links">
+        <h3>Эффекты</h3>
+        <small class="fast-nri-help">
+          Перетащите сюда Effect Item. При использовании способности он появится
+          в chat-card и его можно будет перетащить на токен.
+        </small>
+
+        <div
+          class="fast-nri-effect-link-dropzone"
+          data-fast-nri-effect-link-dropzone
+        >
+          Перетащите Effect сюда
+        </div>
+
+        <div class="fast-nri-linked-effect-list">
+          {{#each linkedEffectRows as |effect|}}
+            <div class="fast-nri-linked-effect-row">
+              <img src="{{effect.img}}" alt="" />
+              <div>
+                <strong>{{effect.name}}</strong>
+                <small>{{effect.durationLabel}}</small>
+              </div>
+              <button
+                type="button"
+                data-action="removeLinkedEffect"
+                data-effect-uuid="{{effect.uuid}}"
+                title="Убрать связь"
+              >
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          {{else}}
+            <small class="fast-nri-help">Связанных эффектов нет.</small>
+          {{/each}}
+        </div>
+      </div>
     </section>
   {{/if}}
 
@@ -365,6 +404,84 @@
         Количество
         <input type="number" name="system.quantity" value="{{system.quantity}}" />
       </label>
+    </section>
+  {{/if}}
+
+  {{#if isEffect}}
+    <section class="fast-nri-section">
+      <div class="fast-nri-section-heading">
+        <div>
+          <h2>Effect</h2>
+          <p class="fast-nri-help">
+            Пока Effect только отслеживает длительность и стаки. Игровых штрафов,
+            бонусов и ограничений он автоматически не применяет.
+          </p>
+        </div>
+
+        <button type="button" data-action="sendEffectToChat">
+          <i class="fa-solid fa-message"></i>
+          В чат
+        </button>
+      </div>
+
+      <div class="fast-nri-two">
+        <label>
+          Вид
+          <select name="system.effectKind">
+            {{selectOptions effectKindChoices selected=system.effectKind}}
+          </select>
+        </label>
+
+        <label>
+          Стаки
+          <select name="system.stacking.mode">
+            {{selectOptions effectStackingChoices selected=system.stacking.mode}}
+          </select>
+        </label>
+      </div>
+
+      <div class="fast-nri-two">
+        <label>
+          Длительность
+          <select name="system.duration.mode">
+            {{selectOptions effectDurationChoices selected=system.duration.mode}}
+          </select>
+        </label>
+
+        {{#if (eq system.duration.mode "rounds")}}
+          <label>
+            Раундов
+            <input
+              type="number"
+              min="1"
+              name="system.duration.rounds"
+              value="{{system.duration.rounds}}"
+            />
+          </label>
+        {{/if}}
+      </div>
+
+      {{#if (eq system.duration.mode "rounds")}}
+        <label>
+          Снимать
+          <select name="system.duration.expiry">
+            {{selectOptions effectExpiryChoices selected=system.duration.expiry}}
+          </select>
+        </label>
+      {{/if}}
+
+      <div class="fast-nri-effect-definition-summary">
+        <strong>{{effectDurationLabel}}</strong>
+      </div>
+
+      {{#if item.isEmbedded}}
+        <div class="fast-nri-effect-runtime-summary">
+          <span>Наложено на: <strong>{{item.parent.name}}</strong></span>
+          <span>Стаков: <strong>{{effectRuntimeStackCount}}</strong></span>
+          <span>{{effectRuntimeDuration}}</span>
+          <small>ПКМ по иконке в панели эффектов снимает один стак.</small>
+        </div>
+      {{/if}}
     </section>
   {{/if}}
 
