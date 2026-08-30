@@ -135,10 +135,19 @@
 
         <div class="fast-nri-drop-zone">
           {{#each abilities as |item|}}
-            <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+            <div class="fast-nri-item-row fast-nri-ability-row item draggable" data-item-id="{{item.id}}">
               <img src="{{item.img}}" alt="" />
               <a data-action="editItem">{{item.name}}</a>
               <small>{{item.system.timing}}</small>
+              <button
+                type="button"
+                class="fast-nri-use-ability-button"
+                data-action="useAbility"
+                title="Использовать способность"
+              >
+                <i class="fa-solid fa-bolt"></i>
+                <span>Использовать</span>
+              </button>
               <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
             </div>
           {{else}}
@@ -243,10 +252,19 @@
 
         <div class="fast-nri-drop-zone">
           {{#each spells as |item|}}
-            <div class="fast-nri-item-row item draggable" data-item-id="{{item.id}}">
+            <div class="fast-nri-item-row fast-nri-ability-row item draggable" data-item-id="{{item.id}}">
               <img src="{{item.img}}" alt="" />
               <a data-action="editItem">{{item.name}}</a>
               <small>{{item.system.timing}}</small>
+              <button
+                type="button"
+                class="fast-nri-use-ability-button"
+                data-action="useAbility"
+                title="Использовать заклинание"
+              >
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Использовать</span>
+              </button>
               <button type="button" class="icon fa-solid fa-trash" data-action="deleteItem" title="Удалить"></button>
             </div>
           {{else}}

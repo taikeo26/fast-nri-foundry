@@ -1,3 +1,4 @@
+import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
 
 import {
@@ -68,5 +69,6 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   console.log("Быстрая НРИ 6.2 | Система готова");
   activateChatInteractions(document);
+  activateAbilityChatInteractions(document);
   ui.notifications.info("Быстрая НРИ 6.2 загружена");
 });

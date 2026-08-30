@@ -1,3 +1,4 @@
+import { useAbility } from "./ability-use.mjs";
 import { rollSkillCheck, rollWeaponAttack } from "./rolls.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -38,7 +39,8 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       deleteItem: FastNriActorSheet.#deleteItem,
       createItem: FastNriActorSheet.#createItem,
       rollSkill: FastNriActorSheet.#rollSkill,
-      rollWeaponAttack: FastNriActorSheet.#rollWeaponAttack
+      rollWeaponAttack: FastNriActorSheet.#rollWeaponAttack,
+      useAbility: FastNriActorSheet.#useAbility
     }
   };
 
@@ -168,6 +170,16 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     }
 
     show(this._activeTab);
+  }
+
+  static async #useAbility(event, target) {
+    event.preventDefault();
+
+    const itemId = target.closest("[data-item-id]")?.dataset.itemId;
+    const item = this.actor.items.get(itemId);
+
+    if (!item || item.type !== "ability") return;
+    await useAbility(this.actor, item);
   }
 
   static async #rollWeaponAttack(event, target) {
