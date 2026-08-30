@@ -1,6 +1,9 @@
-const DAMAGE_COLOR = "#ff2d2d";
-const HEALING_COLOR = "#45b96b";
-const TEMP_HP_COLOR = "#4f9ee8";
+// Foundry v14 createScrollingText receives PIXI.TextStyle properties
+// directly in the options object. PF2e uses numeric fills the same way.
+const DAMAGE_COLOR = 0xff0000;
+const HEALING_COLOR = 0x00ff00;
+const TEMP_HP_COLOR = 0x4f9ee8;
+const TEXT_STROKE_COLOR = 0x000000;
 
 function finitePositive(value) {
   const number = Number(value);
@@ -50,21 +53,18 @@ export async function showHpChangeFeedback({ tokenUuid, amount, kind }) {
   };
 
   try {
+    // Foundry v14 / PF2e: PIXI.TextStyle properties belong directly
+    // in the options object, not inside a nested textStyle object.
     await canvas.interface.createScrollingText(origin, content, {
-      anchor: CONST.TEXT_ANCHOR_POINTS.CENTER,
+      anchor: CONST.TEXT_ANCHOR_POINTS.TOP,
       direction: CONST.TEXT_ANCHOR_POINTS.TOP,
-      distance: 52,
-      duration: 1050,
-      jitter: 0.08,
-      textStyle: {
-        fill,
-        fontSize: 32,
-        fontWeight: "800",
-        stroke: {
-          color: "#1b1b1b",
-          width: 3
-        }
-      }
+      duration: 1200,
+      jitter: 0.12,
+      fill,
+      fontSize: 34,
+      fontWeight: "800",
+      stroke: TEXT_STROKE_COLOR,
+      strokeThickness: 4
     });
     return true;
   } catch (error) {

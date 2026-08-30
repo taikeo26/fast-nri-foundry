@@ -5,6 +5,7 @@ import {
   registerTokenDefaultSettings
 } from "./module/token-defaults.mjs";
 import { activateHpFeedback } from "./module/hp-feedback.mjs";
+import { registerFastNriTokenVisuals } from "./module/token-visuals.mjs";
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
 import {
   migrateDamageTraitsOnce,
@@ -33,6 +34,7 @@ Hooks.once("init", () => {
   registerTokenDefaultSettings();
   registerDataMigrationSettings();
   activateTokenDefaults();
+  registerFastNriTokenVisuals();
 
   CONFIG.Actor.dataModels = {
     character: CharacterData,
