@@ -15,6 +15,7 @@ import {
   seedBuiltinEffectsOnce
 } from "./module/effect-system.mjs";
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
+import { activateWeaponRules } from "./module/weapon-rules.mjs";
 import {
   migrateDamageTraitsOnce,
   migrateEquipmentStateOnce,
@@ -50,6 +51,7 @@ Hooks.once("init", () => {
   registerEffectSettings();
   registerDefenseActionSettings();
   activateTokenDefaults();
+  activateWeaponRules();
   registerFastNriTokenVisuals();
   registerFastNriTokenHud();
 

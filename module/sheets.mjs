@@ -1038,7 +1038,9 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       ...context,
       item: this.item,
       system: this.item.system,
-      propertyChoices: ITEM_PROPERTIES,
+      propertyChoices: this.item.type === "equipment"
+        ? Object.fromEntries(Object.entries(ITEM_PROPERTIES).filter(([id]) => id !== "unarmed"))
+        : ITEM_PROPERTIES,
       damageTraitChoices: CREATURE_TRAITS,
       damageComponentProfiles,
       outcomeChannels,

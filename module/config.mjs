@@ -1,4 +1,5 @@
 export const ITEM_PROPERTIES = Object.freeze({
+  unarmed: "Безоружное",
   reach: "Досягаемость",
   mobile: "Подвижное",
   steady: "Уверенное",
