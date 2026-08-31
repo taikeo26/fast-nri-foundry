@@ -277,19 +277,24 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         event.preventDefault();
         event.stopPropagation();
 
-        const itemId = event.currentTarget
+        // Event.currentTarget гарантирован только во время синхронной части
+        // обработчика. Document update может перерендерить лист во время await,
+        // поэтому сохраняем DOM-элемент заранее и не обращаемся к currentTarget
+        // после асинхронной паузы.
+        const input = event.currentTarget;
+        const itemId = input
           .closest("[data-item-id]")
           ?.dataset?.itemId;
 
         const item = this.actor.items.get(itemId);
         if (!item) return;
 
-        event.currentTarget.disabled = true;
+        const requested = input.checked;
+        input.disabled = true;
 
         try {
-          const requested = event.currentTarget.checked;
           const resolved = await setItemEquipped(item, requested);
-          event.currentTarget.checked = resolved?.system?.equipped === true;
+          if (input.isConnected) input.checked = resolved?.system?.equipped === true;
           if (requested && resolved?.system?.equipped !== true) {
             ui.notifications.warn("Недостаточно свободных рук. Предмет не экипирован.");
           }
@@ -297,7 +302,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
           console.error("Быстрая НРИ | Ошибка экипировки Item", error);
           ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
         } finally {
-          event.currentTarget.disabled = false;
+          if (input.isConnected) input.disabled = false;
         }
       });
     }
@@ -307,23 +312,25 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         event.preventDefault();
         event.stopPropagation();
 
-        const itemId = event.currentTarget
+        const input = event.currentTarget;
+        const itemId = input
           .closest("[data-item-id]")
           ?.dataset?.itemId;
 
         const item = this.actor.items.get(itemId);
         if (!item) return;
 
-        event.currentTarget.disabled = true;
+        const requested = input.checked;
+        input.disabled = true;
 
         try {
-          const resolved = await setItemHeld(item, event.currentTarget.checked);
-          event.currentTarget.checked = resolved?.system?.held === true;
+          const resolved = await setItemHeld(item, requested);
+          if (input.isConnected) input.checked = resolved?.system?.held === true;
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка состояния «В руках»", error);
           ui.notifications.error(`Не удалось изменить состояние «В руках»: ${error.message}`);
         } finally {
-          event.currentTarget.disabled = false;
+          if (input.isConnected) input.disabled = false;
         }
       });
     }
@@ -513,12 +520,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       equipped.addEventListener("change", async event => {
         event.preventDefault();
         event.stopPropagation();
-        event.currentTarget.disabled = true;
+
+        const input = event.currentTarget;
+        const requested = input.checked;
+        input.disabled = true;
 
         try {
-          const requested = event.currentTarget.checked;
           const resolved = await setItemEquipped(this.item, requested);
-          event.currentTarget.checked = resolved?.system?.equipped === true;
+          if (input.isConnected) input.checked = resolved?.system?.equipped === true;
           if (requested && resolved?.system?.equipped !== true) {
             ui.notifications.warn("Недостаточно свободных рук. Предмет не экипирован.");
           }
@@ -526,7 +535,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
           console.error("Быстрая НРИ | Ошибка экипировки Item", error);
           ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
         } finally {
-          event.currentTarget.disabled = false;
+          if (input.isConnected) input.disabled = false;
         }
       });
     }
@@ -537,16 +546,19 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       held.addEventListener("change", async event => {
         event.preventDefault();
         event.stopPropagation();
-        event.currentTarget.disabled = true;
+
+        const input = event.currentTarget;
+        const requested = input.checked;
+        input.disabled = true;
 
         try {
-          const resolved = await setItemHeld(this.item, event.currentTarget.checked);
-          event.currentTarget.checked = resolved?.system?.held === true;
+          const resolved = await setItemHeld(this.item, requested);
+          if (input.isConnected) input.checked = resolved?.system?.held === true;
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка состояния «В руках»", error);
           ui.notifications.error(`Не удалось изменить состояние «В руках»: ${error.message}`);
         } finally {
-          event.currentTarget.disabled = false;
+          if (input.isConnected) input.disabled = false;
         }
       });
     }
@@ -556,15 +568,18 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       hands.addEventListener("change", async event => {
         event.preventDefault();
         event.stopPropagation();
-        event.currentTarget.disabled = true;
+
+        const input = event.currentTarget;
+        const requested = input.value;
+        input.disabled = true;
 
         try {
-          await setItemHands(this.item, event.currentTarget.value);
+          await setItemHands(this.item, requested);
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка изменения занятых рук", error);
           ui.notifications.error(`Не удалось изменить число рук: ${error.message}`);
         } finally {
-          event.currentTarget.disabled = false;
+          if (input.isConnected) input.disabled = false;
         }
       });
     }
