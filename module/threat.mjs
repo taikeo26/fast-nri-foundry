@@ -11,6 +11,8 @@ function currentGrid() {
 }
 
 function currentSceneTokens() {
+  const sceneDocuments = globalThis.canvas?.scene?.tokens?.contents;
+  if (Array.isArray(sceneDocuments)) return Array.from(sceneDocuments);
   return Array.from(globalThis.canvas?.tokens?.placeables ?? []);
 }
 

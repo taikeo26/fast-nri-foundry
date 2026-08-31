@@ -28,6 +28,15 @@ function currentGrid() {
 }
 
 function currentSceneTokens() {
+  // Surrounding is a rules calculation, so use Scene TokenDocuments rather
+  // than canvas Token placeables. The document collection is authoritative
+  // immediately after a movement/update workflow, while the visual placeable
+  // may still be finishing its render/animation. This prevents one-move-late
+  // Surrounding updates in live Foundry.
+  const sceneDocuments = globalThis.canvas?.scene?.tokens?.contents;
+  if (Array.isArray(sceneDocuments)) return Array.from(sceneDocuments);
+
+  // Fallback for lightweight test shims.
   return Array.from(globalThis.canvas?.tokens?.placeables ?? []);
 }
 

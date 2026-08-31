@@ -47,7 +47,15 @@ export function registerTokenDefaultSettings() {
  */
 export function activateTokenDefaults() {
   Hooks.on("preCreateActor", actor => {
-    actor.prototypeToken?.updateSource(tokenDefaultsForActorType(actor?.type));
+    const defaults = tokenDefaultsForActorType(actor?.type);
+    actor.updateSource({
+      "prototypeToken.displayBars": defaults.displayBars,
+      "prototypeToken.bar1.attribute": defaults.bar1.attribute,
+      "prototypeToken.bar2.attribute": defaults.bar2.attribute,
+      ...(defaults.disposition === undefined
+        ? {}
+        : { "prototypeToken.disposition": defaults.disposition })
+    });
   });
 }
 
