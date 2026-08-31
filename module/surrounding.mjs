@@ -1,17 +1,5 @@
-import { areEnemies, isFastNriGridSupported } from "./field-geometry.mjs";
-import {
-  formationCount,
-  formationCountAgainst,
-  formationTargetPenalty
-} from "./formation.mjs";
+import { formationCount, formationCountAgainst } from "./formation.mjs";
 import { threatCount } from "./threat.mjs";
-import {
-  applySurroundedEffect,
-  removeSurroundedEffect,
-  replaceRelativeOffGuardReasonObservers
-} from "./effect-system.mjs";
-
-export const RELATIVE_SURROUNDED_REASON_ID = "surrounded";
 
 function tokenDocument(tokenOrDocument) {
   if (!tokenOrDocument) return null;
@@ -23,44 +11,80 @@ function tokenActor(tokenOrDocument) {
   return document?.actor ?? tokenOrDocument?.actor ?? null;
 }
 
-function currentGrid() {
-  return globalThis.canvas?.grid ?? null;
-}
-
-function currentSceneTokens() {
-  // Surrounding is a rules calculation, so use Scene TokenDocuments rather
-  // than canvas Token placeables. The document collection is authoritative
-  // immediately after a movement/update workflow, while the visual placeable
-  // may still be finishing its render/animation. This prevents one-move-late
-  // Surrounding updates in live Foundry.
-  const sceneDocuments = globalThis.canvas?.scene?.tokens?.contents;
-  if (Array.isArray(sceneDocuments)) return Array.from(sceneDocuments);
-
-  // Fallback for lightweight test shims.
-  return Array.from(globalThis.canvas?.tokens?.placeables ?? []);
-}
-
 function actorIdentity(actor) {
   return String(actor?.uuid ?? actor?.id ?? "");
 }
 
+function currentGrid() {
+  return globalThis.canvas?.grid ?? null;
+}
+
 /**
- * Return the complete Fast NRI Surrounding calculation for one target.
+ * Authoritative TokenDocuments on the currently viewed Scene.
  *
- * Global Surrounding compares Threats with the target's global Formation.
- * When an observer is supplied, observer-relative Formation modifiers are
- * applied instead; this is used for rules such as Rogue's `Ломать строй` and
- * never changes the target's global `Окружён` Effect Item.
+ * Surrounding is intentionally a lazy rules calculation. It is read only when
+ * an action needs the target's current state; movement never writes or caches
+ * Surrounding anywhere on the Actor/Token.
+ */
+export function currentSceneTokens() {
+  const sceneDocuments = globalThis.canvas?.scene?.tokens?.contents;
+  if (Array.isArray(sceneDocuments)) return Array.from(sceneDocuments);
+
+  // Lightweight fallback for tests and environments without a live Scene.
+  return Array.from(globalThis.canvas?.tokens?.placeables ?? []);
+}
+
+/**
+ * Resolve which placed Token represents an acting Actor for observer-relative
+ * Formation rules. A controlled matching Token wins; otherwise a unique Token
+ * for the Actor on the current Scene is safe. Ambiguous multi-token cases
+ * deliberately return null rather than guessing.
+ */
+export function observerTokenForActor(actor, candidates = currentSceneTokens()) {
+  if (!actor) return null;
+  const identity = actorIdentity(actor);
+  if (!identity) return null;
+
+  const controlledMatches = Array.from(globalThis.canvas?.tokens?.controlled ?? [])
+    .filter(token => actorIdentity(tokenActor(token)) === identity);
+  if (controlledMatches.length === 1) {
+    return tokenDocument(controlledMatches[0]);
+  }
+
+  const sceneMatches = Array.from(candidates ?? [])
+    .filter(token => actorIdentity(tokenActor(token)) === identity);
+  return sceneMatches.length === 1 ? tokenDocument(sceneMatches[0]) : null;
+}
+
+function observerToken(observerOrActor, candidates) {
+  if (!observerOrActor) return null;
+
+  const document = tokenDocument(observerOrActor);
+  if (document?.getOccupiedGridSpaceOffsets) return document;
+
+  if (observerOrActor?.documentName === "Actor" || observerOrActor?.type) {
+    return observerTokenForActor(observerOrActor, candidates);
+  }
+
+  const actor = tokenActor(observerOrActor);
+  return actor ? observerTokenForActor(actor, candidates) : null;
+}
+
+/**
+ * Complete Fast NRI Surrounding calculation for one target at the instant a
+ * rule asks for it. No Effect Item, flag, ActiveEffect, or movement cache is
+ * involved.
  */
 export function surroundingBreakdown(
   targetToken,
-  observerToken = null,
+  observerOrActor = null,
   candidates = currentSceneTokens(),
   grid = currentGrid()
 ) {
+  const observer = observerToken(observerOrActor, candidates);
   const threats = threatCount(targetToken, candidates, grid);
-  const formation = observerToken
-    ? formationCountAgainst(targetToken, observerToken, candidates, grid)
+  const formation = observer
+    ? formationCountAgainst(targetToken, observer, candidates, grid)
     : formationCount(targetToken, candidates, grid);
 
   return {
@@ -80,249 +104,9 @@ export function isSurrounded(
 
 export function isSurroundedFor(
   targetToken,
-  observerToken,
+  observerOrActor,
   candidates = currentSceneTokens(),
   grid = currentGrid()
 ) {
-  if (!observerToken) return isSurrounded(targetToken, candidates, grid);
-  return surroundingBreakdown(targetToken, observerToken, candidates, grid).surrounded;
-}
-
-/**
- * Observer Actor UUIDs for whom this target is Surrounded only because of an
- * observer-relative Formation modifier. The global `Окружён` state is managed
- * independently as an Effect Item.
- */
-export function relativeSurroundedObserverUuids(
-  targetToken,
-  candidates = currentSceneTokens(),
-  grid = currentGrid()
-) {
-  if (!targetToken) return [];
-
-  const result = new Set();
-
-  for (const observer of Array.from(candidates ?? [])) {
-    if (!observer || !areEnemies(targetToken, observer)) continue;
-    if (formationTargetPenalty(observer) <= 0) continue;
-    if (!isSurroundedFor(targetToken, observer, candidates, grid)) continue;
-
-    const uuid = actorIdentity(tokenActor(observer));
-    if (uuid) result.add(uuid);
-  }
-
-  return Array.from(result).sort();
-}
-
-function actorGroups(tokens) {
-  const groups = new Map();
-
-  for (const token of Array.from(tokens ?? [])) {
-    const actor = tokenActor(token);
-    const identity = actorIdentity(actor);
-    if (!actor || !identity) continue;
-
-    const group = groups.get(identity) ?? { actor, tokens: [] };
-    group.tokens.push(token);
-    groups.set(identity, group);
-  }
-
-  return Array.from(groups.values());
-}
-
-/**
- * Decide which connected client is allowed to write automatic field state for
- * this Actor. Foundry's User#isDesignated gives all clients the same elected
- * user from the supplied condition, avoiding duplicate embedded Item writes.
- * Only users currently viewing this Scene and permitted to update the Actor
- * are eligible.
- */
-export function isDesignatedSurroundingUser(actor, sceneId = globalThis.canvas?.scene?.id ?? "") {
-  const user = globalThis.game?.user;
-  if (!actor || !user) return false;
-
-  if (typeof user.isDesignated === "function") {
-    return user.isDesignated(candidate =>
-      candidate?.active === true
-      && (!sceneId || candidate.viewedScene === sceneId)
-      && actor.canUserModify?.(candidate, "update") === true
-    );
-  }
-
-  // Conservative fallback for test environments or older shims.
-  return Boolean(user.isGM || actor.isOwner);
-}
-
-async function syncActorGroup(group, candidates, grid, sceneId) {
-  const actor = group?.actor;
-  const tokens = Array.from(group?.tokens ?? []);
-  if (!actor || !tokens.length) return false;
-  if (!isDesignatedSurroundingUser(actor, sceneId)) return false;
-
-  const globallySurrounded = tokens.some(token => isSurrounded(token, candidates, grid));
-
-  if (globallySurrounded) await applySurroundedEffect(actor);
-  else await removeSurroundedEffect(actor);
-
-  const relativeObservers = new Set();
-  for (const token of tokens) {
-    for (const observerUuid of relativeSurroundedObserverUuids(token, candidates, grid)) {
-      relativeObservers.add(observerUuid);
-    }
-  }
-
-  await replaceRelativeOffGuardReasonObservers(
-    actor,
-    RELATIVE_SURROUNDED_REASON_ID,
-    Array.from(relativeObservers)
-  );
-
-  return true;
-}
-
-/**
- * Recalculate automatic Surrounding for all Token Actors on the active Scene.
- * Unsupported grid types are intentionally left untouched rather than guessed.
- */
-export async function syncCurrentSceneSurrounding() {
-  const grid = currentGrid();
-  if (!isFastNriGridSupported(grid)) return false;
-
-  const candidates = currentSceneTokens();
-  const sceneId = String(globalThis.canvas?.scene?.id ?? "");
-
-  for (const group of actorGroups(candidates)) {
-    await syncActorGroup(group, candidates, grid, sceneId);
-  }
-
-  return true;
-}
-
-let syncRunning = false;
-let genericSyncQueued = false;
-const syncQueue = [];
-
-async function drainSyncQueue() {
-  if (syncRunning) return;
-  syncRunning = true;
-
-  try {
-    while (syncQueue.length) {
-      const request = syncQueue.shift();
-      if (request?.kind === "generic") genericSyncQueued = false;
-
-      try {
-        await syncCurrentSceneSurrounding();
-      } catch (error) {
-        console.error("Быстрая НРИ | Ошибка автоматического расчёта Окружения", error);
-      }
-    }
-  } finally {
-    syncRunning = false;
-    if (syncQueue.length) void drainSyncQueue();
-  }
-}
-
-function enqueueSyncRequest(kind) {
-  syncQueue.push({ kind });
-  void drainSyncQueue();
-}
-
-/**
- * Coalesced full-scene recalculation for non-movement state changes.
- * Repeated Item/Actor lifecycle hooks can describe the same logical change,
- * so one queued pass is sufficient for those events.
- */
-export function scheduleSurroundingSync() {
-  if (genericSyncQueued) return;
-  genericSyncQueued = true;
-
-  queueMicrotask(() => enqueueSyncRequest("generic"));
-}
-
-/**
- * Every completed Token movement gets its own full-scene recalculation.
- * Movement requests are deliberately NOT coalesced. A zero-delay task lets
- * the complete Foundry movement hook/update stack settle, then the rules read
- * the authoritative Scene TokenDocuments and recalculate every Token Actor.
- */
-export function scheduleSurroundingSyncAfterMovement() {
-  setTimeout(() => enqueueSyncRequest("movement"), 0);
-}
-
-/**
- * Token x/y changes are covered by the v14 moveToken hook. Skipping the
- * generic updateToken pass avoids an intermediate calculation from the same
- * movement; moveToken then guarantees the final full-scene pass.
- */
-export function tokenUpdateContainsMovement(changed = {}) {
-  if (!changed || typeof changed !== "object") return false;
-  return Object.prototype.hasOwnProperty.call(changed, "x")
-    || Object.prototype.hasOwnProperty.call(changed, "y");
-}
-
-function actorIsOnCurrentScene(actor) {
-  if (!actor) return false;
-  return currentSceneTokens().some(token => tokenActor(token)?.uuid === actor.uuid);
-}
-
-function tokenIsOnCurrentScene(tokenDocumentLike) {
-  const document = tokenDocument(tokenDocumentLike);
-  const sceneId = String(document?.parent?.id ?? document?.parent?.uuid ?? "");
-  const currentSceneId = String(globalThis.canvas?.scene?.id ?? globalThis.canvas?.scene?.uuid ?? "");
-  return Boolean(sceneId && currentSceneId && sceneId === currentSceneId);
-}
-
-function embeddedActor(item) {
-  const parent = item?.parent;
-  return parent?.documentName === "Actor" ? parent : null;
-}
-
-/**
- * Activate event-driven Surrounding recalculation. No polling is used.
- */
-export function activateSurroundingAutomation() {
-  Hooks.on("canvasReady", () => scheduleSurroundingSync());
-
-  // v14 moveToken fires after the movement update workflow has concluded.
-  // Every movement gets a distinct full-scene recalculation; movement passes
-  // are intentionally never coalesced with one another.
-  Hooks.on("moveToken", document => {
-    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSyncAfterMovement();
-  });
-
-  Hooks.on("createToken", document => {
-    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSync();
-  });
-
-  // Covers disposition, footprint/size, level/elevation and direct Token data
-  // updates which are not represented by movement alone. x/y are intentionally
-  // left to moveToken so a move cannot produce a stale intermediate field pass.
-  Hooks.on("updateToken", (document, changed) => {
-    if (!tokenIsOnCurrentScene(document)) return;
-    if (tokenUpdateContainsMovement(changed)) return;
-    scheduleSurroundingSync();
-  });
-
-  Hooks.on("deleteToken", document => {
-    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSync();
-  });
-
-  // HP value changes may change consciousness and therefore both Threat and
-  // Formation. Other Actor updates are harmless and are debounced.
-  Hooks.on("updateActor", actor => {
-    if (actorIsOnCurrentScene(actor)) scheduleSurroundingSync();
-  });
-
-  // Weapon equipment/properties, Formation rules, prone/unconscious Effects,
-  // and melee-control blockers are all embedded Items, so one lifecycle set is
-  // sufficient without hard-coding Item names.
-  for (const hook of ["createItem", "updateItem", "deleteItem"]) {
-    Hooks.on(hook, item => {
-      const actor = embeddedActor(item);
-      if (actor && actorIsOnCurrentScene(actor)) scheduleSurroundingSync();
-    });
-  }
-
-  scheduleSurroundingSync();
+  return surroundingBreakdown(targetToken, observerOrActor, candidates, grid).surrounded;
 }

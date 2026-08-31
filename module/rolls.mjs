@@ -19,6 +19,10 @@ import {
   itemIsUsable,
   itemRequiresHands
 } from "./equipment.mjs";
+import {
+  effectiveArmorForAction,
+  effectiveDefenseCharacteristicForAction
+} from "./target-state.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -574,7 +578,33 @@ function getSingleTarget() {
   return targets[0];
 }
 
-function armorContextHTML(target) {
+function actionTargetStateHTML(state) {
+  if (!state?.offGuard) return "";
+
+  if (state.surrounding?.surrounded) {
+    return `
+      <div class="fast-nri-chat-target-state fast-nri-chat-target-surrounded">
+        <i class="fa-solid fa-users"></i>
+        <div>
+          <strong>Цель окружена</strong>
+          <small>Угрозы ${esc(state.surrounding.threats)} &gt; Строй ${esc(state.surrounding.formation)} · Застигнута врасплох · КЗ −2</small>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="fast-nri-chat-target-state fast-nri-chat-target-off-guard">
+      <i class="fa-solid fa-shield-halved"></i>
+      <div>
+        <strong>Цель застигнута врасплох</strong>
+        <small>КЗ −2</small>
+      </div>
+    </div>
+  `;
+}
+
+function armorContextHTML(target, effectiveArmor = null, targetState = null) {
   if (!target?.actor) {
     return `
       <section class="fast-nri-roll-context fast-nri-roll-context-warning">
@@ -587,7 +617,7 @@ function armorContextHTML(target) {
     `;
   }
 
-  const armor = target.actor.system?.armor ?? {};
+  const armor = effectiveArmor ?? target.actor.system?.armor ?? {};
   return `
     <section class="fast-nri-roll-context">
       <i class="fa-solid fa-crosshairs"></i>
@@ -598,13 +628,14 @@ function armorContextHTML(target) {
           ${esc(armor.partial ?? "—")} /
           ${esc(armor.success ?? "—")} /
           ${esc(armor.great ?? "—")}
+          ${targetState?.offGuard ? " · Застигнут врасплох" : ""}
         </small>
       </div>
     </section>
   `;
 }
 
-function armorMetaHTML(target) {
+function armorMetaHTML(target, effectiveArmor = null, targetState = null) {
   if (!target?.actor) {
     return `
       <div class="fast-nri-chat-target fast-nri-chat-target-missing">
@@ -613,7 +644,7 @@ function armorMetaHTML(target) {
     `;
   }
 
-  const armor = target.actor.system?.armor ?? {};
+  const armor = effectiveArmor ?? target.actor.system?.armor ?? {};
   return `
     <div class="fast-nri-chat-target">
       <span class="fast-nri-chat-target-name">${esc(target.name)}</span>
@@ -621,6 +652,7 @@ function armorMetaHTML(target) {
         КЗ ${esc(armor.partial ?? "—")} / ${esc(armor.success ?? "—")} / ${esc(armor.great ?? "—")}
       </span>
     </div>
+    ${actionTargetStateHTML(targetState)}
   `;
 }
 
@@ -791,6 +823,9 @@ export async function rollWeaponAttack(actor, weapon) {
   const combatDie = String(actor.system?.combatDie ?? "").trim();
   const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
   const target = getSingleTarget();
+  const previewTargetDefense = target?.actor
+    ? effectiveArmorForAction(target, actor)
+    : null;
 
   if ((game.user?.targets?.size ?? 0) > 1) {
     ui.notifications.warn("Для одиночной атаки выбери одну цель. Бросок будет выполнен без автоматической степени.");
@@ -805,13 +840,25 @@ export async function rollWeaponAttack(actor, weapon) {
       ...(combatDie ? [{ formula: combatDie, label: "Куб боя", reason: actor.name }] : [])
     ],
     showDC: false,
-    contextHTML: armorContextHTML(target)
+    contextHTML: armorContextHTML(
+      target,
+      previewTargetDefense?.armor ?? null,
+      previewTargetDefense?.state ?? null
+    )
   });
 
   if (!result) return null;
 
+  // Re-read field state at the exact moment the attack resolves. The dialog
+  // may have remained open while tokens or equipment changed.
+  const targetDefense = target?.actor
+    ? effectiveArmorForAction(target, actor)
+    : null;
+  const effectiveArmor = targetDefense?.armor ?? null;
+  const targetState = targetDefense?.state ?? null;
+
   const degree = target?.actor
-    ? degreeVsArmor(result.roll.total, target.actor.system?.armor, result.naturalD20)
+    ? degreeVsArmor(result.roll.total, effectiveArmor, result.naturalD20)
     : null;
 
   const critical = result.naturalD20 === 20;
@@ -820,7 +867,7 @@ export async function rollWeaponAttack(actor, weapon) {
     <div class="fast-nri-chat-roll fast-nri-attack-card">
       ${rollCardHeader("Попадание", "fa-swords")}
       ${attackResultHTML(weapon, target, degree, result.roll.total)}
-      ${armorMetaHTML(target)}
+      ${armorMetaHTML(target, effectiveArmor, targetState)}
 
       ${critical ? `
         <div class="fast-nri-critical-roll">
@@ -847,7 +894,12 @@ export async function rollWeaponAttack(actor, weapon) {
         degree,
         critical,
         rollTotal: result.roll.total,
-        naturalD20: result.naturalD20
+        naturalD20: result.naturalD20,
+        offGuard: Boolean(targetState?.offGuard),
+        surrounded: Boolean(targetState?.surrounding?.surrounded),
+        surroundingThreats: targetState?.surrounding?.threats ?? null,
+        surroundingFormation: targetState?.surrounding?.formation ?? null,
+        armorPenalty: targetState?.defensePenalty ?? 0
       }
     }
   });
@@ -1811,6 +1863,9 @@ export async function rollAbilityAttackCheck(actor, item) {
   const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
   const formula = expandAbilityAttackFormula(actor, rawFormula);
   const target = getSingleTarget();
+  const previewTargetDefense = target?.actor
+    ? effectiveArmorForAction(target, actor)
+    : null;
 
   if ((game.user?.targets?.size ?? 0) > 1) {
     ui.notifications.warn(
@@ -1824,15 +1879,26 @@ export async function rollAbilityAttackCheck(actor, item) {
     baseFormula: formula,
     baseSources: abilityAttackFormulaSources(actor, rawFormula, formula),
     showDC: false,
-    contextHTML: armorContextHTML(target)
+    contextHTML: armorContextHTML(
+      target,
+      previewTargetDefense?.armor ?? null,
+      previewTargetDefense?.state ?? null
+    )
   });
 
   if (!result) return null;
 
+  // Same lazy rule as weapon attacks: resolve from the latest Scene state.
+  const targetDefense = target?.actor
+    ? effectiveArmorForAction(target, actor)
+    : null;
+  const effectiveArmor = targetDefense?.armor ?? null;
+  const targetState = targetDefense?.state ?? null;
+
   const degree = target?.actor
     ? degreeVsArmor(
         result.roll.total,
-        target.actor.system?.armor,
+        effectiveArmor,
         result.naturalD20
       )
     : null;
@@ -1846,7 +1912,7 @@ export async function rollAbilityAttackCheck(actor, item) {
         <span>Результат: <strong>${esc(result.roll.total)}</strong></span>
         ${target?.name ? `<span>Цель: <strong>${esc(target.name)}</strong></span>` : ""}
       </div>
-      ${armorMetaHTML(target)}
+      ${armorMetaHTML(target, effectiveArmor, targetState)}
       ${critical ? `
         <div class="fast-nri-critical-roll">
           <i class="fa-solid fa-burst"></i>
@@ -1871,7 +1937,12 @@ export async function rollAbilityAttackCheck(actor, item) {
         critical,
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
-        directedDefense: Boolean(config.directedDefense)
+        directedDefense: Boolean(config.directedDefense),
+        offGuard: Boolean(targetState?.offGuard),
+        surrounded: Boolean(targetState?.surrounding?.surrounded),
+        surroundingThreats: targetState?.surrounding?.threats ?? null,
+        surroundingFormation: targetState?.surrounding?.formation ?? null,
+        armorPenalty: targetState?.defensePenalty ?? 0
       }
     }
   });
@@ -2558,7 +2629,15 @@ export async function defenseFromChat(element) {
   );
   if (selectedRemovalParts === null) return null;
 
-  const fortitude = finiteNumberOrNull(defender.system?.defenses?.fortitude);
+  const sourceActor = sourceItem?.parent?.documentName === "Actor"
+    ? sourceItem.parent
+    : null;
+  const fortitudeState = effectiveDefenseCharacteristicForAction(
+    defenderToken,
+    "fortitude",
+    sourceActor
+  );
+  const fortitude = finiteNumberOrNull(fortitudeState.value);
   if (fortitude === null) {
     ui.notifications.error("У выбранного токена нет корректного значения Стойкости.");
     return null;
@@ -2594,7 +2673,13 @@ export async function defenseFromChat(element) {
     baseFormula,
     baseSources: [
       { formula: "1d20", label: "Базовый d20", reason: "Направленная защита" },
-      { formula: String(fortitude), label: "Стойкость", reason: defender.name },
+      {
+        formula: String(fortitude),
+        label: "Стойкость",
+        reason: fortitudeState.state?.offGuard
+          ? `${defender.name} · Застигнут врасплох −2`
+          : defender.name
+      },
       ...(combatSource ? [combatSource] : [])
     ],
     showDC: false,

@@ -26,7 +26,6 @@ export const EFFECT_KINDS = Object.freeze({
 });
 
 export const OFF_GUARD_EFFECT_ID = "off-guard";
-export const SURROUNDED_EFFECT_ID = "surrounded";
 
 export function isSystemOnlyEffect(effectOrSource) {
   return Boolean(effectOrSource?.getFlag?.(SYSTEM_ID, "systemOnly"));
@@ -53,12 +52,6 @@ export const BUILTIN_EFFECTS = Object.freeze([
     id: "off-guard",
     name: "Застигнут врасплох",
     img: "icons/skills/melee/shield-damaged-broken-blue.webp"
-  },
-  {
-    id: "surrounded",
-    name: "Окружён",
-    img: "icons/skills/melee/shield-damaged-broken-blue.webp",
-    systemOnly: true
   },
   {
     id: "slowed",
@@ -337,18 +330,10 @@ export function isOffGuardEffect(effect) {
   return builtinEffectId(effect) === OFF_GUARD_EFFECT_ID;
 }
 
-export function isSurroundedEffect(effect) {
-  return builtinEffectId(effect) === SURROUNDED_EFFECT_ID;
-}
+const LEGACY_SURROUNDED_EFFECT_ID = "surrounded";
 
-function builtinEffectSourceDocument(builtinId) {
-  const id = String(builtinId ?? "").trim();
-  if (!id) return null;
-
-  return game.items?.find?.(item =>
-    item.type === "effect"
-    && String(item.getFlag?.(SYSTEM_ID, "builtinEffectId") ?? "") === id
-  ) ?? null;
+function isLegacySurroundedEffect(effect) {
+  return builtinEffectId(effect) === LEGACY_SURROUNDED_EFFECT_ID;
 }
 
 export function actorHasBuiltinEffect(actor, builtinId) {
@@ -365,34 +350,13 @@ export function hasManualOffGuardEffect(actor) {
   return actorHasBuiltinEffect(actor, OFF_GUARD_EFFECT_ID);
 }
 
-export function hasSurroundedEffect(actor) {
-  return actorHasBuiltinEffect(actor, SURROUNDED_EFFECT_ID);
+export function hasConditionOffGuardEffect(actor) {
+  return actorHasBuiltinEffect(actor, "prone")
+    || actorHasBuiltinEffect(actor, "grabbed");
 }
 
-export async function applySurroundedEffect(actor) {
-  if (!actor || hasSurroundedEffect(actor)) {
-    return Array.from(actor?.items ?? []).find(item => isSurroundedEffect(item)) ?? null;
-  }
-
-  const source = builtinEffectSourceDocument(SURROUNDED_EFFECT_ID);
-  if (!source) {
-    ui.notifications?.warn?.("Не найден встроенный системный Effect «Окружён».");
-    return null;
-  }
-
-  return applyEffectToActor(source, actor, { allowSystemOnly: true });
-}
-
-export async function removeSurroundedEffect(actor) {
-  if (!actor) return false;
-  const effect = Array.from(actor.items ?? []).find(item => isSurroundedEffect(item)) ?? null;
-  if (!effect) return false;
-
-  // System-only Effects reject ordinary manual deletion. Automation uses this
-  // explicit operation flag so only the field calculator can remove it.
-  await effect.delete({ fastNriSystemEffectRemoval: true });
-  refreshNativeEffectHud(actor);
-  return true;
+export function hasStoredOffGuardSource(actor) {
+  return hasManualOffGuardEffect(actor) || hasConditionOffGuardEffect(actor);
 }
 
 export function normalizeRelativeOffGuardState(entries = []) {
@@ -521,9 +485,75 @@ export async function removeRelativeOffGuardReason(targetActor, observerOrUuid, 
 
 export function isOffGuardFor(targetActor, observerOrUuid = null) {
   if (!targetActor) return false;
-  if (hasManualOffGuardEffect(targetActor)) return true;
-  if (hasSurroundedEffect(targetActor)) return true;
+  if (hasStoredOffGuardSource(targetActor)) return true;
   return relativeOffGuardReasons(targetActor, observerOrUuid).length > 0;
+}
+
+/**
+ * Remove persisted Surrounding state created by 0.5.35-0.5.48.
+ *
+ * Starting with 0.5.49 Surrounding is calculated lazily at action resolution,
+ * so legacy embedded Effect Items, their world source, and the old relative
+ * `surrounded` flag must not remain visible or influence rules. This cleanup is
+ * idempotent and GM-only; it is safe to run on every ready.
+ */
+export async function cleanupLegacySurroundedState() {
+  if (!globalThis.game?.user?.isGM) return false;
+
+  const actors = new Map();
+  for (const actor of Array.from(game.actors ?? [])) {
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+
+  for (const scene of Array.from(game.scenes ?? [])) {
+    for (const token of Array.from(scene?.tokens ?? [])) {
+      const actor = token?.actor;
+      if (actor?.uuid) actors.set(actor.uuid, actor);
+    }
+  }
+
+  for (const actor of actors.values()) {
+    const legacyEffects = Array.from(actor.items ?? [])
+      .filter(item => item.type === "effect" && isLegacySurroundedEffect(item));
+
+    for (const effect of legacyEffects) {
+      try {
+        await effect.delete({ fastNriSystemEffectRemoval: true });
+      } catch (error) {
+        console.warn(`Быстрая НРИ | Не удалось удалить старый Effect «Окружён» у ${actor.name}`, error);
+      }
+    }
+
+    const current = relativeOffGuardState(actor);
+    const next = replaceRelativeOffGuardReasonState(
+      current,
+      LEGACY_SURROUNDED_EFFECT_ID,
+      []
+    );
+
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      try {
+        if (next.length) await actor.setFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG, next);
+        else await actor.unsetFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG);
+      } catch (error) {
+        console.warn(`Быстрая НРИ | Не удалось очистить старое относительное Окружение у ${actor.name}`, error);
+      }
+    }
+  }
+
+  const sources = Array.from(game.items ?? [])
+    .filter(item => item.type === "effect" && isLegacySurroundedEffect(item));
+
+  for (const source of sources) {
+    try {
+      await source.delete();
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось удалить старый мировой Effect «Окружён»", error);
+    }
+  }
+
+  refreshNativeEffectHud();
+  return true;
 }
 
 export function effectSourceKey(effectOrUuid) {
