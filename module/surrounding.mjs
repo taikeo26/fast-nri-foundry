@@ -198,42 +198,67 @@ export async function syncCurrentSceneSurrounding() {
   return true;
 }
 
-let syncQueued = false;
 let syncRunning = false;
-let syncAgain = false;
+let genericSyncQueued = false;
+const syncQueue = [];
 
-async function runScheduledSync() {
-  if (syncRunning) {
-    syncAgain = true;
-    return;
-  }
-
+async function drainSyncQueue() {
+  if (syncRunning) return;
   syncRunning = true;
+
   try {
-    await syncCurrentSceneSurrounding();
-  } catch (error) {
-    console.error("Быстрая НРИ | Ошибка автоматического расчёта Окружения", error);
+    while (syncQueue.length) {
+      const request = syncQueue.shift();
+      if (request?.kind === "generic") genericSyncQueued = false;
+
+      try {
+        await syncCurrentSceneSurrounding();
+      } catch (error) {
+        console.error("Быстрая НРИ | Ошибка автоматического расчёта Окружения", error);
+      }
+    }
   } finally {
     syncRunning = false;
-    if (syncAgain) {
-      syncAgain = false;
-      scheduleSurroundingSync();
-    }
+    if (syncQueue.length) void drainSyncQueue();
   }
 }
 
-export function scheduleSurroundingSync() {
-  if (syncRunning) {
-    syncAgain = true;
-    return;
-  }
-  if (syncQueued) return;
+function enqueueSyncRequest(kind) {
+  syncQueue.push({ kind });
+  void drainSyncQueue();
+}
 
-  syncQueued = true;
-  queueMicrotask(() => {
-    syncQueued = false;
-    void runScheduledSync();
-  });
+/**
+ * Coalesced full-scene recalculation for non-movement state changes.
+ * Repeated Item/Actor lifecycle hooks can describe the same logical change,
+ * so one queued pass is sufficient for those events.
+ */
+export function scheduleSurroundingSync() {
+  if (genericSyncQueued) return;
+  genericSyncQueued = true;
+
+  queueMicrotask(() => enqueueSyncRequest("generic"));
+}
+
+/**
+ * Every completed Token movement gets its own full-scene recalculation.
+ * Movement requests are deliberately NOT coalesced. A zero-delay task lets
+ * the complete Foundry movement hook/update stack settle, then the rules read
+ * the authoritative Scene TokenDocuments and recalculate every Token Actor.
+ */
+export function scheduleSurroundingSyncAfterMovement() {
+  setTimeout(() => enqueueSyncRequest("movement"), 0);
+}
+
+/**
+ * Token x/y changes are covered by the v14 moveToken hook. Skipping the
+ * generic updateToken pass avoids an intermediate calculation from the same
+ * movement; moveToken then guarantees the final full-scene pass.
+ */
+export function tokenUpdateContainsMovement(changed = {}) {
+  if (!changed || typeof changed !== "object") return false;
+  return Object.prototype.hasOwnProperty.call(changed, "x")
+    || Object.prototype.hasOwnProperty.call(changed, "y");
 }
 
 function actorIsOnCurrentScene(actor) {
@@ -260,8 +285,10 @@ export function activateSurroundingAutomation() {
   Hooks.on("canvasReady", () => scheduleSurroundingSync());
 
   // v14 moveToken fires after the movement update workflow has concluded.
+  // Every movement gets a distinct full-scene recalculation; movement passes
+  // are intentionally never coalesced with one another.
   Hooks.on("moveToken", document => {
-    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSync();
+    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSyncAfterMovement();
   });
 
   Hooks.on("createToken", document => {
@@ -269,10 +296,12 @@ export function activateSurroundingAutomation() {
   });
 
   // Covers disposition, footprint/size, level/elevation and direct Token data
-  // updates which are not represented by movement alone. Debouncing makes a
-  // simultaneous moveToken + updateToken pair one effective recalculation.
-  Hooks.on("updateToken", document => {
-    if (tokenIsOnCurrentScene(document)) scheduleSurroundingSync();
+  // updates which are not represented by movement alone. x/y are intentionally
+  // left to moveToken so a move cannot produce a stale intermediate field pass.
+  Hooks.on("updateToken", (document, changed) => {
+    if (!tokenIsOnCurrentScene(document)) return;
+    if (tokenUpdateContainsMovement(changed)) return;
+    scheduleSurroundingSync();
   });
 
   Hooks.on("deleteToken", document => {
