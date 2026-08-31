@@ -145,6 +145,18 @@
             <input type="number" name="system.defenses.will" value="{{system.defenses.will}}" />
           </label>
         </div>
+
+        {{#if isCreature}}
+          <label>
+            Исключение Самозащиты 6.3
+            <select name="system.selfDefenseCharacteristicOverride">
+              <option value="" {{#unless system.selfDefenseCharacteristicOverride}}selected{{/unless}}>По виду атаки</option>
+              <option value="fortitude" {{#if (eq system.selfDefenseCharacteristicOverride "fortitude")}}selected{{/if}}>Всегда Стойкость</option>
+              <option value="reflex" {{#if (eq system.selfDefenseCharacteristicOverride "reflex")}}selected{{/if}}>Всегда Рефлекс</option>
+            </select>
+          </label>
+          <small class="fast-nri-help">Используйте только если карточка существа прямо заменяет характеристику Самозащиты.</small>
+        {{/if}}
       </section>
 
       <section class="fast-nri-section">

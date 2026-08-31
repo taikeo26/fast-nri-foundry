@@ -231,7 +231,7 @@ export function warnIfUnsupportedFastNriGrid(grid = currentGrid(), sceneId = glo
   warnedUnsupportedScenes.add(key);
 
   globalThis.ui?.notifications?.warn?.(
-    "Быстрая НРИ 6.2: автоматическая геометрия поля поддерживает только квадратную сетку."
+    "Быстрая НРИ 6.3: автоматическая геометрия поля поддерживает только квадратную сетку."
   );
   return true;
 }

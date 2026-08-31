@@ -23,6 +23,14 @@ import {
   effectiveArmorForAction,
   effectiveDefenseCharacteristicForAction
 } from "./target-state.mjs";
+import {
+  attackTypeLabel,
+  defenseCharacteristicForRole,
+  defenseCharacteristicLabel,
+  inferAbilityAttackTypeFromDescription,
+  inferWeaponAttackType,
+  normalizeAttackType
+} from "./attack-types.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -820,6 +828,7 @@ export async function rollWeaponAttack(actor, weapon) {
 
   if (!itemIsUsable(weapon)) return null;
 
+  const attackType = inferWeaponAttackType(weapon);
   const combatDie = String(actor.system?.combatDie ?? "").trim();
   const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
   const target = getSingleTarget();
@@ -867,6 +876,7 @@ export async function rollWeaponAttack(actor, weapon) {
     <div class="fast-nri-chat-roll fast-nri-attack-card">
       ${rollCardHeader("Попадание", "fa-swords")}
       ${attackResultHTML(weapon, target, degree, result.roll.total)}
+      <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
       ${armorMetaHTML(target, effectiveArmor, targetState)}
 
       ${critical ? `
@@ -895,6 +905,7 @@ export async function rollWeaponAttack(actor, weapon) {
         critical,
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
+        attackType,
         offGuard: Boolean(targetState?.offGuard),
         surrounded: Boolean(targetState?.surrounding?.surrounded),
         surroundingThreats: targetState?.surrounding?.threats ?? null,
@@ -910,7 +921,8 @@ export async function rollWeaponAttack(actor, weapon) {
     naturalD20: result.naturalD20,
     target,
     degree,
-    critical
+    critical,
+    attackType
   };
 }
 
@@ -960,7 +972,7 @@ function activeDieResults(term) {
 }
 
 /**
- * Быстрая НРИ 6.2:
+ * Быстрая НРИ 6.3:
  * - каждый обычный куб урона — отдельный куб урона;
  * - каждый положительный числовой бонус — отдельный фиксированный куб урона;
  * - штрафы кубами урона не считаются;
@@ -1860,6 +1872,16 @@ export async function rollAbilityAttackCheck(actor, item) {
   const config = item.system?.attackCheck ?? {};
   if (!config.enabled) return null;
 
+  const attackType = normalizeAttackType(config.attackType)
+    || inferAbilityAttackTypeFromDescription(item.system?.description);
+
+  if (config.directedDefense && !["melee", "ranged"].includes(attackType)) {
+    ui.notifications.warn(
+      `${item.name}: для Направленной защиты в 6.3 укажите Ближнюю или Дистанционную атаку. ` +
+      `Самозащита не будет предложена для этого результата.`
+    );
+  }
+
   const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
   const formula = expandAbilityAttackFormula(actor, rawFormula);
   const target = getSingleTarget();
@@ -1919,6 +1941,7 @@ export async function rollAbilityAttackCheck(actor, item) {
           <strong>Натуральная 20</strong>
         </div>
       ` : ""}
+      <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
       ${degreeHTML(degree)}
       ${rollSourcesHTML(result)}
     </div>
@@ -1937,6 +1960,7 @@ export async function rollAbilityAttackCheck(actor, item) {
         critical,
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
+        attackType,
         directedDefense: Boolean(config.directedDefense),
         offGuard: Boolean(targetState?.offGuard),
         surrounded: Boolean(targetState?.surrounding?.surrounded),
@@ -1955,7 +1979,8 @@ export async function rollAbilityAttackCheck(actor, item) {
     degree,
     critical,
     targetUuid: target?.document?.uuid ?? null,
-    directedDefense: Boolean(config.directedDefense)
+    directedDefense: Boolean(config.directedDefense),
+    attackType
   };
 }
 
@@ -2014,6 +2039,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     const directedDefense = Boolean(
       sourceAttack
       && item.system?.attackCheck?.directedDefense
+      && ["melee", "ranged"].includes(normalizeAttackType(sourceAttack.attackType))
     );
 
     const flavor = damageCardHTML({
@@ -2041,6 +2067,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
           attackNaturalD20: sourceAttack?.naturalD20 ?? null,
           attackDegree: sourceAttack?.degree ?? null,
           automaticAttackDegree: sourceAttack?.degree ?? null,
+          attackType: normalizeAttackType(sourceAttack?.attackType),
           originalTargetUuid: sourceAttack?.targetUuid ?? null,
           sourceAttackMessageId: sourceAttack?.message?.id ?? null,
           directedDefense,
@@ -2124,6 +2151,9 @@ export async function rollDamageFromChat(element) {
     ? profile
     : automaticAttackDegree;
   const originalTargetUuid = attackMessage?.getFlag("fast-nri", "targetUuid") ?? null;
+  const attackType = normalizeAttackType(
+    attackMessage?.getFlag("fast-nri", "attackType")
+  ) || inferWeaponAttackType(weapon);
 
   const labels = {
     partial: "Частичный",
@@ -2187,6 +2217,7 @@ export async function rollDamageFromChat(element) {
         attackNaturalD20,
         attackDegree: confirmedAttackDegree,
         automaticAttackDegree,
+        attackType,
         originalTargetUuid,
         sourceAttackMessageId: attackMessage?.id ?? null,
         rolledTotal: result.roll.total,
@@ -2214,10 +2245,18 @@ function sameTokenOrActor(a, b) {
   return Boolean(a.actor?.uuid && b.actor?.uuid && a.actor.uuid === b.actor.uuid);
 }
 
-function builtInSelfDefenseOption(actor) {
+function builtInSelfDefenseOption(actor, attackType) {
   const interventionCost = 1;
   const interventions = finiteNumberOrNull(actor?.system?.resources?.intervention);
   const warnings = [];
+  const reasons = [];
+
+  const normalizedAttackType = normalizeAttackType(attackType);
+  if (normalizedAttackType === "area") {
+    reasons.push("против Области действия Самозащита недоступна");
+  } else if (!["melee", "ranged"].includes(normalizedAttackType)) {
+    reasons.push("для исходной атаки не указан однозначный вид Ближняя/Дистанционная");
+  }
 
   if (interventions !== null && interventions < interventionCost) {
     warnings.push(`в листе ${interventions} Вмешательств из требуемых ${interventionCost}`);
@@ -2241,17 +2280,17 @@ function builtInSelfDefenseOption(actor) {
       effectDegreeReduction: 1,
       allowManeuver: false
     },
-    disabled: false,
-    reasons: [],
+    disabled: reasons.length > 0,
+    reasons,
     warnings,
     costLabel: "1 Вмешательство"
   };
 }
 
-function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState }) {
+function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState, attackType }) {
   const options = [];
 
-  if (role === "self") options.push(builtInSelfDefenseOption(actor));
+  if (role === "self") options.push(builtInSelfDefenseOption(actor, attackType));
 
   for (const item of defenseAbilityItems(actor, role)) {
     const config = defenseActionConfig(item);
@@ -2286,14 +2325,15 @@ function defenseMethodOptions({ actor, defenderToken, protectedToken, role, dama
   return options;
 }
 
-async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState }) {
+async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState, attackType }) {
   const { DialogV2 } = foundry.applications.api;
   const options = defenseMethodOptions({
     actor,
     defenderToken,
     protectedToken,
     role,
-    damageState
+    damageState,
+    attackType
   });
 
   const targetName = protectedToken?.name || protectedToken?.actor?.name || actor.name;
@@ -2578,12 +2618,22 @@ export async function defenseFromChat(element) {
     return null;
   }
 
+  const sourceItem = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
+  const storedAttackType = normalizeAttackType(message.getFlag("fast-nri", "attackType"));
+  const attackType = storedAttackType
+    || (sourceItem?.type === "weapon" ? inferWeaponAttackType(sourceItem) : "")
+    || (sourceItem?.type === "ability"
+      ? normalizeAttackType(sourceItem.system?.attackCheck?.attackType)
+        || inferAbilityAttackTypeFromDescription(sourceItem.system?.description)
+      : "");
+
   const method = await chooseDefenseMethod({
     actor: defender,
     defenderToken,
     protectedToken,
     role,
-    damageState
+    damageState,
+    attackType
   });
   if (!method) return null;
 
@@ -2603,7 +2653,6 @@ export async function defenseFromChat(element) {
 
   const attackTotal = finiteNumberOrNull(message.getFlag("fast-nri", "attackTotal"));
   const attackNaturalD20 = finiteNumberOrNull(message.getFlag("fast-nri", "attackNaturalD20"));
-  const sourceItem = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
 
   if (attackTotal === null) {
     ui.notifications.error("Не удалось определить результат исходного действия для проверки защиты.");
@@ -2632,21 +2681,44 @@ export async function defenseFromChat(element) {
   const sourceActor = sourceItem?.parent?.documentName === "Actor"
     ? sourceItem.parent
     : null;
-  const fortitudeState = effectiveDefenseCharacteristicForAction(
+
+  const selfDefenseOverride = role === "self"
+    ? String(actionConfig.selfDefenseCharacteristic ?? "").trim()
+      || String(defender.system?.selfDefenseCharacteristicOverride ?? "").trim()
+    : "";
+
+  const defenseCharacteristic = defenseCharacteristicForRole({
+    role,
+    attackType,
+    selfDefenseOverride
+  });
+
+  if (!defenseCharacteristic) {
+    ui.notifications.error(
+      role === "self"
+        ? "6.3: невозможно определить характеристику Самозащиты. У исходной атаки должен быть вид Ближняя или Дистанционная, либо частное исключение."
+        : "Не удалось определить характеристику Направленной защиты."
+    );
+    return null;
+  }
+
+  const characteristicState = effectiveDefenseCharacteristicForAction(
     defenderToken,
-    "fortitude",
+    defenseCharacteristic,
     sourceActor
   );
-  const fortitude = finiteNumberOrNull(fortitudeState.value);
-  if (fortitude === null) {
-    ui.notifications.error("У выбранного токена нет корректного значения Стойкости.");
+  const characteristicValue = finiteNumberOrNull(characteristicState.value);
+  if (characteristicValue === null) {
+    ui.notifications.error(
+      `У выбранного токена нет корректного значения «${defenseCharacteristicLabel(defenseCharacteristic)}».`
+    );
     return null;
   }
 
   const combatSource = defenseCombatTerm(defender, actionItem, role);
   const baseFormula = combatSource?.formula
-    ? `1d20 + ${fortitude} + ${combatSource.formula}`
-    : `1d20 + ${fortitude}`;
+    ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
+    : `1d20 + ${characteristicValue}`;
 
   const interventionCost = Math.max(0, Number(actionConfig.interventionCost) || 0);
   const interventions = finiteNumberOrNull(defender.system?.resources?.intervention);
@@ -2674,9 +2746,9 @@ export async function defenseFromChat(element) {
     baseSources: [
       { formula: "1d20", label: "Базовый d20", reason: "Направленная защита" },
       {
-        formula: String(fortitude),
-        label: "Стойкость",
-        reason: fortitudeState.state?.offGuard
+        formula: String(characteristicValue),
+        label: defenseCharacteristicLabel(defenseCharacteristic),
+        reason: characteristicState.state?.offGuard
           ? `${defender.name} · Застигнут врасплох −2`
           : defender.name
       },
@@ -2692,6 +2764,7 @@ export async function defenseFromChat(element) {
           <small>
             ${role === "ally" ? `Цель: ${esc(protectedToken.name)} · ` : ""}
             Исходный результат: ${esc(attackTotal)}
+            ${role === "self" ? ` · ${esc(attackTypeLabel(attackType))} → ${esc(defenseCharacteristicLabel(defenseCharacteristic))}` : ""}
             · Удаление: ${esc(actionConfig.removeDamageParts)}
             · Снижение Эффекта: ${esc(actionConfig.effectDegreeReduction)}
             · ${esc(defenseCostLabel(actionItem ?? actionConfig, defender))}
@@ -2762,6 +2835,8 @@ export async function defenseFromChat(element) {
     naturalD20: result.naturalD20,
     attackTotal,
     attackNaturalD20,
+    attackType,
+    characteristic: defenseCharacteristic,
     result: defenseResult,
     removedPartId: removedParts[0]?.id ?? null,
     removedPart: removedParts[0] ? foundry.utils.deepClone(removedParts[0]) : null,

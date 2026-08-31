@@ -27,6 +27,7 @@ import "./module/formation.mjs";
 import {
   migrateDamageTraitsOnce,
   migrateEquipmentStateOnce,
+  migrateRules63Once,
   registerDataMigrationSettings
 } from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
@@ -52,7 +53,7 @@ import {
 } from "./module/sheets.mjs";
 
 Hooks.once("init", () => {
-  console.log("Быстрая НРИ 6.2 | Инициализация системы");
+  console.log("Быстрая НРИ 6.3 | Инициализация системы");
 
   registerTokenDefaultSettings();
   registerDataMigrationSettings();
@@ -114,7 +115,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
-  console.log("Быстрая НРИ 6.2 | Система готова");
+  console.log("Быстрая НРИ 6.3 | Система готова");
   activateChatInteractions(document);
   activateAbilityChatInteractions(document);
   activateHealthChatInteractions(document);
@@ -125,9 +126,10 @@ Hooks.once("ready", async () => {
   await seedBuiltinEffectsOnce();
   await cleanupLegacySurroundedState();
   await migrateDefenseAbilitiesOnce();
+  await migrateRules63Once();
   await migrateDamageTraitsOnce();
   await migrateEquipmentStateOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
-  ui.notifications.info("Быстрая НРИ 6.2 загружена");
+  ui.notifications.info("Быстрая НРИ 6.3 загружена");
 });

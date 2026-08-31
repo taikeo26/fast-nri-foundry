@@ -25,6 +25,14 @@
           <input type="text" name="system.range" value="{{system.range}}" />
         </label>
         <label>
+          Вид атаки 6.3
+          <select name="system.attackType">
+            <option value="" {{#unless system.attackType}}selected{{/unless}}>Авто по оружию (legacy)</option>
+            <option value="melee" {{#if (eq system.attackType "melee")}}selected{{/if}}>Ближняя атака</option>
+            <option value="ranged" {{#if (eq system.attackType "ranged")}}selected{{/if}}>Дистанционная атака</option>
+          </select>
+        </label>
+        <label>
           Тип урона
           <select name="system.damageType">
             <option value="physical" {{#if (eq system.damageType "physical")}}selected{{/if}}>Физический</option>
@@ -212,6 +220,21 @@
             Для особой способности можно записать другую формулу вручную.
           </small>
 
+          <label>
+            Вид исходной атаки 6.3
+            <select name="system.attackCheck.attackType">
+              <option value="" {{#unless system.attackCheck.attackType}}selected{{/unless}}>Не указан</option>
+              <option value="melee" {{#if (eq system.attackCheck.attackType "melee")}}selected{{/if}}>Ближняя атака</option>
+              <option value="ranged" {{#if (eq system.attackCheck.attackType "ranged")}}selected{{/if}}>Дистанционная атака</option>
+              <option value="area" {{#if (eq system.attackCheck.attackType "area")}}selected{{/if}}>Область действия</option>
+            </select>
+          </label>
+
+          <small class="fast-nri-help">
+            В 6.3 Самозащита использует Стойкость против Ближней атаки и Рефлекс против Дистанционной.
+            Для Области действия Самозащита недоступна.
+          </small>
+
           <label class="fast-nri-checkbox-label">
             <input
               type="checkbox"
@@ -323,6 +346,15 @@
             Какие части удалять
             <select name="system.defenseAction.damageSelectionMode">
               {{selectOptions defenseDamageSelectionChoices selected=system.defenseAction.damageSelectionMode}}
+            </select>
+          </label>
+
+          <label>
+            Характеристика Самозащиты
+            <select name="system.defenseAction.selfDefenseCharacteristic">
+              <option value="" {{#unless system.defenseAction.selfDefenseCharacteristic}}selected{{/unless}}>По правилу 6.3</option>
+              <option value="fortitude" {{#if (eq system.defenseAction.selfDefenseCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
+              <option value="reflex" {{#if (eq system.defenseAction.selfDefenseCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
             </select>
           </label>
 

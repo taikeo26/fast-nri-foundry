@@ -213,6 +213,10 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
     // Для существ Бестиария без Куба боя.
     attackModifier: integer(0),
 
+    // 6.3: редкое прямое исключение из выбора характеристики Самозащиты.
+    // Пустое значение означает обычное правило melee→Стойкость, ranged→Рефлекс.
+    selfDefenseCharacteristicOverride: text(""),
+
     armor: new SchemaField({
       partial: integer(5),
       success: integer(10),
@@ -278,6 +282,9 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
     return {
       ...itemBaseSchema(),
       range: text("Ближняя"),
+      // 6.3: вид направленной атаки против КЗ. Пустое legacy-значение
+      // разрешается runtime через однозначные данные оружия и мигрируется GM.
+      attackType: text(""),
       // Канонические стабильные ID свойств.
       propertyIds: stringArray(),
 
@@ -350,7 +357,10 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       attackCheck: new SchemaField({
         enabled: flag(false),
         formula: text("1d20 + {combatDie}"),
-        directedDefense: flag(false)
+        directedDefense: flag(false),
+        // 6.3: melee / ranged / area. Для Направленной защиты от одиночной
+        // Атаки против КЗ должен быть melee или ranged.
+        attackType: text("")
       }),
 
       // Универсальная инфраструктура Защитных действий. Runtime ищет эти
@@ -365,6 +375,9 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         movementMode: text("none"),
         damageSelectionMode: text("standard"),
         combatDiceFormula: text(""),
+        // Пусто = стандарт 6.3 по виду атаки. Частная карточка может
+        // прямо заменить характеристику именно Самозащиты.
+        selfDefenseCharacteristic: text(""),
         removeDamageParts: integer(1),
         effectDegreeReduction: integer(1),
         allowManeuver: flag(false)

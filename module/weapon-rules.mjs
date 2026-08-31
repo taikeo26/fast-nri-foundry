@@ -148,6 +148,7 @@ export function defaultUnarmedAttackData() {
     type: "weapon",
     system: {
       range: "Ближняя",
+      attackType: "melee",
       propertyIds: [UNARMED_PROPERTY_ID],
       equipped: true,
       held: false,

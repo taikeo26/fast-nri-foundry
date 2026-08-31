@@ -68,6 +68,9 @@ export function defenseActionConfig(item) {
       ? config.damageSelectionMode
       : "standard",
     combatDiceFormula: String(config.combatDiceFormula ?? "").trim(),
+    selfDefenseCharacteristic: ["fortitude", "reflex"].includes(config.selfDefenseCharacteristic)
+      ? config.selfDefenseCharacteristic
+      : "",
     removeDamageParts: positiveInt(config.removeDamageParts, 1),
     effectDegreeReduction: positiveInt(config.effectDegreeReduction, 1),
     allowManeuver: Boolean(config.allowManeuver)

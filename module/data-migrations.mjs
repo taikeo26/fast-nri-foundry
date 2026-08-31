@@ -1,3 +1,10 @@
+import {
+  inferAbilityAttackTypeFromDescription,
+  inferWeaponAttackType,
+  normalizeAttackType,
+  normalizeSelfDefenseCharacteristic
+} from "./attack-types.mjs";
+
 const DATA_MIGRATION_SETTING = "dataSchemaMigration";
 const DATA_MIGRATION_VERSION = 1;
 const EQUIPMENT_STATE_MIGRATION_SETTING = "equipmentStateMigration";
@@ -12,6 +19,13 @@ export function registerDataMigrationSettings() {
   });
 
   game.settings.register(game.system.id, EQUIPMENT_STATE_MIGRATION_SETTING, {
+    scope: "world",
+    config: false,
+    type: Number,
+    default: 0
+  });
+
+  game.settings.register(game.system.id, RULES_63_MIGRATION_SETTING, {
     scope: "world",
     config: false,
     type: Number,
@@ -159,5 +173,154 @@ export async function migrateEquipmentStateOnce() {
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка миграции Экипирован/В руках 0.5.30", error);
     ui.notifications.error("Не удалось разделить старые состояния «Экипирован» и «В руках».");
+  }
+}
+
+const RULES_63_MIGRATION_SETTING = "rules63AttackTypesMigration";
+const RULES_63_MIGRATION_VERSION = 1;
+
+function normalizeRussianName(value) {
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("ru-RU")
+    .replace(/ё/g, "е");
+}
+
+function legacyAbilityAttackType(item) {
+  const inferred = inferAbilityAttackTypeFromDescription(item?.system?.description);
+  if (inferred) return inferred;
+
+  const known = new Map([
+    ["быстрый клинок", "melee"],
+    ["хищная хватка", "melee"],
+    ["разряд разлома", "ranged"]
+  ]);
+
+  return known.get(normalizeRussianName(item?.name)) ?? "";
+}
+
+function rules63ItemUpdate(item) {
+  if (!item) return null;
+
+  if (item.type === "weapon") {
+    const raw = foundry.utils.getProperty(item._source, "system.attackType");
+    if (normalizeAttackType(raw)) return null;
+
+    const attackType = inferWeaponAttackType(item);
+    return attackType ? { _id: item.id, "system.attackType": attackType } : null;
+  }
+
+  if (item.type === "ability" && item.system?.attackCheck?.enabled) {
+    const raw = foundry.utils.getProperty(item._source, "system.attackCheck.attackType");
+    if (normalizeAttackType(raw)) return null;
+
+    const attackType = legacyAbilityAttackType(item);
+    return attackType
+      ? { _id: item.id, "system.attackCheck.attackType": attackType }
+      : null;
+  }
+
+  return null;
+}
+
+/**
+ * 0.5.50 / rules 6.3:
+ * - materialize melee/ranged attack type on existing Weapon Items;
+ * - materialize an unambiguous type on legacy Ability attacks when their
+ *   description/name already supports it;
+ * - migrate the Rift Fairy's explicit rule: Self Defense always uses Reflex.
+ *
+ * Runtime never relies on the name after this one-time migration.
+ */
+export async function migrateRules63Once() {
+  if (!game.user.isGM) return;
+
+  const current = Number(
+    game.settings.get(game.system.id, RULES_63_MIGRATION_SETTING)
+  ) || 0;
+  if (current >= RULES_63_MIGRATION_VERSION) return;
+
+  try {
+    let embeddedCount = 0;
+    let worldItemCount = 0;
+    let actorCount = 0;
+    let unresolvedAbilities = 0;
+
+    for (const actor of game.actors) {
+      const itemUpdates = [];
+      for (const item of actor.items) {
+        const update = rules63ItemUpdate(item);
+        if (update) itemUpdates.push(update);
+
+        if (
+          item.type === "ability"
+          && item.system?.attackCheck?.enabled
+          && item.system?.attackCheck?.directedDefense
+          && !normalizeAttackType(item.system?.attackCheck?.attackType)
+          && !legacyAbilityAttackType(item)
+        ) {
+          unresolvedAbilities += 1;
+        }
+      }
+
+      if (itemUpdates.length) {
+        await actor.updateEmbeddedDocuments("Item", itemUpdates);
+        embeddedCount += itemUpdates.length;
+      }
+
+      if (
+        actor.type === "creature"
+        && normalizeRussianName(actor.name) === "фея разлома"
+        && normalizeSelfDefenseCharacteristic(
+          foundry.utils.getProperty(actor._source, "system.selfDefenseCharacteristicOverride")
+        ) !== "reflex"
+      ) {
+        await actor.update({ "system.selfDefenseCharacteristicOverride": "reflex" });
+        actorCount += 1;
+      }
+    }
+
+    const worldUpdates = [];
+    for (const item of game.items) {
+      const update = rules63ItemUpdate(item);
+      if (update) worldUpdates.push(update);
+
+      if (
+        item.type === "ability"
+        && item.system?.attackCheck?.enabled
+        && item.system?.attackCheck?.directedDefense
+        && !normalizeAttackType(item.system?.attackCheck?.attackType)
+        && !legacyAbilityAttackType(item)
+      ) {
+        unresolvedAbilities += 1;
+      }
+    }
+
+    if (worldUpdates.length) {
+      await Item.updateDocuments(worldUpdates);
+      worldItemCount = worldUpdates.length;
+    }
+
+    await game.settings.set(
+      game.system.id,
+      RULES_63_MIGRATION_SETTING,
+      RULES_63_MIGRATION_VERSION
+    );
+
+    console.log(
+      `Быстрая НРИ | Миграция правил 6.3: ${embeddedCount} embedded Item, ` +
+      `${worldItemCount} world Item, ${actorCount} Actor; ` +
+      `${unresolvedAbilities} Ability требуют ручной разметки типа атаки.`
+    );
+
+    if (unresolvedAbilities > 0) {
+      ui.notifications.warn(
+        `Быстрая НРИ 6.3: ${unresolvedAbilities} атакующих Ability не удалось однозначно ` +
+        `разметить как Ближние/Дистанционные. Проверьте поле «Вид исходной атаки 6.3».`
+      );
+    }
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка миграции правил 6.3", error);
+    ui.notifications.error("Не удалось завершить миграцию типов атак для правил 6.3.");
   }
 }

@@ -97,4 +97,4 @@ jobs:
             system.json \
             --target "$GITHUB_SHA" \
             --title "Fast NRI ${VERSION}" \
-            --notes "Автоматический релиз системы «Быстрая НРИ 6.2» для Foundry VTT 14."
+            --notes "Автоматический релиз системы «Быстрая НРИ 6.3» для Foundry VTT 14."
