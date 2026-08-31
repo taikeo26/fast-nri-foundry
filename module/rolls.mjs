@@ -5,6 +5,19 @@ import {
   ITEM_PROPERTY_IDS,
   RESISTANCE_TRAITS
 } from "./config.mjs";
+import {
+  defenseAbilityItems,
+  defenseActionConfig,
+  defenseCostLabel,
+  evaluateDefenseAbility,
+  resolveDefenseCombatSource
+} from "./defense-actions.mjs";
+import {
+  itemIsEquipped,
+  itemIsHeld,
+  itemIsUsable,
+  itemRequiresHands
+} from "./equipment.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -762,6 +775,18 @@ function attackResultHTML(weapon, target, degree, rollTotal) {
 export async function rollWeaponAttack(actor, weapon) {
   if (!actor || !weapon || weapon.type !== "weapon") return null;
 
+  if (!itemIsEquipped(weapon)) {
+    ui.notifications.warn(`«${weapon.name}» не экипировано и сейчас не доступно для использования.`);
+    return null;
+  }
+
+  if (itemRequiresHands(weapon) && !itemIsHeld(weapon)) {
+    ui.notifications.warn(`«${weapon.name}» требует рук, но не отмечено как «В руках».`);
+    return null;
+  }
+
+  if (!itemIsUsable(weapon)) return null;
+
   const combatDie = String(actor.system?.combatDie ?? "").trim();
   const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
   const target = getSingleTarget();
@@ -1157,15 +1182,21 @@ function defenseSummaryHTML(state) {
   const defense = state?.defense;
   if (!defense) return "";
 
-  const removed = defense.removedPart ?? null;
+  const actionName = defense.actionName || "Самозащита";
+  const removedParts = Array.isArray(defense.removedParts)
+    ? defense.removedParts
+    : defense.removedPart
+      ? [defense.removedPart]
+      : [];
   const beforeDegree = defense.effectDegreeBefore;
   const afterDegree = defense.effectDegreeAfter;
+  const protectedName = defense.protectedTokenName ?? null;
 
   return `
     <section class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)}">
       <div class="fast-nri-self-defense-heading">
         <i class="fa-solid fa-shield-halved"></i>
-        <strong>Самозащита — ${esc(defenseResultLabel(defense.result))}</strong>
+        <strong>${esc(actionName)} — ${esc(defenseResultLabel(defense.result))}</strong>
       </div>
 
       <small>
@@ -1173,10 +1204,17 @@ function defenseSummaryHTML(state) {
         ${esc(defense.total)}
         против исходного результата
         ${esc(defense.attackTotal)}
+        ${defense.kind === "ally-defense" && protectedName
+          ? `· защищает ${esc(protectedName)}`
+          : ""
+        }
       </small>
 
-      ${removed ? `
-        <div>Обнулён куб: <strong>${esc(damagePartLabel(removed))}</strong></div>
+      ${removedParts.length ? `
+        <div>
+          Обнулено частей урона:
+          <strong>${removedParts.map(part => esc(damagePartLabel(part))).join(", ")}</strong>
+        </div>
       ` : ""}
 
       ${beforeDegree && afterDegree && beforeDegree !== afterDegree ? `
@@ -1282,7 +1320,7 @@ function damageCardHTML({
   `;
 }
 
-async function chooseDamagePart(parts, mode = "largest") {
+async function chooseDamagePart(parts, mode = "largest", actionName = "Защита") {
   const active = (parts ?? []).filter(part => !part.immuneRemoved && (Number(part.currentValue ?? part.value) || 0) > 0);
   if (!active.length) return null;
 
@@ -1302,17 +1340,17 @@ async function chooseDamagePart(parts, mode = "largest") {
 
   const choice = await DialogV2.wait({
     window: {
-      title: "Самозащита: выберите куб урона"
+      title: `${actionName}: выберите часть урона`
     },
     content: `
       <div class="fast-nri-defense-choice">
         <p>
           Несколько самых ${word} кубов имеют одинаковый результат
           <strong>${esc(targetValue)}</strong>.
-          Выберите, какой удалить при успешной Самозащите.
+          Выберите, какую часть удалить при успешной защите.
         </p>
         <p>
-          Выбор выполняется <strong>до броска Самозащиты</strong>,
+          Выбор выполняется <strong>до броска защиты</strong>,
           поэтому закрытие этого окна не позволяет перебрасывать уже
           совершённую проверку.
         </p>
@@ -1338,6 +1376,35 @@ async function chooseDamagePart(parts, mode = "largest") {
 
   if (!choice) return null;
   return tied.find(part => part.id === choice) ?? null;
+}
+
+async function chooseDamageParts(parts, count = 1, mode = "largest", actionName = "Защита") {
+  const requested = Math.max(0, Math.trunc(Number(count) || 0));
+  if (requested <= 0) return [];
+
+  const working = foundry.utils.deepClone(parts ?? []);
+  const selected = [];
+
+  for (let index = 0; index < requested; index += 1) {
+    const part = await chooseDamagePart(working, mode, actionName);
+    if (!part) {
+      const stillAvailable = working.some(candidate =>
+        !candidate.immuneRemoved
+        && (Number(candidate.currentValue ?? candidate.value) || 0) > 0
+      );
+      if (stillAvailable) return null;
+      break;
+    }
+
+    selected.push(part);
+    const found = working.find(candidate => candidate.id === part.id);
+    if (found) {
+      found.currentValue = 0;
+      found.defenseZeroed = true;
+    }
+  }
+
+  return selected;
 }
 
 function normalizedProperty(value) {
@@ -1367,44 +1434,15 @@ function actorAbilityItems(actor) {
   return actor?.items?.contents ?? Array.from(actor?.items ?? []);
 }
 
-function hasAbility(actor, name) {
-  const target = normalizedProperty(name);
-  return actorAbilityItems(actor).some(item =>
-    item?.type === "ability"
-    && normalizedProperty(item?.name) === target
-  );
-}
-
-function selfDefenseCombatTerm(actor) {
-  // «Всегда готов»: ровно 2d6 вместо Куба боя, а не удвоение
-  // фактического system.combatDie.
-  if (hasAbility(actor, "Всегда готов")) return "2d6";
-
-  const combatDie = String(actor?.system?.combatDie ?? "").trim();
-  if (combatDie) return combatDie;
-
-  // Существо Бестиария без Куба боя использует свой модификатор атаки.
-  if (actor?.type === "creature") {
-    const attackModifier = finiteNumberOrNull(actor.system?.attackModifier);
-    if (attackModifier !== null) return String(attackModifier);
-  }
-
-  return "";
-}
-
-function selfDefenseCombatSource(actor, combatTerm) {
-  if (!combatTerm) return null;
-  if (hasAbility(actor, "Всегда готов")) return { formula: combatTerm, label: "Всегда готов", reason: "2d6 вместо Куба боя" };
-  const combatDie = String(actor?.system?.combatDie ?? "").trim();
-  if (combatDie) return { formula: combatTerm, label: "Куб боя", reason: actor.name };
-  if (actor?.type === "creature") return { formula: combatTerm, label: "Модификатор атаки", reason: "Существо Бестиария без Куба боя" };
-  return { formula: combatTerm, label: "Куб боя", reason: "" };
+function defenseCombatTerm(actor, actionItem = null, role = "self") {
+  return resolveDefenseCombatSource(actor, actionItem, role);
 }
 
 function equippedDefensiveItem(actor) {
   return actorAbilityItems(actor).find(item =>
     (item?.type === "weapon" || item?.type === "equipment")
-    && item?.system?.equipped === true
+    && itemIsEquipped(item)
+    && itemIsHeld(item)
     && itemHasProperty(item, "defensive")
   ) ?? null;
 }
@@ -1447,12 +1485,12 @@ function selfDefenseRemovalMode(weapon) {
   return itemHasProperty(weapon, "steady") ? "smallest" : "largest";
 }
 
-async function confirmZeroDamageDefense() {
+async function confirmZeroDamageDefense(actionName = "Защита") {
   const { DialogV2 } = foundry.applications.api;
 
   return DialogV2.confirm({
     window: {
-      title: "Самозащита при 0 урона"
+      title: `${actionName} при 0 урона`
     },
     content: `
       <div class="fast-nri-defense-choice">
@@ -1462,7 +1500,7 @@ async function confirmZeroDamageDefense() {
           или другой отрицательный Эффект.
         </p>
         <p>
-          Продолжить Самозащиту ради отрицательного Эффекта?
+          Продолжить защиту ради отрицательного Эффекта?
         </p>
       </div>
     `
@@ -2097,7 +2135,337 @@ export async function rollDamageFromChat(element) {
   };
 }
 
-export async function selfDefenseFromChat(element) {
+function sameTokenOrActor(a, b) {
+  if (!a || !b) return false;
+  if (a?.id && b?.id && a.id === b.id) return true;
+  if (a?.document?.uuid && b?.document?.uuid && a.document.uuid === b.document.uuid) return true;
+  return Boolean(a.actor?.uuid && b.actor?.uuid && a.actor.uuid === b.actor.uuid);
+}
+
+function builtInSelfDefenseOption(actor) {
+  const interventionCost = 1;
+  const interventions = finiteNumberOrNull(actor?.system?.resources?.intervention);
+  const warnings = [];
+
+  if (interventions !== null && interventions < interventionCost) {
+    warnings.push(`в листе ${interventions} Вмешательств из требуемых ${interventionCost}`);
+  }
+
+  return {
+    id: "system-self-defense",
+    actionName: "Самозащита",
+    item: null,
+    config: {
+      enabled: true,
+      targetScope: "self",
+      interventionCost,
+      rangeMode: "manual",
+      rangeCells: 0,
+      requiresVisibility: false,
+      movementMode: "none",
+      damageSelectionMode: "standard",
+      combatDiceFormula: "",
+      removeDamageParts: 1,
+      effectDegreeReduction: 1,
+      allowManeuver: false
+    },
+    disabled: false,
+    reasons: [],
+    warnings,
+    costLabel: "1 Вмешательство"
+  };
+}
+
+function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState }) {
+  const options = [];
+
+  if (role === "self") options.push(builtInSelfDefenseOption(actor));
+
+  for (const item of defenseAbilityItems(actor, role)) {
+    const config = defenseActionConfig(item);
+    const availability = evaluateDefenseAbility({
+      actor,
+      defenderToken,
+      protectedToken,
+      item,
+      role
+    });
+
+    const alreadyUsed = (damageState?.defenseHistory ?? []).some(entry =>
+      entry?.actorUuid === actor.uuid
+    );
+
+    if (alreadyUsed) {
+      availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
+    }
+
+    options.push({
+      id: `ability-${item.id}`,
+      actionName: item.name,
+      item,
+      config,
+      disabled: availability.disabled,
+      reasons: availability.reasons,
+      warnings: availability.warnings,
+      costLabel: defenseCostLabel(item, actor)
+    });
+  }
+
+  return options;
+}
+
+async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState }) {
+  const { DialogV2 } = foundry.applications.api;
+  const options = defenseMethodOptions({
+    actor,
+    defenderToken,
+    protectedToken,
+    role,
+    damageState
+  });
+
+  const targetName = protectedToken?.name || protectedToken?.actor?.name || actor.name;
+  const title = role === "self"
+    ? `Защита: ${defenderToken.name}`
+    : `Защита союзника: ${targetName}`;
+
+  const buttons = options.map((option, index) => {
+    const unavailable = option.reasons.length
+      ? ` — недоступно: ${option.reasons.join("; ")}`
+      : "";
+    const warningMark = option.warnings.length ? " ⚠" : "";
+
+    return {
+      action: `defense-method-${index}`,
+      label: `${option.actionName} — ${option.costLabel}${warningMark}${unavailable}`,
+      icon: "fa-solid fa-shield-halved",
+      class: option.disabled
+        ? "fast-nri-defense-method-button is-unavailable"
+        : "fast-nri-defense-method-button",
+      disabled: option.disabled,
+      tooltip: [
+        ...option.reasons.map(reason => `Недоступно: ${reason}`),
+        ...option.warnings.map(warning => `Предупреждение: ${warning}`)
+      ].join("\n"),
+      callback: async () => option.id
+    };
+  });
+
+  buttons.push({
+    action: "cancel",
+    label: "Отмена",
+    icon: "fa-solid fa-xmark",
+    class: "fast-nri-defense-method-cancel",
+    callback: async () => null
+  });
+
+  const selected = await DialogV2.wait({
+    classes: ["fast-nri-defense-method-dialog"],
+    window: {
+      title
+    },
+    content: `
+      <div class="fast-nri-defense-method-intro">
+        <div><strong>Защитник:</strong> ${esc(defenderToken.name)}</div>
+        <div><strong>Защищаемая цель:</strong> ${esc(targetName)}</div>
+        ${role === "self"
+          ? "<p>Выберите способ Самозащиты.</p>"
+          : "<p>Показаны Защитные Ability выбранного персонажа, подходящие для союзника.</p>"
+        }
+        ${options.length ? "" : "<p><strong>У персонажа нет настроенных способов защиты этой цели.</strong></p>"}
+        <small>
+          Вмешательство, Движение и Воздействие не списываются автоматически.
+          Предупреждение о нехватке ресурса не блокирует действие.
+        </small>
+      </div>
+    `,
+    modal: true,
+    rejectClose: false,
+    buttons
+  });
+
+  if (!selected) return null;
+  return options.find(option => option.id === selected) ?? null;
+}
+
+async function spendDefenseClassResource(actor, item) {
+  const cost = Math.max(0, Number(item?.system?.classResourceCost) || 0);
+  const resource = actor?.system?.classResource ?? {};
+  const before = Math.max(0, Number(resource.value) || 0);
+  const max = Math.max(0, Number(resource.max) || 0);
+
+  if (!(cost > 0)) {
+    return {
+      cost: 0,
+      label: resource.label || "Классовый ресурс",
+      before,
+      after: before,
+      spent: 0,
+      shortage: 0,
+      max
+    };
+  }
+
+  const shortage = Math.max(0, cost - before);
+  if (shortage > 0) {
+    ui.notifications.warn(
+      `${actor.name}: недостаточно ресурса «${resource.label || "Классовый ресурс"}». ` +
+      `Нужно ${cost}, доступно ${before}. Защита не блокируется.`
+    );
+  }
+
+  const after = Math.max(0, before - cost);
+  const spent = before - after;
+
+  try {
+    await actor.update({
+      "system.classResource.value": after
+    });
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка списания ресурса защитной способности", error);
+    ui.notifications.error("Не удалось изменить классовый ресурс; защита всё равно разрешена.");
+    return {
+      cost,
+      label: resource.label || "Классовый ресурс",
+      before,
+      after: before,
+      spent: 0,
+      shortage,
+      max,
+      updateFailed: true
+    };
+  }
+
+  return {
+    cost,
+    label: resource.label || "Классовый ресурс",
+    before,
+    after,
+    spent,
+    shortage,
+    max
+  };
+}
+
+function defenseResourceHTML(resource, undone = false) {
+  if (!(Number(resource?.cost) > 0)) return "";
+
+  return `
+    <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
+      <div class="fast-nri-resource-use-text">
+        <span class="fast-nri-resource-label">${esc(resource.label || "Классовый ресурс")}</span>
+        <strong>−${esc(resource.cost)}</strong>
+        <small>${esc(resource.before)} → ${esc(resource.after)}</small>
+        ${resource.shortage > 0
+          ? `<small class="fast-nri-resource-shortage">не хватает ${esc(resource.shortage)}</small>`
+          : ""
+        }
+      </div>
+
+      ${undone || !(resource.spent > 0) ? "" : `
+        <button
+          type="button"
+          class="fast-nri-undo-resource-button"
+          data-fast-nri-undo-defense-resource
+          title="Вернуть списанный классовый ресурс"
+        >
+          <i class="fa-solid fa-rotate-left"></i>
+          <span>Вернуть</span>
+        </button>
+      `}
+    </div>
+  `;
+}
+
+function defenseRollFlavorHTML({
+  actionName,
+  defenderTokenName,
+  protectedTokenName,
+  role,
+  attackTotal,
+  defenseTotal,
+  defenseResult,
+  result,
+  sourcesHTML = "",
+  resource,
+  resourceUndone = false
+}) {
+  return `
+    <div class="fast-nri-chat-roll fast-nri-defense-roll-card">
+      ${rollCardHeader(`${actionName}: ${defenderTokenName}`, "fa-shield-halved")}
+      <div class="fast-nri-defense-roll-result">
+        ${role === "ally"
+          ? `<span>Защищаемая цель: <strong>${esc(protectedTokenName)}</strong></span>`
+          : ""
+        }
+        <span>Исходный результат: <strong>${esc(attackTotal)}</strong></span>
+        <span>Защита: <strong>${esc(defenseTotal)}</strong></span>
+        <span>Результат: <strong>${esc(defenseResultLabel(defenseResult))}</strong></span>
+      </div>
+      ${defenseResourceHTML(resource, resourceUndone)}
+      ${result ? rollSourcesHTML(result) : sourcesHTML}
+    </div>
+  `;
+}
+
+export async function undoDefenseResource(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== "defense-roll") {
+    ui.notifications.error("Не удалось найти данные защитного броска.");
+    return null;
+  }
+
+  if (message.getFlag("fast-nri", "resourceUndone")) {
+    ui.notifications.info("Ресурс уже возвращён.");
+    return null;
+  }
+
+  const actor = await fromUuid(message.getFlag("fast-nri", "defenderActorUuid"));
+  if (!actor) {
+    ui.notifications.error("Не удалось найти защищавшего персонажа.");
+    return null;
+  }
+
+  const spent = Math.max(0, Number(message.getFlag("fast-nri", "resourceSpent")) || 0);
+  if (!(spent > 0)) {
+    ui.notifications.info("Для этой защиты ресурс фактически не списывался.");
+    return null;
+  }
+
+  const current = Math.max(0, Number(actor.system?.classResource?.value) || 0);
+  const max = Math.max(0, Number(actor.system?.classResource?.max) || 0);
+  let restored = current + spent;
+  if (max > 0) restored = Math.min(max, restored);
+
+  await actor.update({ "system.classResource.value": restored });
+
+  const resource = {
+    cost: Number(message.getFlag("fast-nri", "resourceCost")) || 0,
+    label: message.getFlag("fast-nri", "resourceLabel") || "Классовый ресурс",
+    before: Number(message.getFlag("fast-nri", "resourceBefore")) || 0,
+    after: Number(message.getFlag("fast-nri", "resourceAfter")) || 0,
+    spent,
+    shortage: Number(message.getFlag("fast-nri", "resourceShortage")) || 0
+  };
+
+  const stored = message.getFlag("fast-nri", "defenseDisplay") ?? {};
+  const flavor = defenseRollFlavorHTML({
+    ...stored,
+    result: null,
+    resource,
+    resourceUndone: true
+  });
+
+  await message.update({
+    flavor,
+    "flags.fast-nri.resourceUndone": true,
+    "flags.fast-nri.resourceRestoredTo": restored
+  });
+
+  return { actor, restored, restoredAmount: spent };
+}
+
+export async function defenseFromChat(element) {
   const message = chatMessageFromElement(element);
 
   if (!message || message.getFlag("fast-nri", "kind") !== "damage") {
@@ -2108,35 +2476,21 @@ export async function selfDefenseFromChat(element) {
   const defenderToken = controlledSingleDefenderToken();
   if (!defenderToken) return null;
 
-  const targets = Array.from(game.user?.targets ?? []);
-
-  // Роль определяет только текущий выбор игрока:
-  // - target отсутствует -> выбранный Token защищает себя;
-  // - target совпадает с выбранным Token -> это тоже Самозащита;
-  // - единственный другой target -> Защита союзника.
-  // Исходный target атаки здесь намеренно не проверяется.
-  if (targets.length > 1) {
-    ui.notifications.warn("Для защиты выбери не больше одной цели.");
-    return null;
-  }
-
-  if (targets.length === 1) {
-    const target = targets[0];
-    const sameToken =
-      target?.id === defenderToken.id
-      || target?.document?.uuid === defenderToken.document?.uuid;
-
-    if (!sameToken) {
-      ui.notifications.info("Выбран другой токен: это Защита союзника. Эта ветка пока не реализована.");
-      return null;
-    }
-  }
-
   const defender = defenderToken.actor;
   if (!defender) {
     ui.notifications.error("У выбранного токена нет Actor.");
     return null;
   }
+
+  const targets = Array.from(game.user?.targets ?? []);
+  if (targets.length > 1) {
+    ui.notifications.warn("Для защиты выбери не больше одной защищаемой цели.");
+    return null;
+  }
+
+  const requestedTarget = targets[0] ?? defenderToken;
+  const role = sameTokenOrActor(defenderToken, requestedTarget) ? "self" : "ally";
+  const protectedToken = role === "self" ? defenderToken : requestedTarget;
 
   let damageState = foundry.utils.deepClone(
     message.getFlag("fast-nri", "damageState")
@@ -2148,35 +2502,60 @@ export async function selfDefenseFromChat(element) {
   }
 
   if (!damageState.supported) {
-    ui.notifications.error("Эту формулу урона пока нельзя безопасно обработать Самозащитой.");
+    ui.notifications.error("Эту формулу урона пока нельзя безопасно обработать Направленной защитой.");
     return null;
+  }
+
+  const method = await chooseDefenseMethod({
+    actor: defender,
+    defenderToken,
+    protectedToken,
+    role,
+    damageState
+  });
+  if (!method) return null;
+
+  const actionItem = method.item;
+  const actionConfig = method.config;
+  const actionName = method.actionName;
+
+  if (method.warnings.length) {
+    ui.notifications.warn(`${actionName}: ${method.warnings.join("; ")}.`);
+  }
+
+  if (actionConfig.movementMode === "moveAdjacent") {
+    ui.notifications.info(
+      `${actionName}: перемещение токена остаётся ручным. После выбора проверьте маршрут и свободную клетку рядом с целью.`
+    );
   }
 
   const attackTotal = finiteNumberOrNull(message.getFlag("fast-nri", "attackTotal"));
   const attackNaturalD20 = finiteNumberOrNull(message.getFlag("fast-nri", "attackNaturalD20"));
-  const weapon = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
+  const sourceItem = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
 
   if (attackTotal === null) {
-    ui.notifications.error("Не удалось определить результат исходной атаки для проверки Самозащиты.");
+    ui.notifications.error("Не удалось определить результат исходного действия для проверки защиты.");
     return null;
   }
 
   if (damageState.currentTotal <= 0) {
-    const continueForEffect = await confirmZeroDamageDefense();
+    const continueForEffect = await confirmZeroDamageDefense(actionName);
     if (!continueForEffect) return null;
   }
 
-  const removalMode = selfDefenseRemovalMode(weapon);
+  const removalMode = actionConfig.damageSelectionMode === "largest"
+    ? "largest"
+    : actionConfig.damageSelectionMode === "smallest"
+      ? "smallest"
+      : selfDefenseRemovalMode(sourceItem);
   const remainingBeforeRoll = (damageState.parts ?? []).filter(part => !part.removed);
-
-  // В случае равных максимальных/минимальных результатов выбор делается
-  // ДО броска защиты. Закрытие окна поэтому не создаёт способа перебросить
-  // уже совершённую проверку.
-  let selectedRemovalPart = null;
-  if (remainingBeforeRoll.length) {
-    selectedRemovalPart = await chooseDamagePart(remainingBeforeRoll, removalMode);
-    if (!selectedRemovalPart) return null;
-  }
+  const selectedRemovalParts = await chooseDamageParts(
+    remainingBeforeRoll,
+    actionConfig.removeDamageParts,
+    removalMode,
+    actionName
+  );
+  if (selectedRemovalParts === null) return null;
 
   const fortitude = finiteNumberOrNull(defender.system?.defenses?.fortitude);
   if (fortitude === null) {
@@ -2184,29 +2563,33 @@ export async function selfDefenseFromChat(element) {
     return null;
   }
 
-  const combatTerm = selfDefenseCombatTerm(defender);
-  const baseFormula = combatTerm
-    ? `1d20 + ${fortitude} + ${combatTerm}`
+  const combatSource = defenseCombatTerm(defender, actionItem, role);
+  const baseFormula = combatSource?.formula
+    ? `1d20 + ${fortitude} + ${combatSource.formula}`
     : `1d20 + ${fortitude}`;
 
+  const interventionCost = Math.max(0, Number(actionConfig.interventionCost) || 0);
   const interventions = finiteNumberOrNull(defender.system?.resources?.intervention);
-  if (interventions !== null && interventions <= 0) {
+  if (
+    interventionCost > 0
+    && interventions !== null
+    && interventions < interventionCost
+  ) {
     ui.notifications.warn(
-      `${defenderToken.name}: в листе сейчас 0 Вмешательств. Самозащита не блокируется; ресурс ведётся вручную.`
+      `${defenderToken.name}: в листе ${interventions} Вмешательств, требуется ${interventionCost}. ` +
+      `Защита не блокируется; базовый ресурс ведётся вручную.`
     );
   }
 
   const contextualModifiers = selfDefenseContextualModifiers(
     defender,
-    weapon,
+    sourceItem,
     damageState.originalEffectDegree
   );
 
-  const combatSource = selfDefenseCombatSource(defender, combatTerm);
-
   const result = await prepareRoll({
     actor: defender,
-    label: `Самозащита: ${defenderToken.name}`,
+    label: `${actionName}: ${defenderToken.name}`,
     baseFormula,
     baseSources: [
       { formula: "1d20", label: "Базовый d20", reason: "Направленная защита" },
@@ -2219,11 +2602,13 @@ export async function selfDefenseFromChat(element) {
       <section class="fast-nri-roll-context fast-nri-defense-roll-context">
         <i class="fa-solid fa-shield-halved"></i>
         <div>
-          <strong>Самозащита</strong>
+          <strong>${esc(actionName)}</strong>
           <small>
+            ${role === "ally" ? `Цель: ${esc(protectedToken.name)} · ` : ""}
             Исходный результат: ${esc(attackTotal)}
-            · Удаление: ${removalMode === "smallest" ? "самый маленький куб (Уверенное)" : "самый большой куб"}
-            · Требуется 1 Вмешательство (вручную)
+            · Удаление: ${esc(actionConfig.removeDamageParts)}
+            · Снижение Эффекта: ${esc(actionConfig.effectDegreeReduction)}
+            · ${esc(defenseCostLabel(actionItem ?? actionConfig, defender))}
           </small>
         </div>
       </section>
@@ -2233,7 +2618,6 @@ export async function selfDefenseFromChat(element) {
   if (!result) return null;
 
   let defenseResult = "failure";
-
   if (result.naturalD20 === 1) {
     defenseResult = "failure";
   } else if (result.naturalD20 === 20) {
@@ -2244,20 +2628,18 @@ export async function selfDefenseFromChat(element) {
 
   const effectDegreeBefore = damageState.effectDegree ?? null;
   let effectDegreeAfter = effectDegreeBefore;
-  let removedPart = null;
+  let removedParts = [];
 
   if (defenseResult === "full-cancel") {
     damageState.fullCancel = true;
     damageState.effectDegree = "failure";
     effectDegreeAfter = "failure";
   } else if (defenseResult === "success") {
-    removedPart = selectedRemovalPart;
+    removedParts = selectedRemovalParts ?? [];
+    const removedIds = new Set(removedParts.map(part => part.id));
 
-    if (removedPart) {
-      // Защита меняет числовой результат части на 0, но НЕ стирает её тип
-      // и свойства. Они продолжают существовать для последующей проверки
-      // Устойчивости/Уязвимости, пока Иммунитет не удалит эту часть целиком.
-      damageState.parts = damageState.parts.map(part => part.id === removedPart.id
+    if (removedIds.size) {
+      damageState.parts = damageState.parts.map(part => removedIds.has(part.id)
         ? {
             ...part,
             currentValue: 0,
@@ -2268,24 +2650,40 @@ export async function selfDefenseFromChat(element) {
       );
     }
 
-    effectDegreeAfter = lowerDegree(effectDegreeBefore, 1);
+    effectDegreeAfter = lowerDegree(
+      effectDegreeBefore,
+      actionConfig.effectDegreeReduction
+    );
     damageState.effectDegree = effectDegreeAfter;
   }
 
+  const resource = await spendDefenseClassResource(defender, actionItem);
+
   damageState.defense = {
-    kind: "self-defense",
+    kind: role === "self" ? "self-defense" : "ally-defense",
+    actionName,
+    abilityUuid: actionItem?.uuid ?? null,
     tokenUuid: defenderToken.document?.uuid ?? null,
     actorUuid: defender.uuid,
     tokenName: defenderToken.name || defender.name || "Защитник",
+    protectedTokenUuid: protectedToken?.document?.uuid ?? null,
+    protectedActorUuid: protectedToken?.actor?.uuid ?? null,
+    protectedTokenName: protectedToken?.name || protectedToken?.actor?.name || "Цель",
+    interventionCost,
+    classResourceCost: resource.cost,
     formula: result.formula,
     total: result.roll.total,
     naturalD20: result.naturalD20,
     attackTotal,
     attackNaturalD20,
     result: defenseResult,
-    removedPartId: removedPart?.id ?? null,
-    removedPart: removedPart ? foundry.utils.deepClone(removedPart) : null,
+    removedPartId: removedParts[0]?.id ?? null,
+    removedPart: removedParts[0] ? foundry.utils.deepClone(removedParts[0]) : null,
+    removedPartIds: removedParts.map(part => part.id),
+    removedParts: removedParts.map(part => foundry.utils.deepClone(part)),
     removalMode,
+    removeDamageParts: actionConfig.removeDamageParts,
+    effectDegreeReduction: actionConfig.effectDegreeReduction,
     contextualModifiers: result.automaticModifiers
       .filter(modifier => String(modifier.id ?? "").startsWith("context-")
         || String(modifier.id ?? "").startsWith("equipped-defensive-")
@@ -2310,19 +2708,25 @@ export async function selfDefenseFromChat(element) {
     great: "Большой"
   };
 
-  const defenseFlavor = `
-    <div class="fast-nri-chat-roll fast-nri-defense-roll-card">
-      ${rollCardHeader(`Самозащита: ${defenderToken.name}`, "fa-shield-halved")}
-      <div class="fast-nri-defense-roll-result">
-        <span>Исходный результат: <strong>${esc(attackTotal)}</strong></span>
-        <span>Защита: <strong>${esc(result.roll.total)}</strong></span>
-        <span>Результат: <strong>${esc(defenseResultLabel(defenseResult))}</strong></span>
-      </div>
-      ${rollSourcesHTML(result)}
-    </div>
-  `;
+  const defenseDisplay = {
+    actionName,
+    defenderTokenName: defenderToken.name,
+    protectedTokenName: protectedToken?.name || protectedToken?.actor?.name || defender.name,
+    role,
+    attackTotal,
+    defenseTotal: result.roll.total,
+    defenseResult,
+    sourcesHTML: rollSourcesHTML(result)
+  };
 
-  await result.roll.toMessage({
+  const defenseFlavor = defenseRollFlavorHTML({
+    ...defenseDisplay,
+    result,
+    resource,
+    resourceUndone: false
+  });
+
+  const defenseMessage = await result.roll.toMessage({
     speaker: ChatMessage.getSpeaker({
       actor: defender,
       token: defenderToken.document
@@ -2330,22 +2734,32 @@ export async function selfDefenseFromChat(element) {
     flavor: defenseFlavor,
     flags: {
       "fast-nri": {
-        kind: "self-defense-roll",
+        kind: "defense-roll",
+        actionName,
+        role,
+        abilityUuid: actionItem?.uuid ?? null,
         sourceDamageMessageId: message.id,
         defenderTokenUuid: defenderToken.document?.uuid ?? null,
         defenderActorUuid: defender.uuid,
+        protectedTokenUuid: protectedToken?.document?.uuid ?? null,
+        protectedActorUuid: protectedToken?.actor?.uuid ?? null,
         result: defenseResult,
         attackTotal,
-        naturalD20: result.naturalD20
+        naturalD20: result.naturalD20,
+        resourceCost: resource.cost,
+        resourceLabel: resource.label,
+        resourceBefore: resource.before,
+        resourceAfter: resource.after,
+        resourceSpent: resource.spent,
+        resourceShortage: resource.shortage,
+        resourceUndone: false,
+        defenseDisplay
       }
     }
   });
 
-  // Ключевое правило UI: исходная карточка урона остаётся неизменной.
-  // После защиты создаётся новая карточка с унаследованными результатами
-  // и уже изменённым набором кубов.
   const flavor = damageCardHTML({
-    weaponName: weapon?.name ?? "Урон",
+    weaponName: sourceItem?.name ?? "Урон",
     profileLabel: labels[profile] ?? profile ?? "",
     critical,
     state: damageState,
@@ -2380,11 +2794,20 @@ export async function selfDefenseFromChat(element) {
   return {
     message: derivedMessage,
     sourceMessage: message,
+    defenseMessage,
     defenderToken,
+    protectedToken,
+    actionItem,
+    actionName,
     roll: result.roll,
     result: defenseResult,
     damageState
   };
+}
+
+// Backward-compatible export for older callers/macros.
+export async function selfDefenseFromChat(element) {
+  return defenseFromChat(element);
 }
 
 function controlledSingleToken() {
@@ -2954,6 +3377,23 @@ export function activateChatInteractions(root = document) {
       return;
     }
 
+    const undoDefenseResourceButton = event.target.closest("[data-fast-nri-undo-defense-resource]");
+    if (undoDefenseResourceButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (undoDefenseResourceButton.dataset.fastNriBusy === "true") return;
+      undoDefenseResourceButton.dataset.fastNriBusy = "true";
+
+      try {
+        await undoDefenseResource(undoDefenseResourceButton);
+      } finally {
+        delete undoDefenseResourceButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
     const defenseButton = event.target.closest("[data-fast-nri-defense]");
     if (defenseButton) {
       event.preventDefault();
@@ -2963,7 +3403,7 @@ export function activateChatInteractions(root = document) {
       defenseButton.dataset.fastNriBusy = "true";
 
       try {
-        await selfDefenseFromChat(defenseButton);
+        await defenseFromChat(defenseButton);
       } finally {
         delete defenseButton.dataset.fastNriBusy;
       }

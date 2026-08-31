@@ -274,15 +274,19 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       // Не используется как список свойств и пока не выводится в UI.
       details: text(""),
 
-      // Игровой статус: предмет сейчас одет / удерживается.
+      // Пользовательская настройка активности Item в системных расчётах.
       equipped: flag(false),
 
-      // Сколько рук занимает предмет при экипировке.
-      // Игрок не выбирает "хват" во время игры: это характеристика Item.
+      // Физическое состояние: предмет находится в руках.
+      // Имеет смысл только если hands > 0.
+      held: flag(false),
+
+      // Сколько рук требует предмет: 0 = рук не требует, 1 или 2.
       hands: integer(1),
 
-      // Служебное время экипировки для правила "третий одноручный
-      // снимает самый давно экипированный одноручный".
+      // Внутренний маркер порядка удержания для автоматического вытеснения
+      // самого давно взятого одноручного предмета. Имя поля сохранено ради
+      // совместимости документов 0.5.29–0.5.30.
       equippedAt: integer(0),
 
       damageType: text("physical"),
@@ -338,6 +342,31 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         directedDefense: flag(false)
       }),
 
+      // Универсальная инфраструктура Защитных действий. Runtime ищет эти
+      // признаки у Ability Item и не зависит от названия или класса.
+      defenseAction: new SchemaField({
+        enabled: flag(false),
+        targetScope: text("ally"),
+        interventionCost: integer(1),
+        rangeMode: text("adjacent"),
+        rangeCells: integer(0),
+        requiresVisibility: flag(false),
+        movementMode: text("none"),
+        damageSelectionMode: text("standard"),
+        combatDiceFormula: text(""),
+        removeDamageParts: integer(1),
+        effectDegreeReduction: integer(1),
+        allowManeuver: flag(false)
+      }),
+
+      // Отдельная Ability может модифицировать формулу всех/части Защитных
+      // действий, не являясь самостоятельным способом защиты.
+      defenseModifier: new SchemaField({
+        enabled: flag(false),
+        scope: text("all"),
+        combatDiceFormula: text("")
+      }),
+
       // Ссылки на Effect Item. При использовании способности они выводятся
       // в chat-card как перетаскиваемые эффекты.
       effectUuids: stringArray()
@@ -357,7 +386,10 @@ export class EquipmentData extends foundry.abstract.TypeDataModel {
       details: text(""),
 
       equipped: flag(false),
-      hands: integer(1),
+      held: flag(false),
+      // Большинство снаряжения не обязано занимать руку.
+      hands: integer(0),
+      // Внутренний маркер порядка удержания; имя сохранено ради совместимости.
       equippedAt: integer(0)
     };
   }

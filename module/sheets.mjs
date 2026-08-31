@@ -1,4 +1,10 @@
-import { setItemEquipped, setItemHands } from "./equipment.mjs";
+import {
+  itemIsUsable,
+  itemRequiresHands,
+  setItemEquipped,
+  setItemHands,
+  setItemHeld
+} from "./equipment.mjs";
 import {
   CREATURE_TRAITS,
   HP_GAIN_DEFENSE_TRAITS,
@@ -20,6 +26,13 @@ import {
   runtimeDurationLabel
 } from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
+import {
+  DEFENSE_DAMAGE_SELECTION_MODES,
+  DEFENSE_MODIFIER_SCOPES,
+  DEFENSE_MOVEMENT_MODES,
+  DEFENSE_RANGE_MODES,
+  DEFENSE_TARGET_SCOPES
+} from "./defense-actions.mjs";
 import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -274,10 +287,41 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         event.currentTarget.disabled = true;
 
         try {
-          await setItemEquipped(item, event.currentTarget.checked);
+          const requested = event.currentTarget.checked;
+          const resolved = await setItemEquipped(item, requested);
+          event.currentTarget.checked = resolved?.system?.equipped === true;
+          if (requested && resolved?.system?.equipped !== true) {
+            ui.notifications.warn("Недостаточно свободных рук. Предмет не экипирован.");
+          }
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка экипировки Item", error);
           ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
+        } finally {
+          event.currentTarget.disabled = false;
+        }
+      });
+    }
+
+    for (const checkbox of this.element.querySelectorAll("[data-fast-nri-held-toggle]")) {
+      checkbox.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const itemId = event.currentTarget
+          .closest("[data-item-id]")
+          ?.dataset?.itemId;
+
+        const item = this.actor.items.get(itemId);
+        if (!item) return;
+
+        event.currentTarget.disabled = true;
+
+        try {
+          const resolved = await setItemHeld(item, event.currentTarget.checked);
+          event.currentTarget.checked = resolved?.system?.held === true;
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка состояния «В руках»", error);
+          ui.notifications.error(`Не удалось изменить состояние «В руках»: ${error.message}`);
         } finally {
           event.currentTarget.disabled = false;
         }
@@ -472,10 +516,35 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.currentTarget.disabled = true;
 
         try {
-          await setItemEquipped(this.item, event.currentTarget.checked);
+          const requested = event.currentTarget.checked;
+          const resolved = await setItemEquipped(this.item, requested);
+          event.currentTarget.checked = resolved?.system?.equipped === true;
+          if (requested && resolved?.system?.equipped !== true) {
+            ui.notifications.warn("Недостаточно свободных рук. Предмет не экипирован.");
+          }
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка экипировки Item", error);
           ui.notifications.error(`Не удалось изменить экипировку: ${error.message}`);
+        } finally {
+          event.currentTarget.disabled = false;
+        }
+      });
+    }
+
+
+    const held = this.element.querySelector("[data-fast-nri-item-held]");
+    if (held) {
+      held.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.disabled = true;
+
+        try {
+          const resolved = await setItemHeld(this.item, event.currentTarget.checked);
+          event.currentTarget.checked = resolved?.system?.held === true;
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка состояния «В руках»", error);
+          ui.notifications.error(`Не удалось изменить состояние «В руках»: ${error.message}`);
         } finally {
           event.currentTarget.disabled = false;
         }
@@ -962,6 +1031,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",
+      showHeldToggle: itemRequiresHands(this.item),
+      itemUsable: itemIsUsable(this.item),
       isConsumable: this.item.type === "consumable",
       isEffect: this.item.type === "effect",
       linkedEffectRows,
@@ -984,6 +1055,11 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
               round: Number(game.combat.round) || 0
             } : null)
           : "",
+      defenseTargetScopeChoices: DEFENSE_TARGET_SCOPES,
+      defenseRangeModeChoices: DEFENSE_RANGE_MODES,
+      defenseMovementModeChoices: DEFENSE_MOVEMENT_MODES,
+      defenseDamageSelectionChoices: DEFENSE_DAMAGE_SELECTION_MODES,
+      defenseModifierScopeChoices: DEFENSE_MODIFIER_SCOPES,
       abilityIsSpell:
         this.item.type === "ability" && this.item.system.category === "spell"
     };

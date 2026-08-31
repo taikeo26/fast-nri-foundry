@@ -42,18 +42,30 @@
           </multi-select>
         </label>
         <div class="fast-nri-item-equip-config">
-          <label class="fast-nri-checkbox-label">
+          <label class="fast-nri-checkbox-label" title="Активен и учитывается в системных расчётах">
             <input
               type="checkbox"
               data-fast-nri-item-equipped
               {{#if system.equipped}}checked{{/if}}
             />
-            Одето
+            Экипирован
           </label>
 
+          {{#if showHeldToggle}}
+            <label class="fast-nri-checkbox-label" title="Физически находится в руках">
+              <input
+                type="checkbox"
+                data-fast-nri-item-held
+                {{#if system.held}}checked{{/if}}
+              />
+              В руках
+            </label>
+          {{/if}}
+
           <label>
-            Занимает рук
+            Требует рук
             <select data-fast-nri-item-hands>
+              <option value="0" {{#if (eq system.hands 0)}}selected{{/if}}>Не требует</option>
               <option value="1" {{#if (eq system.hands 1)}}selected{{/if}}>1</option>
               <option value="2" {{#if (eq system.hands 2)}}selected{{/if}}>2</option>
             </select>
@@ -216,6 +228,166 @@
         {{/if}}
       </div>
 
+      <div class="fast-nri-ability-defense-config">
+        <h3>Защитное действие</h3>
+
+        <label class="fast-nri-checkbox-label">
+          <input
+            type="checkbox"
+            name="system.defenseAction.enabled"
+            {{#if system.defenseAction.enabled}}checked{{/if}}
+          />
+          <span>Показывать эту способность как способ защиты</span>
+        </label>
+
+        {{#if system.defenseAction.enabled}}
+          <div class="fast-nri-two">
+            <label>
+              Кого можно защищать
+              <select name="system.defenseAction.targetScope">
+                {{selectOptions defenseTargetScopeChoices selected=system.defenseAction.targetScope}}
+              </select>
+            </label>
+
+            <label>
+              Вмешательств
+              <input
+                type="number"
+                min="0"
+                name="system.defenseAction.interventionCost"
+                value="{{system.defenseAction.interventionCost}}"
+              />
+            </label>
+          </div>
+
+          <div class="fast-nri-two">
+            <label>
+              Дистанция
+              <select name="system.defenseAction.rangeMode">
+                {{selectOptions defenseRangeModeChoices selected=system.defenseAction.rangeMode}}
+              </select>
+            </label>
+
+            {{#if (eq system.defenseAction.rangeMode "cells")}}
+              <label>
+                Клеток
+                <input
+                  type="number"
+                  min="0"
+                  name="system.defenseAction.rangeCells"
+                  value="{{system.defenseAction.rangeCells}}"
+                />
+              </label>
+            {{else}}
+              <label>
+                Перемещение
+                <select name="system.defenseAction.movementMode">
+                  {{selectOptions defenseMovementModeChoices selected=system.defenseAction.movementMode}}
+                </select>
+              </label>
+            {{/if}}
+          </div>
+
+          <label class="fast-nri-checkbox-label">
+            <input
+              type="checkbox"
+              name="system.defenseAction.requiresVisibility"
+              {{#if system.defenseAction.requiresVisibility}}checked{{/if}}
+            />
+            <span>Требует видимую защищаемую цель</span>
+          </label>
+
+          <div class="fast-nri-two">
+            <label>
+              Кубы Боевой подготовки
+              <input
+                type="text"
+                name="system.defenseAction.combatDiceFormula"
+                value="{{system.defenseAction.combatDiceFormula}}"
+                placeholder="пусто = обычная формула Actor"
+              />
+            </label>
+
+            <label>
+              Удалить частей урона
+              <input
+                type="number"
+                min="0"
+                name="system.defenseAction.removeDamageParts"
+                value="{{system.defenseAction.removeDamageParts}}"
+              />
+            </label>
+          </div>
+
+          <label>
+            Какие части удалять
+            <select name="system.defenseAction.damageSelectionMode">
+              {{selectOptions defenseDamageSelectionChoices selected=system.defenseAction.damageSelectionMode}}
+            </select>
+          </label>
+
+          <div class="fast-nri-two">
+            <label>
+              Снизить степень Эффекта на
+              <input
+                type="number"
+                min="0"
+                name="system.defenseAction.effectDegreeReduction"
+                value="{{system.defenseAction.effectDegreeReduction}}"
+              />
+            </label>
+
+            <label class="fast-nri-checkbox-label fast-nri-defense-inline-checkbox">
+              <input
+                type="checkbox"
+                name="system.defenseAction.allowManeuver"
+                {{#if system.defenseAction.allowManeuver}}checked{{/if}}
+              />
+              <span>Разрешает защиту от Манёвра</span>
+            </label>
+          </div>
+
+          <small class="fast-nri-help">
+            Базовые ресурсы здесь только показываются и предупреждают — система их не списывает.
+            Стоимость классового ресурса берётся из общего поля способности выше и списывается мягко.
+          </small>
+        {{/if}}
+      </div>
+
+      <div class="fast-nri-ability-defense-config">
+        <h3>Модификатор Защитных действий</h3>
+
+        <label class="fast-nri-checkbox-label">
+          <input
+            type="checkbox"
+            name="system.defenseModifier.enabled"
+            {{#if system.defenseModifier.enabled}}checked{{/if}}
+          />
+          <span>Эта способность меняет формулу Защитных действий</span>
+        </label>
+
+        {{#if system.defenseModifier.enabled}}
+          <div class="fast-nri-two">
+            <label>
+              Область действия
+              <select name="system.defenseModifier.scope">
+                {{selectOptions defenseModifierScopeChoices selected=system.defenseModifier.scope}}
+              </select>
+            </label>
+
+            <label>
+              Кубы Боевой подготовки
+              <input
+                type="text"
+                name="system.defenseModifier.combatDiceFormula"
+                value="{{system.defenseModifier.combatDiceFormula}}"
+                placeholder="например 2d6"
+              />
+            </label>
+          </div>
+        {{/if}}
+      </div>
+
       <div class="fast-nri-ability-outcome-config">
         <h3>Автоматические результаты</h3>
         <small class="fast-nri-help">
@@ -369,18 +541,30 @@
           <input type="text" name="system.category" value="{{system.category}}" />
         </label>
         <div class="fast-nri-item-equip-config">
-          <label class="fast-nri-checkbox-label">
+          <label class="fast-nri-checkbox-label" title="Активен и учитывается в системных расчётах">
             <input
               type="checkbox"
               data-fast-nri-item-equipped
               {{#if system.equipped}}checked{{/if}}
             />
-            Одето
+            Экипирован
           </label>
 
+          {{#if showHeldToggle}}
+            <label class="fast-nri-checkbox-label" title="Физически находится в руках">
+              <input
+                type="checkbox"
+                data-fast-nri-item-held
+                {{#if system.held}}checked{{/if}}
+              />
+              В руках
+            </label>
+          {{/if}}
+
           <label>
-            Занимает рук
+            Требует рук
             <select data-fast-nri-item-hands>
+              <option value="0" {{#if (eq system.hands 0)}}selected{{/if}}>Не требует</option>
               <option value="1" {{#if (eq system.hands 1)}}selected{{/if}}>1</option>
               <option value="2" {{#if (eq system.hands 2)}}selected{{/if}}>2</option>
             </select>

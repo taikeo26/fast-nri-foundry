@@ -17,10 +17,15 @@ import {
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
 import {
   migrateDamageTraitsOnce,
+  migrateEquipmentStateOnce,
   registerDataMigrationSettings
 } from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
+import {
+  migrateDefenseAbilitiesOnce,
+  registerDefenseActionSettings
+} from "./module/defense-actions.mjs";
 
 import {
   CharacterData,
@@ -43,6 +48,7 @@ Hooks.once("init", () => {
   registerTokenDefaultSettings();
   registerDataMigrationSettings();
   registerEffectSettings();
+  registerDefenseActionSettings();
   activateTokenDefaults();
   registerFastNriTokenVisuals();
   registerFastNriTokenHud();
@@ -106,7 +112,9 @@ Hooks.once("ready", async () => {
   activateFastNriEffectPanel();
   activateHpFeedback();
   await seedBuiltinEffectsOnce();
+  await migrateDefenseAbilitiesOnce();
   await migrateDamageTraitsOnce();
+  await migrateEquipmentStateOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
   ui.notifications.info("Быстрая НРИ 6.2 загружена");

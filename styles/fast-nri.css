@@ -1039,7 +1039,7 @@ body.theme-dark .fast-nri-chat-damage-profile-name {
 
 .fast-nri-hit-damage-buttons {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 4px;
 }
 
@@ -1148,7 +1148,7 @@ body.theme-dark .fast-nri-hit-damage-great.selected {
 /* ========================================================= */
 
 .fast-nri-weapon-row {
-  grid-template-columns: 28px minmax(0, 1fr) auto auto 28px;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto 28px;
 }
 
 .fast-nri-attack-button {
@@ -1705,15 +1705,20 @@ body.theme-dark .fast-nri-defense-resolved {
   margin: 0;
 }
 
+.fast-nri-held-placeholder {
+  display: block;
+  min-width: 1px;
+}
+
 .fast-nri-item-equip-config {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.8fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
   align-items: end;
 }
 
 .fast-nri-weapon-row {
-  grid-template-columns: 28px minmax(0, 1fr) auto auto auto 28px;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto auto 28px;
 }
 
 .fast-nri-inventory .fast-nri-item-group:nth-of-type(2) .fast-nri-item-row {
@@ -2556,7 +2561,7 @@ body.theme-dark .fast-nri-hp-line label {
   top: 6px;
   right: 8px;
   width: max-content;
-  max-width: 52px;
+  max-width: 58px;
   pointer-events: auto;
 }
 
@@ -2572,8 +2577,8 @@ body.theme-dark .fast-nri-hp-line label {
 
 .fast-nri-applied-effect-icon {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   padding: 2px;
   border: 1px solid rgba(180, 180, 190, 0.38);
   border-radius: 5px;
@@ -2716,4 +2721,64 @@ body.theme-dark .fast-nri-hp-line label {
   border-top: 1px solid rgba(170, 170, 180, 0.22);
   font-size: 0.72rem;
   opacity: 0.66;
+}
+
+/* ========================================================= */
+/* v0.5.29 - Defense Ability infrastructure + method dialog  */
+/* ========================================================= */
+
+.fast-nri-ability-defense-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(125, 140, 165, 0.28);
+  border-radius: 6px;
+  background: rgba(80, 105, 145, 0.05);
+}
+
+.fast-nri-ability-defense-config h3 {
+  margin: 0;
+}
+
+.fast-nri-defense-inline-checkbox {
+  align-self: end;
+  min-height: 34px;
+}
+
+.fast-nri-defense-method-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fast-nri-defense-method-intro p {
+  margin: 4px 0;
+}
+
+.fast-nri-defense-method-dialog footer.form-footer,
+.fast-nri-defense-method-dialog .form-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.fast-nri-defense-method-dialog footer.form-footer > button,
+.fast-nri-defense-method-dialog .form-footer > button {
+  width: 100%;
+  min-height: 42px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+}
+
+.fast-nri-defense-method-dialog .fast-nri-defense-method-button.is-unavailable {
+  opacity: 0.5;
+}
+
+.fast-nri-defense-method-dialog .fast-nri-defense-method-cancel {
+  margin-top: 4px;
+  justify-content: center;
 }
