@@ -493,6 +493,25 @@
       </div>
       </div>
 
+      <div class="fast-nri-formation-rules">
+        <h3>Модификаторы Строя</h3>
+        <div class="fast-nri-three">
+          <label>Бонус себе
+            <input type="number" min="0" name="system.rules.formation.selfBonus" value="{{system.rules.formation.selfBonus}}" />
+          </label>
+          <label>Бонус соседним союзникам
+            <input type="number" min="0" name="system.rules.formation.adjacentAllyBonus" value="{{system.rules.formation.adjacentAllyBonus}}" />
+          </label>
+          <label>Штраф Строю цели для владельца
+            <input type="number" min="0" name="system.rules.formation.targetPenalty" value="{{system.rules.formation.targetPenalty}}" />
+          </label>
+        </div>
+        <small class="fast-nri-help">
+          Машинные модификаторы для расчёта поля. Одинаковые бонусы одного направления не складываются: используется наибольший.
+          Штраф цели действует только при расчёте Строя относительно владельца этой способности.
+        </small>
+      </div>
+
       <div class="fast-nri-ability-effect-links">
         <h3>Эффекты</h3>
         <small class="fast-nri-help">
@@ -656,6 +675,34 @@
 
       <div class="fast-nri-effect-definition-summary">
         <strong>{{effectDurationLabel}}</strong>
+      </div>
+
+      <div class="fast-nri-formation-rules">
+        <h3>Модификаторы Строя</h3>
+        <div class="fast-nri-three">
+          <label>Бонус себе
+            <input type="number" min="0" name="system.rules.formation.selfBonus" value="{{system.rules.formation.selfBonus}}" />
+          </label>
+          <label>Бонус соседним союзникам
+            <input type="number" min="0" name="system.rules.formation.adjacentAllyBonus" value="{{system.rules.formation.adjacentAllyBonus}}" />
+          </label>
+          <label>Штраф Строю цели для владельца
+            <input type="number" min="0" name="system.rules.formation.targetPenalty" value="{{system.rules.formation.targetPenalty}}" />
+          </label>
+        </div>
+        <small class="fast-nri-help">Машинные модификаторы действуют только пока этот Effect находится на Actor.</small>
+      </div>
+
+      <div class="fast-nri-effect-rule-flags">
+        <label class="fast-nri-checkbox-label" title="Только для вычисления состояния поля; кнопки атак не блокируются">
+          <input
+            type="checkbox"
+            name="system.rules.disableMeleeControl"
+            {{#if system.rules.disableMeleeControl}}checked{{/if}}
+          />
+          Отключает контроль ближнего боя
+        </label>
+        <small>Машинное свойство: пока Effect действует, существо не создаёт контролируемых клеток ближнего боя.</small>
       </div>
 
       {{#if item.isEmbedded}}

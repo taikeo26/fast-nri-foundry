@@ -1,4 +1,5 @@
 import { HP_GAIN_DEFENSE_TRAITS, HP_GAIN_SOURCE_TRAITS } from "./config.mjs";
+import { HP_FEEDBACK_SUPPRESS_OPTION } from "./hp-feedback.mjs";
 
 function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -221,7 +222,7 @@ export async function applyHpGainFromChat(element, kind) {
     : { "system.hp.temp": afterTemp };
 
   try {
-    await actor.update(update);
+    await actor.update(update, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка Получения HP", error);
     ui.notifications.error("Не удалось изменить HP выделенного токена.");
@@ -310,7 +311,7 @@ export async function undoHpGainFromChat(element) {
   if (kind === "healing-applied") {
     const current = Math.max(0, Number(actor.system?.hp?.value) || 0);
     const after = Math.max(0, current - applied);
-    await actor.update({ "system.hp.value": after });
+    await actor.update({ "system.hp.value": after }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
   } else {
     const current = Math.max(0, Number(actor.system?.hp?.temp) || 0);
     const expectedAfter = Math.max(0, Number(message.getFlag("fast-nri", "afterTemp")) || 0);
@@ -322,7 +323,7 @@ export async function undoHpGainFromChat(element) {
       ui.notifications.warn("Временные HP уже изменились после этой карточки. Автоматический Undo отменён, чтобы не стереть более новый эффект.");
       return null;
     }
-    await actor.update({ "system.hp.temp": previous });
+    await actor.update({ "system.hp.temp": previous }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
   }
 
   const tokenName = message.getFlag("fast-nri", "tokenName") || actor.name;

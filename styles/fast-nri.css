@@ -2782,3 +2782,11 @@ body.theme-dark .fast-nri-hp-line label {
   margin-top: 4px;
   justify-content: center;
 }
+
+.fast-nri-effect-system-only {
+  cursor: default;
+}
+
+.fast-nri-effect-system-only:not(.active) {
+  opacity: 0.55;
+}

@@ -16,6 +16,15 @@ import {
 } from "./module/effect-system.mjs";
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
 import { activateWeaponRules } from "./module/weapon-rules.mjs";
+import { activateFieldGeometry } from "./module/field-geometry.mjs";
+// Controlled-cell rules are imported by later field automation layers.
+// The module itself is pure and requires no activation hook.
+import "./module/melee-control.mjs";
+// Threat counting and Formation are pure rules layers consumed by later
+// Surrounding automation.
+import "./module/threat.mjs";
+import "./module/formation.mjs";
+import { activateSurroundingAutomation } from "./module/surrounding.mjs";
 import {
   migrateDamageTraitsOnce,
   migrateEquipmentStateOnce,
@@ -52,6 +61,7 @@ Hooks.once("init", () => {
   registerDefenseActionSettings();
   activateTokenDefaults();
   activateWeaponRules();
+  activateFieldGeometry();
   registerFastNriTokenVisuals();
   registerFastNriTokenHud();
 
@@ -114,6 +124,7 @@ Hooks.once("ready", async () => {
   activateFastNriEffectPanel();
   activateHpFeedback();
   await seedBuiltinEffectsOnce();
+  activateSurroundingAutomation();
   await migrateDefenseAbilitiesOnce();
   await migrateDamageTraitsOnce();
   await migrateEquipmentStateOnce();

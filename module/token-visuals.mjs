@@ -62,17 +62,26 @@ export function calculateHpBarLayout({ value = 0, max = 0, temp = 0 } = {}) {
   return { green, gap, blue };
 }
 
-function touchesHp(changes) {
+export function touchesHp(changes) {
   const hp = changes?.system?.hp;
-  if (!hp || typeof hp !== "object") return false;
+  if (hp && typeof hp === "object") {
+    if (["value", "max", "temp"].some(
+      key => Object.prototype.hasOwnProperty.call(hp, key)
+    )) return true;
+  }
 
-  return ["value", "max", "temp"].some(
-    key => Object.prototype.hasOwnProperty.call(hp, key)
+  // Be tolerant of flattened update data produced by direct Document.update
+  // calls or integrations which submit dot-path keys.
+  return ["system.hp.value", "system.hp.max", "system.hp.temp"].some(
+    key => Object.prototype.hasOwnProperty.call(changes ?? {}, key)
   );
 }
 
-function refreshActorHpBars(actor) {
-  for (const token of actor?.getActiveTokens?.(true, true) ?? []) {
+export function refreshActorHpBars(actor) {
+  // getActiveTokens(..., false) returns canvas Token placeables. The previous
+  // code requested TokenDocuments and then tried to use renderFlags on them,
+  // so hp.temp-only updates could leave the custom combined bar stale.
+  for (const token of actor?.getActiveTokens?.(false, false) ?? []) {
     token.renderFlags?.set?.({ refreshBars: true });
   }
 }

@@ -5,7 +5,8 @@ import {
   durationDefinitionLabel,
   effectStackCount,
   removeOneEffectStack,
-  runtimeDurationLabel
+  runtimeDurationLabel,
+  isSystemOnlyEffect
 } from "./effect-system.mjs";
 
 const HUD_EFFECT_PREFIX = "fast-nri-effect:";
@@ -66,16 +67,21 @@ export function buildFastNriHudChoice(source, actor, combatState = null) {
       ].join(" • ")
     : definition;
 
+  const systemOnly = isSystemOnlyEffect(source);
+
   return {
     _id: id,
     id,
-    title: `${source.name} • ${stateLabel} • ${stacking} • ЛКМ: применить • ПКМ: снять один стак`,
+    title: systemOnly
+      ? `${source.name} • ${stateLabel} • Системный эффект — управляется автоматически`
+      : `${source.name} • ${stateLabel} • ${stacking} • ЛКМ: применить • ПКМ: снять один стак`,
     src: source.img,
     isActive: Boolean(applied),
     isOverlay: false,
     order: 100000 + (Number(source.sort) || 0),
     cssClass: [
       "fast-nri-effect-item",
+      systemOnly ? "fast-nri-effect-system-only" : "",
       applied ? "active" : ""
     ].filter(Boolean).join(" ")
   };
@@ -99,6 +105,8 @@ async function handleFastNriEffect(hud, event, statusId) {
     ui.notifications.warn("Не удалось найти Effect Item для этой иконки.");
     return;
   }
+
+  if (isSystemOnlyEffect(source)) return;
 
   if (event.button === 2) {
     const applied = appliedEffectForSource(actor, source);

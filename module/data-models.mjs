@@ -86,6 +86,17 @@ const outcomeChannelSchema = () =>
   });
 
 
+
+const formationRulesSchema = () =>
+  new SchemaField({
+    // Положительный бонус к Строю самого владельца правила.
+    selfBonus: integer(0),
+    // Положительный бонус к Строю соседних союзников владельца.
+    adjacentAllyBonus: integer(0),
+    // Положительный штраф к Строю цели только для владельца правила.
+    targetPenalty: integer(0)
+  });
+
 const effectTimerArray = () =>
   new ArrayField(
     new SchemaField({
@@ -367,6 +378,12 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         combatDiceFormula: text("")
       }),
 
+      // Универсальные машинные правила пассивной способности. Runtime не
+      // зависит от названия способности или класса владельца.
+      rules: new SchemaField({
+        formation: formationRulesSchema()
+      }),
+
       // Ссылки на Effect Item. При использовании способности они выводятся
       // в chat-card как перетаскиваемые эффекты.
       effectUuids: stringArray()
@@ -423,6 +440,13 @@ export class EffectData extends foundry.abstract.TypeDataModel {
       // independent — каждый стак имеет собственный таймер.
       stacking: new SchemaField({
         mode: text("none")
+      }),
+
+      // Машинные свойства Effect используются только для объективных
+      // вычислений поля и не блокируют игровые кнопки/решения пользователя.
+      rules: new SchemaField({
+        disableMeleeControl: flag(false),
+        formation: formationRulesSchema()
       }),
 
       // Источник и runtime используются только у Effect, встроенного в Actor.

@@ -3,11 +3,18 @@ const TOKEN_MIGRATION_VERSION = 1;
 const AUTO_ROTATE_MIGRATION_SETTING = "disableAutoRotateMigration";
 const AUTO_ROTATE_MIGRATION_VERSION = 1;
 
-function tokenBarDefaults() {
+export function tokenDefaultsForActorType(actorType) {
+  const disposition = actorType === "character"
+    ? CONST.TOKEN_DISPOSITIONS.FRIENDLY
+    : actorType === "creature"
+      ? CONST.TOKEN_DISPOSITIONS.HOSTILE
+      : undefined;
+
   return {
     displayBars: CONST.TOKEN_DISPLAY_MODES.ALWAYS,
     bar1: { attribute: "hp" },
-    bar2: { attribute: "" }
+    bar2: { attribute: "" },
+    ...(disposition === undefined ? {} : { disposition })
   };
 }
 
@@ -40,7 +47,7 @@ export function registerTokenDefaultSettings() {
  */
 export function activateTokenDefaults() {
   Hooks.on("preCreateActor", actor => {
-    actor.prototypeToken?.updateSource(tokenBarDefaults());
+    actor.prototypeToken?.updateSource(tokenDefaultsForActorType(actor?.type));
   });
 }
 

@@ -586,7 +586,7 @@
               class="fast-nri-applied-effect-row"
               data-item-id="{{row.id}}"
               data-fast-nri-applied-effect-id="{{row.id}}"
-              title="ПКМ: снять один стак"
+              title="{{#if row.systemOnly}}Системный эффект — снимается автоматически{{else}}ПКМ: снять один стак{{/if}}"
             >
               <img src="{{row.img}}" alt="" />
 

@@ -25,6 +25,14 @@ export const EFFECT_KINDS = Object.freeze({
   debuff: "Дебафф"
 });
 
+export const OFF_GUARD_EFFECT_ID = "off-guard";
+export const SURROUNDED_EFFECT_ID = "surrounded";
+
+export function isSystemOnlyEffect(effectOrSource) {
+  return Boolean(effectOrSource?.getFlag?.(SYSTEM_ID, "systemOnly"));
+}
+const RELATIVE_OFF_GUARD_FLAG = "relativeOffGuardReasons";
+
 export const BUILTIN_EFFECTS = Object.freeze([
   {
     id: "prone",
@@ -45,6 +53,12 @@ export const BUILTIN_EFFECTS = Object.freeze([
     id: "off-guard",
     name: "Застигнут врасплох",
     img: "icons/skills/melee/shield-damaged-broken-blue.webp"
+  },
+  {
+    id: "surrounded",
+    name: "Окружён",
+    img: "icons/skills/melee/shield-damaged-broken-blue.webp",
+    systemOnly: true
   },
   {
     id: "slowed",
@@ -298,6 +312,220 @@ function activeCombatDisplayState() {
   };
 }
 
+function uniqueStrings(values = []) {
+  return Array.from(new Set(
+    Array.from(values ?? [])
+      .map(value => String(value ?? "").trim())
+      .filter(Boolean)
+  ));
+}
+
+export function builtinEffectId(effect) {
+  if (!effect || effect.type !== "effect") return "";
+
+  const directId = String(effect.getFlag?.(SYSTEM_ID, "builtinEffectId") ?? "");
+  if (directId) return directId;
+
+  const sourceUuid = String(effect.system?.sourceUuid ?? "").trim();
+  if (!sourceUuid) return "";
+
+  const source = globalThis.fromUuidSync?.(sourceUuid) ?? null;
+  return String(source?.getFlag?.(SYSTEM_ID, "builtinEffectId") ?? "");
+}
+
+export function isOffGuardEffect(effect) {
+  return builtinEffectId(effect) === OFF_GUARD_EFFECT_ID;
+}
+
+export function isSurroundedEffect(effect) {
+  return builtinEffectId(effect) === SURROUNDED_EFFECT_ID;
+}
+
+function builtinEffectSourceDocument(builtinId) {
+  const id = String(builtinId ?? "").trim();
+  if (!id) return null;
+
+  return game.items?.find?.(item =>
+    item.type === "effect"
+    && String(item.getFlag?.(SYSTEM_ID, "builtinEffectId") ?? "") === id
+  ) ?? null;
+}
+
+export function actorHasBuiltinEffect(actor, builtinId) {
+  if (!actor) return false;
+  const id = String(builtinId ?? "").trim();
+  if (!id) return false;
+
+  return Array.from(actor.items ?? []).some(item =>
+    item.type === "effect" && builtinEffectId(item) === id
+  );
+}
+
+export function hasManualOffGuardEffect(actor) {
+  return actorHasBuiltinEffect(actor, OFF_GUARD_EFFECT_ID);
+}
+
+export function hasSurroundedEffect(actor) {
+  return actorHasBuiltinEffect(actor, SURROUNDED_EFFECT_ID);
+}
+
+export async function applySurroundedEffect(actor) {
+  if (!actor || hasSurroundedEffect(actor)) {
+    return Array.from(actor?.items ?? []).find(item => isSurroundedEffect(item)) ?? null;
+  }
+
+  const source = builtinEffectSourceDocument(SURROUNDED_EFFECT_ID);
+  if (!source) {
+    ui.notifications?.warn?.("Не найден встроенный системный Effect «Окружён».");
+    return null;
+  }
+
+  return applyEffectToActor(source, actor, { allowSystemOnly: true });
+}
+
+export async function removeSurroundedEffect(actor) {
+  if (!actor) return false;
+  const effect = Array.from(actor.items ?? []).find(item => isSurroundedEffect(item)) ?? null;
+  if (!effect) return false;
+
+  // System-only Effects reject ordinary manual deletion. Automation uses this
+  // explicit operation flag so only the field calculator can remove it.
+  await effect.delete({ fastNriSystemEffectRemoval: true });
+  refreshNativeEffectHud(actor);
+  return true;
+}
+
+export function normalizeRelativeOffGuardState(entries = []) {
+  const result = [];
+  for (const entry of Array.from(entries ?? [])) {
+    const observerUuid = String(entry?.observerUuid ?? "").trim();
+    if (!observerUuid) continue;
+    const reasons = uniqueStrings(entry?.reasons ?? []);
+    if (!reasons.length) continue;
+
+    const existing = result.find(item => item.observerUuid === observerUuid);
+    if (existing) existing.reasons = uniqueStrings([...existing.reasons, ...reasons]);
+    else result.push({ observerUuid, reasons });
+  }
+  return result;
+}
+
+export function addRelativeOffGuardReasonState(entries = [], observerUuid, reasonId) {
+  const observer = String(observerUuid ?? "").trim();
+  const reason = String(reasonId ?? "").trim();
+  const next = normalizeRelativeOffGuardState(entries);
+  if (!observer || !reason) return next;
+
+  const entry = next.find(item => item.observerUuid === observer);
+  if (entry) entry.reasons = uniqueStrings([...entry.reasons, reason]);
+  else next.push({ observerUuid: observer, reasons: [reason] });
+  return next;
+}
+
+export function removeRelativeOffGuardReasonState(entries = [], observerUuid, reasonId) {
+  const observer = String(observerUuid ?? "").trim();
+  const reason = String(reasonId ?? "").trim();
+  return normalizeRelativeOffGuardState(entries)
+    .map(entry => entry.observerUuid === observer
+      ? { ...entry, reasons: uniqueStrings(entry.reasons).filter(existing => existing !== reason) }
+      : entry)
+    .filter(entry => entry.reasons.length > 0);
+}
+
+function observerUuid(observerOrUuid) {
+  if (typeof observerOrUuid === "string") return observerOrUuid.trim();
+
+  // Relative rules belong to the observing creature, not to one particular
+  // placed Token. Accept Actor, Token, or TokenDocument callers and normalize
+  // all Token-shaped inputs to their Actor UUID.
+  const actorUuid = observerOrUuid?.actor?.uuid
+    ?? observerOrUuid?.document?.actor?.uuid
+    ?? "";
+  return String(actorUuid || observerOrUuid?.uuid || "").trim();
+}
+
+export function relativeOffGuardState(targetActor) {
+  if (!targetActor) return [];
+  return normalizeRelativeOffGuardState(
+    targetActor.getFlag?.(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG) ?? []
+  );
+}
+
+export function replaceRelativeOffGuardReasonState(entries = [], reasonId, observerUuids = []) {
+  const reason = String(reasonId ?? "").trim();
+  const desired = new Set(uniqueStrings(observerUuids));
+  const next = normalizeRelativeOffGuardState(entries)
+    .map(entry => ({
+      observerUuid: entry.observerUuid,
+      reasons: uniqueStrings(entry.reasons).filter(existing => existing !== reason)
+    }))
+    .filter(entry => entry.reasons.length > 0);
+
+  if (!reason) return next;
+
+  for (const observerUuid of Array.from(desired).sort()) {
+    const entry = next.find(item => item.observerUuid === observerUuid);
+    if (entry) entry.reasons = uniqueStrings([...entry.reasons, reason]);
+    else next.push({ observerUuid, reasons: [reason] });
+  }
+
+  return normalizeRelativeOffGuardState(next);
+}
+
+export async function replaceRelativeOffGuardReasonObservers(targetActor, reasonId, observerUuids = []) {
+  if (!targetActor) return false;
+
+  const current = relativeOffGuardState(targetActor);
+  const next = replaceRelativeOffGuardReasonState(current, reasonId, observerUuids);
+  if (JSON.stringify(current) === JSON.stringify(next)) return false;
+
+  if (next.length) await targetActor.setFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG, next);
+  else await targetActor.unsetFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG);
+  return true;
+}
+
+export function relativeOffGuardReasons(targetActor, observerOrUuid) {
+  if (!targetActor) return [];
+  const observer = observerUuid(observerOrUuid);
+  if (!observer) return [];
+
+  const entries = normalizeRelativeOffGuardState(
+    targetActor.getFlag?.(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG) ?? []
+  );
+  return entries.find(entry => entry.observerUuid === observer)?.reasons ?? [];
+}
+
+export async function addRelativeOffGuardReason(targetActor, observerOrUuid, reasonId) {
+  if (!targetActor) return false;
+  const observer = observerUuid(observerOrUuid);
+  if (!observer) return false;
+
+  const current = targetActor.getFlag?.(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG) ?? [];
+  const next = addRelativeOffGuardReasonState(current, observer, reasonId);
+  await targetActor.setFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG, next);
+  return true;
+}
+
+export async function removeRelativeOffGuardReason(targetActor, observerOrUuid, reasonId) {
+  if (!targetActor) return false;
+  const observer = observerUuid(observerOrUuid);
+  if (!observer) return false;
+
+  const current = targetActor.getFlag?.(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG) ?? [];
+  const next = removeRelativeOffGuardReasonState(current, observer, reasonId);
+
+  if (next.length) await targetActor.setFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG, next);
+  else await targetActor.unsetFlag(SYSTEM_ID, RELATIVE_OFF_GUARD_FLAG);
+  return true;
+}
+
+export function isOffGuardFor(targetActor, observerOrUuid = null) {
+  if (!targetActor) return false;
+  if (hasManualOffGuardEffect(targetActor)) return true;
+  if (hasSurroundedEffect(targetActor)) return true;
+  return relativeOffGuardReasons(targetActor, observerOrUuid).length > 0;
+}
+
 export function effectSourceKey(effectOrUuid) {
   if (typeof effectOrUuid === "string") {
     return String(effectOrUuid).trim();
@@ -381,11 +609,24 @@ async function syncMirror(item) {
     if (Object.keys(update).length) await mirror.update(update);
   }
 
-  for (const token of actor.getActiveTokens?.(true, true) ?? []) {
-    token.renderFlags?.set?.({ refreshEffects: true });
-  }
+  refreshEffectTokenIcons(actor);
 
   return mirror;
+}
+
+/**
+ * Refresh native effect icons on canvas Token placeables representing Actor.
+ * Actor#getActiveTokens(..., false) must return placeables here because
+ * renderFlags belongs to canvas Token, not TokenDocument.
+ */
+export function refreshEffectTokenIcons(actor) {
+  let refreshed = 0;
+  for (const token of actor?.getActiveTokens?.(false, false) ?? []) {
+    if (!token?.renderFlags?.set) continue;
+    token.renderFlags.set({ refreshEffects: true });
+    refreshed += 1;
+  }
+  return refreshed;
 }
 
 async function deleteMirror(item) {
@@ -395,15 +636,14 @@ async function deleteMirror(item) {
   const mirror = mirrorForItem(item);
   if (!mirror) return;
 
-  await actor.deleteEmbeddedDocuments("ActiveEffect", [mirror.id]);
+  await actor.deleteEmbeddedDocuments("ActiveEffect", [mirror.id], { fastNriSystemEffectRemoval: true });
 
-  for (const token of actor.getActiveTokens?.(true, true) ?? []) {
-    token.renderFlags?.set?.({ refreshEffects: true });
-  }
+  refreshEffectTokenIcons(actor);
 }
 
-export async function applyEffectToActor(sourceEffect, actor) {
+export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly = false } = {}) {
   if (!sourceEffect || sourceEffect.type !== "effect" || !actor) return null;
+  if (isSystemOnlyEffect(sourceEffect) && !allowSystemOnly) return null;
 
   if (!actor.isOwner && !game.user.isGM) {
     ui.notifications.warn(`Нет прав на изменение ${actor.name}.`);
@@ -431,11 +671,12 @@ export async function applyEffectToActor(sourceEffect, actor) {
 
   if (existing) {
     const next = addStackState(existing.system, timer);
-
-    await existing.update({
+    const update = {
       "system.runtime.stackCount": next.stackCount,
       "system.runtime.timers": next.timers
-    });
+    };
+
+    await existing.update(update);
 
     await syncMirror(existing);
     refreshNativeEffectHud(actor);
@@ -476,6 +717,7 @@ export async function applyEffectToActor(sourceEffect, actor) {
 
 export async function removeOneEffectStack(effect) {
   if (!effect?.isEmbedded || effect.type !== "effect") return;
+  if (isSystemOnlyEffect(effect)) return;
 
   const next = removeOneStackState(effect.system);
 
@@ -709,7 +951,8 @@ export function registerEffectSettings() {
 
 export async function seedBuiltinEffectsOnce() {
   if (!game.user.isGM) return;
-  if (game.settings.get(SYSTEM_ID, SEED_SETTING)) return;
+
+  const initialSeedComplete = Boolean(game.settings.get(SYSTEM_ID, SEED_SETTING));
 
   let folder = game.folders?.find(folder =>
     folder.type === "Item"
@@ -732,6 +975,9 @@ export async function seedBuiltinEffectsOnce() {
 
   const data = BUILTIN_EFFECTS
     .filter(effect => !existingIds.has(effect.id))
+    // После первоначального заполнения не восстанавливаем удалённые пользователем
+    // ручные Effect. Системные источники при этом должны существовать всегда.
+    .filter(effect => !initialSeedComplete || effect.systemOnly)
     .map(effect => ({
       name: effect.name,
       type: "effect",
@@ -739,7 +985,8 @@ export async function seedBuiltinEffectsOnce() {
       folder: folder?.id ?? null,
       flags: {
         [SYSTEM_ID]: {
-          builtinEffectId: effect.id
+          builtinEffectId: effect.id,
+          systemOnly: Boolean(effect.systemOnly)
         }
       },
       system: {
@@ -759,7 +1006,9 @@ export async function seedBuiltinEffectsOnce() {
     await Item.createDocuments(data);
   }
 
-  await game.settings.set(SYSTEM_ID, SEED_SETTING, true);
+  if (!initialSeedComplete) {
+    await game.settings.set(SYSTEM_ID, SEED_SETTING, true);
+  }
 }
 
 /**
@@ -812,6 +1061,26 @@ export function activateEffectSystem() {
   });
 
 
+  Hooks.on("preDeleteItem", (item, options) => {
+    if (item.type !== "effect" || !item.isEmbedded) return;
+    if (!isSystemOnlyEffect(item)) return;
+    if (options?.fastNriSystemEffectRemoval) return;
+    return false;
+  });
+
+  Hooks.on("preDeleteActiveEffect", (activeEffect, options) => {
+    if (options?.fastNriSystemEffectRemoval) return;
+
+    const itemId = activeEffect.getFlag?.(SYSTEM_ID, "effectItemId");
+    const actor = activeEffect.parent;
+    if (!itemId || !actor) return;
+
+    const effectItem = actor.items.get(itemId);
+    if (effectItem?.type === "effect" && isSystemOnlyEffect(effectItem)) {
+      return false;
+    }
+  });
+
   Hooks.on("createItem", (item, options, userId) => {
     if (item.type !== "effect") return;
 
@@ -855,9 +1124,9 @@ export function activateEffectSystem() {
     if (!itemId || !actor) return;
 
     const effectItem = actor.items.get(itemId);
-    if (effectItem?.type === "effect") {
+    if (effectItem?.type === "effect" && !isSystemOnlyEffect(effectItem)) {
       // Removing the visual mirror is interpreted as manually removing
-      // the gameplay Effect Item as well.
+      // the gameplay Effect Item as well for ordinary user-managed effects.
       void effectItem.delete();
     }
   });

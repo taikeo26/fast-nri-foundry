@@ -4,7 +4,8 @@ import {
   durationDefinitionLabel,
   effectStackCount,
   removeOneEffectStack,
-  runtimeDurationLabel
+  runtimeDurationLabel,
+  isSystemOnlyEffect
 } from "./effect-system.mjs";
 
 const PANEL_ID = "fast-nri-applied-effects-panel";
@@ -60,6 +61,7 @@ export function effectPanelData(effect, combatState = null) {
     id: effect.id,
     name: effect.name,
     img: effect.img,
+    systemOnly: isSystemOnlyEffect(effect),
     kind,
     stackCount: count,
     stacking,
@@ -165,7 +167,9 @@ async function showTooltip(effect, button) {
     </dl>
 
     <footer>
-      ЛКМ — открыть эффект • ПКМ — снять один стак
+      ${data.systemOnly
+        ? "Системный эффект — снимается автоматически"
+        : "ЛКМ — открыть эффект • ПКМ — снять один стак"}
     </footer>
   `;
 
@@ -271,6 +275,7 @@ async function renderPanel() {
       event.preventDefault();
       event.stopPropagation();
       hideTooltip();
+      if (isSystemOnlyEffect(effect)) return;
       void removeOneEffectStack(effect);
     });
 

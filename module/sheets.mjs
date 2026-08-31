@@ -20,6 +20,7 @@ import {
   applyEffectToActor,
   durationDefinitionLabel,
   effectStackCount,
+  isSystemOnlyEffect,
   postEffectToChat,
   removeOneEffectStack,
   resolveEffectDocuments,
@@ -110,6 +111,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         id: item.id,
         name: item.name,
         img: item.img,
+        systemOnly: isSystemOnlyEffect(item),
         stackCount: effectStackCount(item),
         durationLabel: runtimeDurationLabel(item, game.combat?.started ? {
           combatId: game.combat.id,
@@ -341,7 +343,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         event.stopPropagation();
 
         const effect = this.actor.items.get(row.dataset.fastNriAppliedEffectId);
-        if (effect?.type === "effect") {
+        if (effect?.type === "effect" && !isSystemOnlyEffect(effect)) {
           void removeOneEffectStack(effect);
         }
       });

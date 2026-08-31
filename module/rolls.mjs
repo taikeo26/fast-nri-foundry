@@ -1,3 +1,4 @@
+import { HP_FEEDBACK_SUPPRESS_OPTION } from "./hp-feedback.mjs";
 import {
   CREATURE_TRAITS,
   HP_GAIN_DEFENSE_TRAITS,
@@ -3110,7 +3111,7 @@ export async function applyDamageFromChat(element) {
     await actor.update({
       "system.hp.temp": afterTemp,
       "system.hp.value": afterHp
-    });
+    }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка нанесения урона", error);
     ui.notifications.error("Не удалось изменить HP выделенного токена.");
@@ -3304,7 +3305,7 @@ export async function undoAppliedDamage(element) {
     await actor.update({
       "system.hp.value": restoredHp,
       "system.hp.temp": restoredTemp
-    });
+    }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка отмены урона", error);
     ui.notifications.error("Не удалось вернуть HP.");
