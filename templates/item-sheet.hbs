@@ -193,62 +193,84 @@
       </label>
 
       <div class="fast-nri-ability-attack-config">
-        <h3>Исходная Атака против КЗ</h3>
+        <h3>Проверка</h3>
 
         <label class="fast-nri-checkbox-label">
           <input
             type="checkbox"
-            name="system.attackCheck.enabled"
-            {{#if system.attackCheck.enabled}}checked{{/if}}
+            name="system.check.enabled"
+            {{#if system.check.enabled}}checked{{/if}}
           />
-          <span>Перед результатами выполнить Атаку против КЗ</span>
+          <span>Способность содержит направленную проверку</span>
         </label>
 
-        {{#if system.attackCheck.enabled}}
+        {{#if system.check.enabled}}
           <label>
             Формула проверки
             <input
               type="text"
-              name="system.attackCheck.formula"
-              value="{{system.attackCheck.formula}}"
+              name="system.check.formula"
+              value="{{system.check.formula}}"
               placeholder="1d20 + {combatDie}"
             />
           </label>
 
           <small class="fast-nri-help">
             Маркер <code>{combatDie}</code> автоматически заменяется текущим Кубом боя Actor.
-            Для особой способности можно записать другую формулу вручную.
+            Универсальная Check-модель используется и для КЗ, и для четырёх защитных характеристик.
           </small>
 
           <label>
-            Вид исходной атаки 6.3
-            <select name="system.attackCheck.attackType">
-              <option value="" {{#unless system.attackCheck.attackType}}selected{{/unless}}>Не указан</option>
-              <option value="melee" {{#if (eq system.attackCheck.attackType "melee")}}selected{{/if}}>Ближняя атака</option>
-              <option value="ranged" {{#if (eq system.attackCheck.attackType "ranged")}}selected{{/if}}>Дистанционная атака</option>
-              <option value="area" {{#if (eq system.attackCheck.attackType "area")}}selected{{/if}}>Область действия</option>
+            Целевая характеристика
+            <select name="system.check.targetCharacteristic">
+              <option value="armor" {{#if (eq system.check.targetCharacteristic "armor")}}selected{{/if}}>КЗ</option>
+              <option value="awareness" {{#if (eq system.check.targetCharacteristic "awareness")}}selected{{/if}}>Внимательность</option>
+              <option value="reflex" {{#if (eq system.check.targetCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
+              <option value="fortitude" {{#if (eq system.check.targetCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
+              <option value="will" {{#if (eq system.check.targetCharacteristic "will")}}selected{{/if}}>Воля</option>
             </select>
           </label>
-
-          <small class="fast-nri-help">
-            В 6.3 Самозащита использует Стойкость против Ближней атаки и Рефлекс против Дистанционной.
-            Для Области действия Самозащита недоступна.
-          </small>
 
           <label class="fast-nri-checkbox-label">
             <input
               type="checkbox"
-              name="system.attackCheck.directedDefense"
-              {{#if system.attackCheck.directedDefense}}checked{{/if}}
+              name="system.defenseProcedure.directedDefense"
+              {{#if system.defenseProcedure.directedDefense}}checked{{/if}}
             />
-            <span>Разрешить Направленную защиту от этого урона</span>
+            <span>Направленная защита применима к результату</span>
           </label>
 
           <small class="fast-nri-help">
-            Включайте только когда карточка действия действительно допускает Направленную защиту.
-            Для Области действия или урона без подходящей исходной проверки оставляйте выключенным.
+            Это структурированное описание процедуры, а не универсальный hard block.
+            Область и проверки против защитных характеристик будут использовать общий конструктор Защит.
           </small>
         {{/if}}
+
+        <h3>Признаки действия</h3>
+        <div class="fast-nri-two">
+          <label class="fast-nri-checkbox-label">
+            <input type="checkbox" name="system.actionTraits.melee" {{#if system.actionTraits.melee}}checked{{/if}} />
+            <span>melee · Ближняя атака</span>
+          </label>
+          <label class="fast-nri-checkbox-label">
+            <input type="checkbox" name="system.actionTraits.ranged" {{#if system.actionTraits.ranged}}checked{{/if}} />
+            <span>ranged · Дистанционная атака</span>
+          </label>
+          <label class="fast-nri-checkbox-label">
+            <input type="checkbox" name="system.actionTraits.area" {{#if system.actionTraits.area}}checked{{/if}} />
+            <span>area · Область действия</span>
+          </label>
+          <label class="fast-nri-checkbox-label">
+            <input type="checkbox" name="system.actionTraits.intervention" {{#if system.actionTraits.intervention}}checked{{/if}} />
+            <span>Вмешательство</span>
+          </label>
+        </div>
+
+        <small class="fast-nri-help">
+          Эти признаки принадлежат самому действию и не зависят от наличия Check.
+          <code>area</code> — независимое свойство, а не третий attackType, поэтому может сочетаться с melee/ranged.
+          Для направленной Атаки против КЗ без области должен быть указан ровно один из признаков melee/ranged.
+        </small>
       </div>
 
       <div class="fast-nri-ability-defense-config">

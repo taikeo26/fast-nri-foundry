@@ -4,6 +4,10 @@ import {
   normalizeAttackType,
   normalizeSelfDefenseCharacteristic
 } from "./attack-types.mjs";
+import {
+  directedAttackTypeFromTraits,
+  inferLegacyAbilityActionTraits
+} from "./check-system.mjs";
 
 const DATA_MIGRATION_SETTING = "dataSchemaMigration";
 const DATA_MIGRATION_VERSION = 1;
@@ -177,7 +181,7 @@ export async function migrateEquipmentStateOnce() {
 }
 
 const RULES_63_MIGRATION_SETTING = "rules63AttackTypesMigration";
-const RULES_63_MIGRATION_VERSION = 1;
+const RULES_63_MIGRATION_VERSION = 2;
 
 function normalizeRussianName(value) {
   return String(value ?? "")
@@ -211,23 +215,46 @@ function rules63ItemUpdate(item) {
   }
 
   if (item.type === "ability" && item.system?.attackCheck?.enabled) {
-    const raw = foundry.utils.getProperty(item._source, "system.attackCheck.attackType");
-    if (normalizeAttackType(raw)) return null;
+    const update = { _id: item.id };
+    const rawLegacyType = String(
+      foundry.utils.getProperty(item._source, "system.attackCheck.attackType") ?? ""
+    ).trim().toLowerCase();
+    const inferredType = normalizeAttackType(rawLegacyType) || legacyAbilityAttackType(item);
+    const traits = inferLegacyAbilityActionTraits(
+      item.system?.description,
+      rawLegacyType || inferredType
+    );
 
-    const attackType = legacyAbilityAttackType(item);
-    return attackType
-      ? { _id: item.id, "system.attackCheck.attackType": attackType }
-      : null;
+    // Keep old melee/ranged data materialized for backwards compatibility.
+    if (!normalizeAttackType(rawLegacyType) && inferredType) {
+      update["system.attackCheck.attackType"] = inferredType;
+    }
+
+    // 0.5.52 universal Check. Legacy attackCheck was always a KZ check.
+    update["system.check.enabled"] = true;
+    update["system.check.formula"] = String(
+      item.system?.attackCheck?.formula ?? "1d20 + {combatDie}"
+    );
+    update["system.check.targetCharacteristic"] = "armor";
+    update["system.actionTraits.melee"] = traits.melee;
+    update["system.actionTraits.ranged"] = traits.ranged;
+    update["system.actionTraits.area"] = traits.area;
+    update["system.actionTraits.intervention"] = traits.intervention;
+    update["system.defenseProcedure.directedDefense"] = Boolean(
+      item.system?.attackCheck?.directedDefense
+    );
+
+    return update;
   }
 
   return null;
 }
 
 /**
- * 0.5.50 / rules 6.3:
+ * 0.5.50–0.5.52 / rules 6.3:
  * - materialize melee/ranged attack type on existing Weapon Items;
- * - materialize an unambiguous type on legacy Ability attacks when their
- *   description/name already supports it;
+ * - migrate legacy Ability attackCheck into the universal Check model;
+ * - split melee/ranged from the independent area action property;
  * - migrate the Rift Fairy's explicit rule: Self Defense always uses Reflex.
  *
  * Runtime never relies on the name after this one-time migration.
@@ -256,8 +283,14 @@ export async function migrateRules63Once() {
           item.type === "ability"
           && item.system?.attackCheck?.enabled
           && item.system?.attackCheck?.directedDefense
-          && !normalizeAttackType(item.system?.attackCheck?.attackType)
-          && !legacyAbilityAttackType(item)
+          && !inferLegacyAbilityActionTraits(
+            item.system?.description,
+            item.system?.attackCheck?.attackType
+          ).area
+          && !directedAttackTypeFromTraits(inferLegacyAbilityActionTraits(
+            item.system?.description,
+            item.system?.attackCheck?.attackType || legacyAbilityAttackType(item)
+          ))
         ) {
           unresolvedAbilities += 1;
         }
@@ -289,8 +322,14 @@ export async function migrateRules63Once() {
         item.type === "ability"
         && item.system?.attackCheck?.enabled
         && item.system?.attackCheck?.directedDefense
-        && !normalizeAttackType(item.system?.attackCheck?.attackType)
-        && !legacyAbilityAttackType(item)
+        && !inferLegacyAbilityActionTraits(
+          item.system?.description,
+          item.system?.attackCheck?.attackType
+        ).area
+        && !directedAttackTypeFromTraits(inferLegacyAbilityActionTraits(
+          item.system?.description,
+          item.system?.attackCheck?.attackType || legacyAbilityAttackType(item)
+        ))
       ) {
         unresolvedAbilities += 1;
       }

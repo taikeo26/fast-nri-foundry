@@ -350,16 +350,36 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         tempHp: outcomeChannelSchema()
       }),
 
-      // Не вся способность, наносящая урон, является Атакой.
-      // Если этот блок включён, перед результатами выполняется одна
-      // исходная проверка Атаки против КЗ. Её результат можно передать
-      // карточке урона для Направленной защиты.
+      // 0.5.52: универсальная направленная Check-модель. Цель проверки
+      // хранится независимо от игрового типа действия. armor = КЗ; остальные
+      // значения — четыре защитные характеристики Rulebook 6.3.
+      check: new SchemaField({
+        enabled: flag(false),
+        formula: text("1d20 + {combatDie}"),
+        targetCharacteristic: text("armor")
+      }),
+
+      // Структурированные свойства действия. area больше не является третьим
+      // взаимоисключающим attackType и может сочетаться с melee/ranged.
+      actionTraits: new SchemaField({
+        melee: flag(false),
+        ranged: flag(false),
+        area: flag(false),
+        intervention: flag(false)
+      }),
+
+      // Минимальный структурированный контракт защитной процедуры. Полный
+      // selector будет строиться поверх него в следующих шагах 0.5.52.
+      defenseProcedure: new SchemaField({
+        directedDefense: flag(false)
+      }),
+
+      // Legacy 0.5.51. Оставлено для безопасного чтения старых документов;
+      // runtime 0.5.52 предпочитает check/actionTraits после миграции.
       attackCheck: new SchemaField({
         enabled: flag(false),
         formula: text("1d20 + {combatDie}"),
         directedDefense: flag(false),
-        // 6.3: melee / ranged / area. Для Направленной защиты от одиночной
-        // Атаки против КЗ должен быть melee или ranged.
         attackType: text("")
       }),
 

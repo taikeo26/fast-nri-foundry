@@ -27,10 +27,19 @@ import {
   attackTypeLabel,
   defenseCharacteristicForRole,
   defenseCharacteristicLabel,
-  inferAbilityAttackTypeFromDescription,
   inferWeaponAttackType,
   normalizeAttackType
 } from "./attack-types.mjs";
+import {
+  abilityActionTraits,
+  abilityCheckConfig,
+  actionTraitsLabel,
+  checkStructureWarnings,
+  checkTargetCharacteristicLabel,
+  directedAttackTypeFromTraits,
+  normalizeActionTraits,
+  normalizeCheckTargetCharacteristic
+} from "./check-system.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -586,7 +595,7 @@ function getSingleTarget() {
   return targets[0];
 }
 
-function actionTargetStateHTML(state) {
+function actionTargetStateHTML(state, defenseLabel = "КЗ") {
   if (!state?.offGuard) return "";
 
   if (state.surrounding?.surrounded) {
@@ -595,7 +604,7 @@ function actionTargetStateHTML(state) {
         <i class="fa-solid fa-users"></i>
         <div>
           <strong>Цель окружена</strong>
-          <small>Угрозы ${esc(state.surrounding.threats)} &gt; Строй ${esc(state.surrounding.formation)} · Застигнута врасплох · КЗ −2</small>
+          <small>Угрозы ${esc(state.surrounding.threats)} &gt; Строй ${esc(state.surrounding.formation)} · Застигнута врасплох · ${esc(defenseLabel)} −2</small>
         </div>
       </div>
     `;
@@ -606,7 +615,7 @@ function actionTargetStateHTML(state) {
       <i class="fa-solid fa-shield-halved"></i>
       <div>
         <strong>Цель застигнута врасплох</strong>
-        <small>КЗ −2</small>
+        <small>${esc(defenseLabel)} −2</small>
       </div>
     </div>
   `;
@@ -640,6 +649,71 @@ function armorContextHTML(target, effectiveArmor = null, targetState = null) {
         </small>
       </div>
     </section>
+  `;
+}
+
+function checkContextHTML(target, targetCharacteristic, resolved = null) {
+  const characteristic = normalizeCheckTargetCharacteristic(targetCharacteristic) || "armor";
+  if (characteristic === "armor") {
+    return armorContextHTML(
+      target,
+      resolved?.armor ?? null,
+      resolved?.state ?? null
+    );
+  }
+
+  const label = checkTargetCharacteristicLabel(characteristic);
+  if (!target?.actor) {
+    return `
+      <section class="fast-nri-roll-context fast-nri-roll-context-warning">
+        <i class="fa-solid fa-crosshairs"></i>
+        <div>
+          <strong>Цель не выбрана</strong>
+          <small>Проверка против ${esc(label)} будет брошена, но степень автоматически не рассчитывается.</small>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="fast-nri-roll-context">
+      <i class="fa-solid fa-crosshairs"></i>
+      <div>
+        <strong>${esc(target.name)}</strong>
+        <small>
+          ${esc(label)}: ${esc(resolved?.value ?? "—")}
+          ${resolved?.state?.offGuard ? " · Застигнут врасплох" : ""}
+        </small>
+      </div>
+    </section>
+  `;
+}
+
+function checkMetaHTML(target, targetCharacteristic, resolved = null) {
+  const characteristic = normalizeCheckTargetCharacteristic(targetCharacteristic) || "armor";
+  if (characteristic === "armor") {
+    return armorMetaHTML(
+      target,
+      resolved?.armor ?? null,
+      resolved?.state ?? null
+    );
+  }
+
+  if (!target?.actor) {
+    return `
+      <div class="fast-nri-chat-target fast-nri-chat-target-missing">
+        <span>Цель не выбрана</span>
+      </div>
+    `;
+  }
+
+  const label = checkTargetCharacteristicLabel(characteristic);
+  return `
+    <div class="fast-nri-chat-target">
+      <span class="fast-nri-chat-target-name">${esc(target.name)}</span>
+      <span class="fast-nri-chat-armor">${esc(label)} ${esc(resolved?.value ?? "—")}</span>
+    </div>
+    ${actionTargetStateHTML(resolved?.state, label)}
   `;
 }
 
@@ -1852,7 +1926,7 @@ function hpGainRollCardHTML({ item, kind, state, modifiersHTML = "" }) {
 }
 
 
-function expandAbilityAttackFormula(actor, rawFormula) {
+function expandAbilityCheckFormula(actor, rawFormula) {
   const combatDie = String(actor?.system?.combatDie ?? "").trim();
   const replacement = combatDie || "0";
   const formula = String(rawFormula ?? "1d20 + {combatDie}")
@@ -1863,105 +1937,156 @@ function expandAbilityAttackFormula(actor, rawFormula) {
   return formula || "1d20";
 }
 
-function abilityAttackFormulaSources(actor, rawFormula, expandedFormula) {
+function abilityCheckFormulaSources(actor, rawFormula, expandedFormula, targetCharacteristic) {
   const raw = String(rawFormula ?? "").trim();
+  const targetLabel = checkTargetCharacteristicLabel(targetCharacteristic);
+  const label = `Проверка против ${targetLabel}`;
 
   if (raw.includes("{combatDie}") || raw.includes("@combatDie")) {
     const combatDie = String(actor?.system?.combatDie ?? "").trim();
-    return [
-      {
-        formula: expandedFormula,
-        label: "Атака против КЗ",
-        reason: combatDie
-          ? `Формула способности; Куб боя ${combatDie}`
-          : "Формула способности; Куб боя отсутствует"
-      }
-    ];
+    return [{
+      formula: expandedFormula,
+      label,
+      reason: combatDie
+        ? `Формула способности; Куб боя ${combatDie}`
+        : "Формула способности; Куб боя отсутствует"
+    }];
   }
 
   return [{
     formula: expandedFormula,
-    label: "Атака против КЗ",
+    label,
     reason: "Формула способности/заклинания"
   }];
 }
 
-export async function rollAbilityAttackCheck(actor, item) {
+function resolveAbilityCheckTarget(target, targetCharacteristic, actor) {
+  if (!target?.actor) return null;
+
+  if (targetCharacteristic === "armor") {
+    return effectiveArmorForAction(target, actor);
+  }
+
+  return effectiveDefenseCharacteristicForAction(
+    target,
+    targetCharacteristic,
+    actor
+  );
+}
+
+function degreeForAbilityCheck(result, targetCharacteristic, resolvedTarget) {
+  if (!resolvedTarget) return null;
+
+  if (targetCharacteristic === "armor") {
+    return degreeVsArmor(
+      result.roll.total,
+      resolvedTarget.armor,
+      result.naturalD20
+    );
+  }
+
+  const dc = finiteNumberOrNull(resolvedTarget.value);
+  if (dc === null) return null;
+  return degreeVsDC(result.roll.total, dc, result.naturalD20);
+}
+
+export async function rollAbilityCheck(actor, item) {
   if (!actor || !item || item.type !== "ability") return null;
 
-  const config = item.system?.attackCheck ?? {};
+  const config = abilityCheckConfig(item);
   if (!config.enabled) return null;
 
-  const attackType = normalizeAttackType(config.attackType)
-    || inferAbilityAttackTypeFromDescription(item.system?.description);
+  const targetCharacteristic = normalizeCheckTargetCharacteristic(config.targetCharacteristic) || "armor";
+  const actionTraits = abilityActionTraits(item);
+  const attackType = directedAttackTypeFromTraits(actionTraits);
+  const structureWarnings = checkStructureWarnings({
+    targetCharacteristic,
+    traits: actionTraits
+  });
 
-  if (config.directedDefense && !["melee", "ranged"].includes(attackType)) {
+  if (structureWarnings.length) {
+    ui.notifications.warn(`${item.name}: ${structureWarnings.join("; ")}.`);
+  }
+
+  // Standard Directed Defense is a consequence of a directed non-area KZ
+  // attack. Other checks may later expose their own counteraction procedure,
+  // but must not accidentally inherit Self Defense from the legacy attack card.
+  const directedDefense = Boolean(
+    config.directedDefense
+    && targetCharacteristic === "armor"
+    && !actionTraits.area
+    && ["melee", "ranged"].includes(attackType)
+  );
+
+  if (config.directedDefense && !directedDefense) {
     ui.notifications.warn(
-      `${item.name}: для Направленной защиты в 6.3 укажите Ближнюю или Дистанционную атаку. ` +
-      `Самозащита не будет предложена для этого результата.`
+      `${item.name}: стандартная Направленная защита доступна только для направленной ` +
+      `Атаки против КЗ без Области действия и с ровно одним признаком Ближняя/Дистанционная.`
     );
   }
 
   const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
-  const formula = expandAbilityAttackFormula(actor, rawFormula);
+  const formula = expandAbilityCheckFormula(actor, rawFormula);
   const target = getSingleTarget();
-  const previewTargetDefense = target?.actor
-    ? effectiveArmorForAction(target, actor)
-    : null;
+  const previewTarget = resolveAbilityCheckTarget(target, targetCharacteristic, actor);
 
   if ((game.user?.targets?.size ?? 0) > 1) {
     ui.notifications.warn(
-      "Для одиночной Атаки способности выбери одну цель. Проверка будет выполнена без автоматической степени."
+      "Для направленной проверки способности выбери одну цель. Проверка будет выполнена без автоматической степени."
     );
   }
 
+  const targetLabel = checkTargetCharacteristicLabel(targetCharacteristic);
   const result = await prepareRoll({
     actor,
-    label: `Атака: ${item.name}`,
+    label: `Проверка: ${item.name}`,
     baseFormula: formula,
-    baseSources: abilityAttackFormulaSources(actor, rawFormula, formula),
+    baseSources: abilityCheckFormulaSources(actor, rawFormula, formula, targetCharacteristic),
     showDC: false,
-    contextHTML: armorContextHTML(
-      target,
-      previewTargetDefense?.armor ?? null,
-      previewTargetDefense?.state ?? null
-    )
+    contextHTML: checkContextHTML(target, targetCharacteristic, previewTarget)
   });
 
   if (!result) return null;
 
-  // Same lazy rule as weapon attacks: resolve from the latest Scene state.
-  const targetDefense = target?.actor
-    ? effectiveArmorForAction(target, actor)
-    : null;
-  const effectiveArmor = targetDefense?.armor ?? null;
-  const targetState = targetDefense?.state ?? null;
-
+  // Resolve from the latest Scene state after the pre-roll dialog closes.
+  const resolvedTarget = resolveAbilityCheckTarget(target, targetCharacteristic, actor);
+  const targetState = resolvedTarget?.state ?? null;
   const degree = target?.actor
-    ? degreeVsArmor(
-        result.roll.total,
-        effectiveArmor,
-        result.naturalD20
-      )
+    ? degreeForAbilityCheck(result, targetCharacteristic, resolvedTarget)
     : null;
 
-  const critical = result.naturalD20 === 20;
+  // Natural 20 is a damage multiplier only for KZ Attacks. Against the four
+  // defensive characteristics it is already handled by degreeVsDC as Great.
+  const critical = targetCharacteristic === "armor" && result.naturalD20 === 20;
+  const traitsLabel = actionTraitsLabel(actionTraits);
 
-  const flavor = `
-    <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-attack-card">
-      ${rollCardHeader(`Атака: ${item.name}`, "fa-wand-magic-sparkles")}
-      <div class="fast-nri-attack-summary">
-        <span>Результат: <strong>${esc(result.roll.total)}</strong></span>
-        ${target?.name ? `<span>Цель: <strong>${esc(target.name)}</strong></span>` : ""}
-      </div>
-      ${armorMetaHTML(target, effectiveArmor, targetState)}
-      ${critical ? `
+  const natural20HTML = result.naturalD20 === 20
+    ? targetCharacteristic === "armor"
+      ? `
         <div class="fast-nri-critical-roll">
           <i class="fa-solid fa-burst"></i>
-          <strong>Натуральная 20</strong>
+          <strong>Натуральная 20 · урон ×2 после Защит</strong>
         </div>
-      ` : ""}
-      <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
+      `
+      : `
+        <div class="fast-nri-critical-roll">
+          <i class="fa-solid fa-burst"></i>
+          <strong>Натуральная 20 · Большой успех</strong>
+        </div>
+      `
+    : "";
+
+  const flavor = `
+    <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-check-card">
+      ${rollCardHeader(`Проверка: ${item.name}`, "fa-wand-magic-sparkles")}
+      <div class="fast-nri-attack-summary">
+        <span>Результат: <strong>${esc(result.roll.total)}</strong></span>
+        <span>Против: <strong>${esc(targetLabel)}</strong></span>
+        ${target?.name ? `<span>Цель: <strong>${esc(target.name)}</strong></span>` : ""}
+      </div>
+      ${checkMetaHTML(target, targetCharacteristic, resolvedTarget)}
+      ${natural20HTML}
+      <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(degree)}
       ${abilityAttackFollowupHTML(actor, item)}
       ${rollSourcesHTML(result)}
@@ -1973,7 +2098,7 @@ export async function rollAbilityAttackCheck(actor, item) {
     flavor,
     flags: {
       "fast-nri": {
-        kind: "ability-attack",
+        kind: "ability-check",
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
         targetUuid: target?.document?.uuid ?? null,
@@ -1981,8 +2106,12 @@ export async function rollAbilityAttackCheck(actor, item) {
         critical,
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
+        targetCharacteristic,
+        actionTraits,
+        // Compatibility bridge for 0.5.51 damage/defense messages.
         attackType,
-        directedDefense: Boolean(config.directedDefense),
+        area: Boolean(actionTraits.area),
+        directedDefense,
         offGuard: Boolean(targetState?.offGuard),
         surrounded: Boolean(targetState?.surrounding?.surrounded),
         surroundingThreats: targetState?.surrounding?.threats ?? null,
@@ -2000,9 +2129,16 @@ export async function rollAbilityAttackCheck(actor, item) {
     degree,
     critical,
     targetUuid: target?.document?.uuid ?? null,
-    directedDefense: Boolean(config.directedDefense),
+    targetCharacteristic,
+    actionTraits,
+    directedDefense,
     attackType
   };
+}
+
+/** Compatibility alias for macros or modules written against <= 0.5.51. */
+export async function rollAbilityAttackCheck(actor, item) {
+  return rollAbilityCheck(actor, item);
 }
 
 export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null) {
@@ -2057,11 +2193,19 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     state = recalculateDamageState(state);
 
     const modifiersHTML = rollSourcesHTML(result);
+    const sourceTargetCharacteristic = normalizeCheckTargetCharacteristic(
+      sourceAttack?.targetCharacteristic
+    ) || (sourceAttack ? "armor" : "");
+    const sourceActionTraits = normalizeActionTraits(sourceAttack?.actionTraits);
+    const sourceAttackType = normalizeAttackType(sourceAttack?.attackType)
+      || directedAttackTypeFromTraits(sourceActionTraits);
     const directedDefense = Boolean(
-      sourceAttack
-      && item.system?.attackCheck?.directedDefense
-      && ["melee", "ranged"].includes(normalizeAttackType(sourceAttack.attackType))
+      sourceAttack?.directedDefense
+      && sourceTargetCharacteristic === "armor"
+      && !sourceActionTraits.area
+      && ["melee", "ranged"].includes(sourceAttackType)
     );
+    const allowDouble = Boolean(sourceAttack && sourceTargetCharacteristic === "armor");
 
     const flavor = damageCardHTML({
       sourceName: item.name,
@@ -2070,7 +2214,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
       state,
       modifiersHTML,
       allowDefense: directedDefense,
-      allowDouble: Boolean(sourceAttack)
+      allowDouble
     });
 
     return result.roll.toMessage({
@@ -2088,7 +2232,10 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
           attackNaturalD20: sourceAttack?.naturalD20 ?? null,
           attackDegree: sourceAttack?.degree ?? null,
           automaticAttackDegree: sourceAttack?.degree ?? null,
-          attackType: normalizeAttackType(sourceAttack?.attackType),
+          targetCharacteristic: sourceTargetCharacteristic || null,
+          actionTraits: sourceAttack ? sourceActionTraits : null,
+          attackType: sourceAttackType,
+          area: Boolean(sourceActionTraits.area),
           originalTargetUuid: sourceAttack?.targetUuid ?? null,
           sourceAttackMessageId: sourceAttack?.message?.id ?? null,
           directedDefense,
@@ -2266,14 +2413,15 @@ function sameTokenOrActor(a, b) {
   return Boolean(a.actor?.uuid && b.actor?.uuid && a.actor.uuid === b.actor.uuid);
 }
 
-function builtInSelfDefenseOption(actor, attackType) {
+function builtInSelfDefenseOption(actor, attackType, actionTraits = {}) {
   const interventionCost = 1;
   const interventions = finiteNumberOrNull(actor?.system?.resources?.intervention);
   const warnings = [];
   const reasons = [];
 
   const normalizedAttackType = normalizeAttackType(attackType);
-  if (normalizedAttackType === "area") {
+  const normalizedTraits = normalizeActionTraits(actionTraits);
+  if (normalizedTraits.area) {
     reasons.push("против Области действия Самозащита недоступна");
   } else if (!["melee", "ranged"].includes(normalizedAttackType)) {
     reasons.push("для исходной атаки не указан однозначный вид Ближняя/Дистанционная");
@@ -2308,10 +2456,10 @@ function builtInSelfDefenseOption(actor, attackType) {
   };
 }
 
-function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState, attackType }) {
+function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState, attackType, actionTraits = {} }) {
   const options = [];
 
-  if (role === "self") options.push(builtInSelfDefenseOption(actor, attackType));
+  if (role === "self") options.push(builtInSelfDefenseOption(actor, attackType, actionTraits));
 
   for (const item of defenseAbilityItems(actor, role)) {
     const config = defenseActionConfig(item);
@@ -2346,7 +2494,7 @@ function defenseMethodOptions({ actor, defenderToken, protectedToken, role, dama
   return options;
 }
 
-async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState, attackType }) {
+async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState, attackType, actionTraits = {} }) {
   const { DialogV2 } = foundry.applications.api;
   const options = defenseMethodOptions({
     actor,
@@ -2354,7 +2502,8 @@ async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role,
     protectedToken,
     role,
     damageState,
-    attackType
+    attackType,
+    actionTraits
   });
 
   const targetName = protectedToken?.name || protectedToken?.actor?.name || actor.name;
@@ -2642,9 +2791,12 @@ export async function defenseFromChat(element) {
   const attackType = storedAttackType
     || (sourceItem?.type === "weapon" ? inferWeaponAttackType(sourceItem) : "")
     || (sourceItem?.type === "ability"
-      ? normalizeAttackType(sourceItem.system?.attackCheck?.attackType)
-        || inferAbilityAttackTypeFromDescription(sourceItem.system?.description)
+      ? directedAttackTypeFromTraits(abilityActionTraits(sourceItem))
       : "");
+  const actionTraits = normalizeActionTraits(
+    message.getFlag("fast-nri", "actionTraits")
+      ?? (sourceItem?.type === "ability" ? abilityActionTraits(sourceItem) : {})
+  );
 
   const method = await chooseDefenseMethod({
     actor: defender,
@@ -2652,7 +2804,8 @@ export async function defenseFromChat(element) {
     protectedToken,
     role,
     damageState,
-    attackType
+    attackType,
+    actionTraits
   });
   if (!method) return null;
 

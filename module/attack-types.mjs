@@ -1,7 +1,6 @@
 export const ATTACK_TYPES = Object.freeze({
   melee: "Ближняя атака",
-  ranged: "Дистанционная атака",
-  area: "Область действия"
+  ranged: "Дистанционная атака"
 });
 
 export const SELF_DEFENSE_CHARACTERISTICS = Object.freeze({
@@ -24,9 +23,8 @@ export function normalizeSelfDefenseCharacteristic(value) {
 /**
  * 6.3 attack-type fallback for pre-migration Weapon Items.
  *
- * Explicit machine data always wins. Reach is a melee property even when the
- * printed range is numeric. A printed melee label is also melee. Remaining
- * non-empty ranges are treated as ranged weapon attacks.
+ * Weapon attack type is only melee/ranged. Area is an action property and is
+ * deliberately not part of this enum in 0.5.52.
  */
 export function inferWeaponAttackType(weaponOrSystem) {
   const system = weaponOrSystem?.system ?? weaponOrSystem ?? {};
@@ -42,9 +40,8 @@ export function inferWeaponAttackType(weaponOrSystem) {
 }
 
 /**
- * Extract an attack type from a legacy ability description when the wording
- * already makes the 6.3 type unambiguous. This is a migration helper only;
- * runtime never parses prose to decide a rule.
+ * Migration helper for the melee/ranged portion of old Ability prose.
+ * Area is intentionally handled by the independent action-traits migration.
  */
 export function inferAbilityAttackTypeFromDescription(description) {
   const text = String(description ?? "")
@@ -52,7 +49,6 @@ export function inferAbilityAttackTypeFromDescription(description) {
     .replace(/\s+/g, " ")
     .toLocaleLowerCase("ru-RU");
 
-  if (text.includes("область действия")) return "area";
   if (text.includes("ближняя атака")) return "melee";
   if (text.includes("дистанционная атака")) return "ranged";
   return "";
@@ -65,12 +61,15 @@ export function inferAbilityAttackTypeFromDescription(description) {
 export function defenseCharacteristicForRole({
   role,
   attackType = "",
+  isArea = false,
   selfDefenseOverride = ""
 } = {}) {
   if (role !== "self") return "fortitude";
 
   const override = normalizeSelfDefenseCharacteristic(selfDefenseOverride);
   if (override) return override;
+
+  if (isArea) return "";
 
   const type = normalizeAttackType(attackType);
   if (type === "melee") return "fortitude";

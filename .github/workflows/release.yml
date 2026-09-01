@@ -33,6 +33,13 @@ jobs:
             node --check "$source_file"
           done < <(find . -type f \( -name '*.js' -o -name '*.mjs' \) | sort)
 
+      - name: Run regression tests
+        shell: bash
+        run: |
+          for test_file in tests/*.mjs; do
+            node "$test_file"
+          done
+
       - name: Validate manifest URLs
         shell: bash
         run: |
@@ -81,6 +88,7 @@ jobs:
           zip -r fast-nri.zip \
             system.json \
             fast-nri.mjs \
+            README.md \
             lang \
             module \
             styles \

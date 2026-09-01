@@ -1,4 +1,5 @@
-import { rollAbilityAttackCheck, rollAbilityOutcome } from "./rolls.mjs";
+import { rollAbilityCheck, rollAbilityOutcome } from "./rolls.mjs";
+import { abilityCheckConfig } from "./check-system.mjs";
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
 
 function esc(value) {
@@ -60,28 +61,28 @@ function outcomeActionButtonHTML(actor, item, kind) {
 
 function abilityActionsHTML(actor, item) {
   const outcomeKinds = configuredOutcomeKinds(item);
-  const attackEnabled = Boolean(item.system?.attackCheck?.enabled);
+  const checkEnabled = abilityCheckConfig(item).enabled;
   const actions = [];
 
-  if (attackEnabled) {
+  if (checkEnabled) {
     actions.push(`
       <button
         type="button"
-        data-fast-nri-roll-ability-attack
+        data-fast-nri-roll-ability-check
         data-actor-uuid="${escAttr(actor.uuid)}"
         data-item-uuid="${escAttr(item.uuid)}"
       >
         <i class="fa-solid fa-dice-d20"></i>
-        <span>Выполнить атаку</span>
+        <span>Выполнить проверку</span>
       </button>
     `);
   }
 
   for (const kind of outcomeKinds) {
-    // Урон атакующей Ability становится явным следующим шагом на карточке
-    // уже выполненной Атаки. Остальные независимые результаты остаются
+    // Урон Ability с Check становится явным следующим шагом на карточке
+    // уже выполненной проверки. Остальные независимые результаты остаются
     // доступны прямо из исходной карточки Ability.
-    if (kind === "damage" && attackEnabled) continue;
+    if (kind === "damage" && checkEnabled) continue;
     actions.push(outcomeActionButtonHTML(actor, item, kind));
   }
 
@@ -328,24 +329,26 @@ export async function undoAbilityResource(element) {
 
 export function activateAbilityChatInteractions(root = document) {
   root.addEventListener("click", async event => {
-    const attackButton = event.target.closest("[data-fast-nri-roll-ability-attack]");
-    if (attackButton) {
+    const checkButton = event.target.closest(
+      "[data-fast-nri-roll-ability-check], [data-fast-nri-roll-ability-attack]"
+    );
+    if (checkButton) {
       event.preventDefault();
       event.stopPropagation();
 
-      if (attackButton.dataset.fastNriBusy === "true") return;
-      attackButton.dataset.fastNriBusy = "true";
+      if (checkButton.dataset.fastNriBusy === "true") return;
+      checkButton.dataset.fastNriBusy = "true";
 
       try {
-        const actor = await fromUuid(attackButton.dataset.actorUuid);
-        const item = await fromUuid(attackButton.dataset.itemUuid);
+        const actor = await fromUuid(checkButton.dataset.actorUuid);
+        const item = await fromUuid(checkButton.dataset.itemUuid);
         if (!actor || !item || item.type !== "ability") {
           ui.notifications.error("Не удалось найти способность или заклинание.");
           return;
         }
-        await rollAbilityAttackCheck(actor, item);
+        await rollAbilityCheck(actor, item);
       } finally {
-        delete attackButton.dataset.fastNriBusy;
+        delete checkButton.dataset.fastNriBusy;
       }
       return;
     }
@@ -372,8 +375,9 @@ export function activateAbilityChatInteractions(root = document) {
             ? game.messages?.get(sourceMessageId) ?? null
             : null;
 
-          if (!sourceMessage || sourceMessage.getFlag("fast-nri", "kind") !== "ability-attack") {
-            ui.notifications.error("Не удалось найти исходную Атаку способности.");
+          const sourceKind = sourceMessage?.getFlag("fast-nri", "kind");
+          if (!sourceMessage || !["ability-check", "ability-attack"].includes(sourceKind)) {
+            ui.notifications.error("Не удалось найти исходную проверку способности.");
             return;
           }
 
@@ -385,7 +389,9 @@ export function activateAbilityChatInteractions(root = document) {
             critical: Boolean(sourceMessage.getFlag("fast-nri", "critical")),
             targetUuid: sourceMessage.getFlag("fast-nri", "targetUuid"),
             directedDefense: Boolean(sourceMessage.getFlag("fast-nri", "directedDefense")),
-            attackType: sourceMessage.getFlag("fast-nri", "attackType")
+            attackType: sourceMessage.getFlag("fast-nri", "attackType"),
+            targetCharacteristic: sourceMessage.getFlag("fast-nri", "targetCharacteristic") ?? "armor",
+            actionTraits: sourceMessage.getFlag("fast-nri", "actionTraits") ?? {}
           };
         }
 
