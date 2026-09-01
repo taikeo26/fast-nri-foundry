@@ -1,0 +1,46 @@
+{
+  "name": "ТЕСТ — Свободная специальная защита",
+  "type": "ability",
+  "img": "icons/svg/shield.svg",
+  "system": {
+    "level": 1,
+    "traitIds": [
+      "defensive"
+    ],
+    "costs": {
+      "action": 0,
+      "movement": 0,
+      "intervention": 0,
+      "freeAction": true,
+      "classResourceMin": 0,
+      "classResourceMax": 0,
+      "additionalText": ""
+    },
+    "description": "<p>Контрольный тест узости HB-02: эта защита не требует Вмешательство и не должна блокироваться только из-за происхождения исходного действия.</p>",
+    "defenseAction": {
+      "enabled": true,
+      "procedure": "directed",
+      "targetScope": "self",
+      "interventionCost": 0,
+      "rangeMode": "manual",
+      "rangeCells": 0,
+      "requiresVisibility": false,
+      "movementMode": "none",
+      "damageSelectionMode": "standard",
+      "combatDiceFormula": "",
+      "selfDefenseCharacteristic": "",
+      "removeDamageParts": 1,
+      "effectDegreeReduction": 1,
+      "allowManeuver": false
+    }
+  },
+  "_id": "kaqlN9nzbS2k7zXT",
+  "effects": [],
+  "folder": null,
+  "sort": 4000,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.1"
+    }
+  }
+}

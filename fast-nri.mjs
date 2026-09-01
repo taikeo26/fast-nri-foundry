@@ -51,10 +51,6 @@ import {
   FastNriActorSheet,
   FastNriItemSheet
 } from "./module/sheets.mjs";
-import {
-  ensureTestAbilityCompendium,
-  registerTestCompendiumSettings
-} from "./module/test-compendium.mjs";
 
 Hooks.once("init", () => {
   console.log("Быстрая НРИ 6.3 | Инициализация системы");
@@ -63,7 +59,6 @@ Hooks.once("init", () => {
   registerDataMigrationSettings();
   registerEffectSettings();
   registerDefenseActionSettings();
-  registerTestCompendiumSettings();
   activateTokenDefaults();
   activateWeaponRules();
   activateFieldGeometry();
@@ -136,11 +131,5 @@ Hooks.once("ready", async () => {
   await migrateEquipmentStateOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
-  try {
-    await ensureTestAbilityCompendium();
-  } catch (error) {
-    console.error("Быстрая НРИ | Не удалось подготовить тестовый компендиум", error);
-    ui.notifications.warn("Не удалось создать тестовый компендиум способностей. Подробности в консоли.");
-  }
   ui.notifications.info("Быстрая НРИ 6.3 загружена");
 });

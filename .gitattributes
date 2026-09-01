@@ -13,3 +13,6 @@
 *.ttf binary
 *.otf binary
 *.zip binary
+
+# Foundry compendium databases (NeDB source and migrated LevelDB files).
+packs/** binary

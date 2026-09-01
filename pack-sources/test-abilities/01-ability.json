@@ -1,0 +1,152 @@
+{
+  "name": "ТЕСТ — Ближняя способность",
+  "type": "ability",
+  "img": "icons/svg/sword.svg",
+  "system": {
+    "level": 1,
+    "traitIds": [
+      "action",
+      "attack",
+      "melee"
+    ],
+    "costs": {
+      "action": 1,
+      "movement": 0,
+      "intervention": 0,
+      "freeAction": false,
+      "classResourceMin": 0,
+      "classResourceMax": 0,
+      "additionalText": ""
+    },
+    "targeting": {
+      "mode": "single",
+      "relation": "enemy",
+      "countMin": 1,
+      "countMax": 1,
+      "rangeMode": "adjacent",
+      "rangeCells": 0,
+      "requiresVisibility": true,
+      "areaShape": "none",
+      "areaSize": "",
+      "text": ""
+    },
+    "check": {
+      "enabled": true,
+      "formula": "1d20 + {combatDie}",
+      "targetCharacteristic": "armor"
+    },
+    "defenseProcedure": {
+      "directedDefense": true
+    },
+    "description": "<p><strong>Тестовая ближняя способность.</strong> Проверяет обычный Check, Направленную защиту и профиль урона.</p>",
+    "profiles": {
+      "failure": {
+        "enabled": true,
+        "text": "<p>Эффекта нет.</p>",
+        "damage": {
+          "enabled": false,
+          "components": [],
+          "removeHighest": 0,
+          "removeLowest": 0,
+          "removeAll": false
+        },
+        "healing": {
+          "enabled": false,
+          "components": []
+        },
+        "tempHp": {
+          "enabled": false,
+          "components": []
+        },
+        "effectUuids": []
+      },
+      "partial": {
+        "enabled": true,
+        "text": "<p>Частичное попадание.</p>",
+        "damage": {
+          "enabled": true,
+          "components": [
+            {
+              "formula": "1d6",
+              "damageType": "physical",
+              "traitIds": []
+            }
+          ],
+          "removeHighest": 0,
+          "removeLowest": 0,
+          "removeAll": false
+        },
+        "healing": {
+          "enabled": false,
+          "components": []
+        },
+        "tempHp": {
+          "enabled": false,
+          "components": []
+        },
+        "effectUuids": []
+      },
+      "success": {
+        "enabled": true,
+        "text": "<p>Обычное попадание.</p>",
+        "damage": {
+          "enabled": true,
+          "components": [
+            {
+              "formula": "2d6",
+              "damageType": "physical",
+              "traitIds": []
+            }
+          ],
+          "removeHighest": 0,
+          "removeLowest": 0,
+          "removeAll": false
+        },
+        "healing": {
+          "enabled": false,
+          "components": []
+        },
+        "tempHp": {
+          "enabled": false,
+          "components": []
+        },
+        "effectUuids": []
+      },
+      "great": {
+        "enabled": true,
+        "text": "<p><em>Большой успех.</em></p>",
+        "damage": {
+          "enabled": true,
+          "components": [
+            {
+              "formula": "3d6",
+              "damageType": "physical",
+              "traitIds": []
+            }
+          ],
+          "removeHighest": 0,
+          "removeLowest": 0,
+          "removeAll": false
+        },
+        "healing": {
+          "enabled": false,
+          "components": []
+        },
+        "tempHp": {
+          "enabled": false,
+          "components": []
+        },
+        "effectUuids": []
+      }
+    }
+  },
+  "_id": "bz9csL0fXUgdo4Ii",
+  "effects": [],
+  "folder": null,
+  "sort": 0,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.1"
+    }
+  }
+}

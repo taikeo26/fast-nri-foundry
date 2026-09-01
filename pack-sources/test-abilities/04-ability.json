@@ -1,0 +1,47 @@
+{
+  "name": "ТЕСТ — Специальная защита",
+  "type": "ability",
+  "img": "icons/svg/shield.svg",
+  "system": {
+    "level": 1,
+    "traitIds": [
+      "defensive",
+      "intervention"
+    ],
+    "costs": {
+      "action": 0,
+      "movement": 0,
+      "intervention": 1,
+      "freeAction": false,
+      "classResourceMin": 1,
+      "classResourceMax": 1,
+      "additionalText": ""
+    },
+    "description": "<p><strong>Эта Ability должна появляться в обработчике кнопки «Защита»</strong>, только если находится у выбранного токена.</p>",
+    "defenseAction": {
+      "enabled": true,
+      "procedure": "directed",
+      "targetScope": "either",
+      "interventionCost": 1,
+      "rangeMode": "manual",
+      "rangeCells": 0,
+      "requiresVisibility": false,
+      "movementMode": "none",
+      "damageSelectionMode": "largest",
+      "combatDiceFormula": "",
+      "selfDefenseCharacteristic": "",
+      "removeDamageParts": 2,
+      "effectDegreeReduction": 1,
+      "allowManeuver": false
+    }
+  },
+  "_id": "p2jgomjyKlIkPgCJ",
+  "effects": [],
+  "folder": null,
+  "sort": 3000,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.1"
+    }
+  }
+}
