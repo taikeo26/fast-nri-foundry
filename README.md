@@ -20,13 +20,6 @@
 
 ## Проверка исходников
 
-Из корня репозитория системы:
+GitHub workflow автоматически проверяет синтаксис JavaScript перед сборкой релиза.
 
-```bash
-for test_file in tests/*.mjs; do node "$test_file"; done
-find . -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
-  | sort -z \
-  | xargs -0 -n1 node --check
-```
-
-Текущий статус и незакрытые задачи находятся в `../STATUS.md` и `../docs/ROADMAP_6.3.md` мастер-архива.
+Текущий статус и незакрытые задачи хранятся в мастер-архиве проекта.
