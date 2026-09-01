@@ -7,11 +7,11 @@ import {
   RESISTANCE_TRAITS
 } from "./config.mjs";
 import {
-  defenseAbilityItems,
+  actionHasDefenseProcedure,
   defenseActionConfig,
   defenseCostLabel,
-  evaluateDefenseAbility,
-  resolveDefenseCombatSource
+  resolveDefenseCombatSource,
+  resolveDefenseOptions
 } from "./defense-actions.mjs";
 import {
   itemIsEquipped,
@@ -30,6 +30,16 @@ import {
   inferWeaponAttackType,
   normalizeAttackType
 } from "./attack-types.mjs";
+import {
+  actionContextForDefenseAction,
+  actionContextFromAbility,
+  actionContextFromMessage,
+  actionContextFromWeapon,
+  actionContextWithCheckResult,
+  deriveActionContext,
+  directedAttackTypeFromActionContext,
+  normalizeActionContext
+} from "./action-context.mjs";
 import {
   abilityActionTraits,
   abilityCheckConfig,
@@ -906,6 +916,7 @@ export async function rollWeaponAttack(actor, weapon) {
   const combatDie = String(actor.system?.combatDie ?? "").trim();
   const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
   const target = getSingleTarget();
+  const baseActionContext = actionContextFromWeapon(actor, weapon, { target });
   const previewTargetDefense = target?.actor
     ? effectiveArmorForAction(target, actor)
     : null;
@@ -945,6 +956,14 @@ export async function rollWeaponAttack(actor, weapon) {
     : null;
 
   const critical = result.naturalD20 === 20;
+  const actionContext = actionContextWithCheckResult(baseActionContext, {
+    target,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    degree,
+    critical,
+    formula: result.formula
+  });
 
   const flavor = `
     <div class="fast-nri-chat-roll fast-nri-attack-card">
@@ -966,7 +985,7 @@ export async function rollWeaponAttack(actor, weapon) {
     </div>
   `;
 
-  await result.roll.toMessage({
+  const message = await result.roll.toMessage({
     speaker: ChatMessage.getSpeaker({ actor }),
     flavor,
     flags: {
@@ -980,6 +999,8 @@ export async function rollWeaponAttack(actor, weapon) {
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
         attackType,
+        actionTraits: actionContext.traits,
+        actionContext,
         offGuard: Boolean(targetState?.offGuard),
         surrounded: Boolean(targetState?.surrounding?.surrounded),
         surroundingThreats: targetState?.surrounding?.threats ?? null,
@@ -996,7 +1017,9 @@ export async function rollWeaponAttack(actor, weapon) {
     target,
     degree,
     critical,
-    attackType
+    attackType,
+    actionContext,
+    message
   };
 }
 
@@ -1686,6 +1709,26 @@ function abilityOutcomeChannel(item, kind) {
   };
 }
 
+function abilityCheckDefenseHTML(actionContext) {
+  const labels = [];
+  if (actionHasDefenseProcedure(actionContext, "counteraction")) labels.push("Противодействие");
+  if (actionHasDefenseProcedure(actionContext, "dodge")) labels.push("Уворот");
+  if (!labels.length) return "";
+
+  return `
+    <div class="fast-nri-ability-outcome-actions fast-nri-check-defense-actions">
+      <button
+        type="button"
+        data-fast-nri-check-defense
+        title="Доступно: ${escAttr(labels.join(", "))}"
+      >
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>Защита</span>
+      </button>
+    </div>
+  `;
+}
+
 export function abilityAttackFollowupHTML(actor, item) {
   if (!abilityOutcomeChannel(item, "damage").enabled) return "";
 
@@ -1990,7 +2033,7 @@ function degreeForAbilityCheck(result, targetCharacteristic, resolvedTarget) {
   return degreeVsDC(result.roll.total, dc, result.naturalD20);
 }
 
-export async function rollAbilityCheck(actor, item) {
+export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null } = {}) {
   if (!actor || !item || item.type !== "ability") return null;
 
   const config = abilityCheckConfig(item);
@@ -1999,6 +2042,9 @@ export async function rollAbilityCheck(actor, item) {
   const targetCharacteristic = normalizeCheckTargetCharacteristic(config.targetCharacteristic) || "armor";
   const actionTraits = abilityActionTraits(item);
   const attackType = directedAttackTypeFromTraits(actionTraits);
+  const baseActionContext = actionContextFromAbility(actor, item, {
+    originActionContext: inheritedActionContext
+  });
   const structureWarnings = checkStructureWarnings({
     targetCharacteristic,
     traits: actionTraits
@@ -2011,12 +2057,7 @@ export async function rollAbilityCheck(actor, item) {
   // Standard Directed Defense is a consequence of a directed non-area KZ
   // attack. Other checks may later expose their own counteraction procedure,
   // but must not accidentally inherit Self Defense from the legacy attack card.
-  const directedDefense = Boolean(
-    config.directedDefense
-    && targetCharacteristic === "armor"
-    && !actionTraits.area
-    && ["melee", "ranged"].includes(attackType)
-  );
+  const directedDefense = actionHasDefenseProcedure(baseActionContext, "directed");
 
   if (config.directedDefense && !directedDefense) {
     ui.notifications.warn(
@@ -2058,6 +2099,15 @@ export async function rollAbilityCheck(actor, item) {
   // Natural 20 is a damage multiplier only for KZ Attacks. Against the four
   // defensive characteristics it is already handled by degreeVsDC as Great.
   const critical = targetCharacteristic === "armor" && result.naturalD20 === 20;
+  const actionContext = actionContextWithCheckResult(baseActionContext, {
+    target,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    degree,
+    critical,
+    formula: result.formula,
+    parentMessageId
+  });
   const traitsLabel = actionTraitsLabel(actionTraits);
 
   const natural20HTML = result.naturalD20 === 20
@@ -2088,6 +2138,7 @@ export async function rollAbilityCheck(actor, item) {
       ${natural20HTML}
       <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(degree)}
+      ${abilityCheckDefenseHTML(actionContext)}
       ${abilityAttackFollowupHTML(actor, item)}
       ${rollSourcesHTML(result)}
     </div>
@@ -2108,6 +2159,8 @@ export async function rollAbilityCheck(actor, item) {
         naturalD20: result.naturalD20,
         targetCharacteristic,
         actionTraits,
+        actionContext,
+        defenseHistory: [],
         // Compatibility bridge for 0.5.51 damage/defense messages.
         attackType,
         area: Boolean(actionTraits.area),
@@ -2131,6 +2184,7 @@ export async function rollAbilityCheck(actor, item) {
     targetUuid: target?.document?.uuid ?? null,
     targetCharacteristic,
     actionTraits,
+    actionContext,
     directedDefense,
     attackType
   };
@@ -2141,8 +2195,28 @@ export async function rollAbilityAttackCheck(actor, item) {
   return rollAbilityCheck(actor, item);
 }
 
-export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null) {
+export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null, sourceActionContext = null) {
   if (!actor || !item || item.type !== "ability") return null;
+
+  let actionContext = normalizeActionContext(
+    sourceAttack?.actionContext
+      ?? sourceActionContext
+      ?? actionContextFromAbility(actor, item)
+  );
+
+  if (sourceAttack && !sourceAttack?.actionContext) {
+    actionContext = actionContextWithCheckResult(actionContext, {
+      total: sourceAttack.total,
+      naturalD20: sourceAttack.naturalD20,
+      degree: sourceAttack.degree,
+      critical: Boolean(sourceAttack.critical),
+      parentMessageId: sourceAttack?.message?.id ?? null
+    });
+  } else if (sourceAttack?.message?.id) {
+    actionContext = deriveActionContext(actionContext, {
+      parentMessageId: sourceAttack.message.id
+    });
+  }
 
   const fallbackKind = String(item.system?.outcome?.kind ?? "none");
   const kind = String(requestedKind ?? fallbackKind);
@@ -2193,18 +2267,13 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     state = recalculateDamageState(state);
 
     const modifiersHTML = rollSourcesHTML(result);
-    const sourceTargetCharacteristic = normalizeCheckTargetCharacteristic(
-      sourceAttack?.targetCharacteristic
-    ) || (sourceAttack ? "armor" : "");
-    const sourceActionTraits = normalizeActionTraits(sourceAttack?.actionTraits);
-    const sourceAttackType = normalizeAttackType(sourceAttack?.attackType)
-      || directedAttackTypeFromTraits(sourceActionTraits);
-    const directedDefense = Boolean(
-      sourceAttack?.directedDefense
-      && sourceTargetCharacteristic === "armor"
-      && !sourceActionTraits.area
-      && ["melee", "ranged"].includes(sourceAttackType)
-    );
+    const sourceTargetCharacteristic = actionContext.check.targetCharacteristic
+      || normalizeCheckTargetCharacteristic(sourceAttack?.targetCharacteristic)
+      || (sourceAttack ? "armor" : "");
+    const sourceActionTraits = actionContext.traits;
+    const sourceAttackType = directedAttackTypeFromActionContext(actionContext)
+      || normalizeAttackType(sourceAttack?.attackType);
+    const directedDefense = actionHasDefenseProcedure(actionContext, "directed");
     const allowDouble = Boolean(sourceAttack && sourceTargetCharacteristic === "armor");
 
     const flavor = damageCardHTML({
@@ -2233,7 +2302,8 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
           attackDegree: sourceAttack?.degree ?? null,
           automaticAttackDegree: sourceAttack?.degree ?? null,
           targetCharacteristic: sourceTargetCharacteristic || null,
-          actionTraits: sourceAttack ? sourceActionTraits : null,
+          actionTraits: sourceActionTraits,
+          actionContext,
           attackType: sourceAttackType,
           area: Boolean(sourceActionTraits.area),
           originalTargetUuid: sourceAttack?.targetUuid ?? null,
@@ -2277,6 +2347,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
         outcomeKind: kind,
+        actionContext,
         hpGainState: state,
         rolledTotal: result.roll.total,
         modifierNotesHTML: modifiersHTML
@@ -2307,6 +2378,8 @@ export async function rollDamageFromChat(element) {
   const displayFormula = plainDamageFormula(components) || fallbackFormula || "0";
 
   const attackMessage = chatMessageFromElement(element);
+  let actionContext = actionContextFromMessage(attackMessage)
+    ?? actionContextFromWeapon(actor, weapon);
   const attackTotal = finiteNumberOrNull(
     attackMessage?.getFlag("fast-nri", "rollTotal")
     ?? attackMessage?.rolls?.[0]?.total
@@ -2318,10 +2391,22 @@ export async function rollDamageFromChat(element) {
   const confirmedAttackDegree = ["partial", "success", "great"].includes(profile)
     ? profile
     : automaticAttackDegree;
-  const originalTargetUuid = attackMessage?.getFlag("fast-nri", "targetUuid") ?? null;
-  const attackType = normalizeAttackType(
-    attackMessage?.getFlag("fast-nri", "attackType")
-  ) || inferWeaponAttackType(weapon);
+  const originalTargetUuid = actionContext.targets?.[0]?.tokenUuid
+    ?? attackMessage?.getFlag("fast-nri", "targetUuid")
+    ?? null;
+  actionContext = deriveActionContext(actionContext, {
+    check: {
+      ...actionContext.check,
+      total: attackTotal,
+      naturalD20: attackNaturalD20,
+      degree: confirmedAttackDegree,
+      critical
+    },
+    parentMessageId: attackMessage?.id ?? null
+  });
+  const attackType = directedAttackTypeFromActionContext(actionContext)
+    || normalizeAttackType(attackMessage?.getFlag("fast-nri", "attackType"))
+    || inferWeaponAttackType(weapon);
 
   const labels = {
     partial: "Частичный",
@@ -2368,7 +2453,8 @@ export async function rollDamageFromChat(element) {
     profileLabel: labels[profile] ?? profile,
     critical,
     state: damageState,
-    modifiersHTML
+    modifiersHTML,
+    allowDefense: actionHasDefenseProcedure(actionContext, "directed")
   });
 
   const message = await result.roll.toMessage({
@@ -2386,6 +2472,9 @@ export async function rollDamageFromChat(element) {
         attackDegree: confirmedAttackDegree,
         automaticAttackDegree,
         attackType,
+        targetCharacteristic: actionContext.check.targetCharacteristic,
+        actionTraits: actionContext.traits,
+        actionContext,
         originalTargetUuid,
         sourceAttackMessageId: attackMessage?.id ?? null,
         rolledTotal: result.roll.total,
@@ -2413,97 +2502,44 @@ function sameTokenOrActor(a, b) {
   return Boolean(a.actor?.uuid && b.actor?.uuid && a.actor.uuid === b.actor.uuid);
 }
 
-function builtInSelfDefenseOption(actor, attackType, actionTraits = {}) {
-  const interventionCost = 1;
-  const interventions = finiteNumberOrNull(actor?.system?.resources?.intervention);
-  const warnings = [];
-  const reasons = [];
-
-  const normalizedAttackType = normalizeAttackType(attackType);
-  const normalizedTraits = normalizeActionTraits(actionTraits);
-  if (normalizedTraits.area) {
-    reasons.push("против Области действия Самозащита недоступна");
-  } else if (!["melee", "ranged"].includes(normalizedAttackType)) {
-    reasons.push("для исходной атаки не указан однозначный вид Ближняя/Дистанционная");
-  }
-
-  if (interventions !== null && interventions < interventionCost) {
-    warnings.push(`в листе ${interventions} Вмешательств из требуемых ${interventionCost}`);
-  }
-
-  return {
-    id: "system-self-defense",
-    actionName: "Самозащита",
-    item: null,
-    config: {
-      enabled: true,
-      targetScope: "self",
-      interventionCost,
-      rangeMode: "manual",
-      rangeCells: 0,
-      requiresVisibility: false,
-      movementMode: "none",
-      damageSelectionMode: "standard",
-      combatDiceFormula: "",
-      removeDamageParts: 1,
-      effectDegreeReduction: 1,
-      allowManeuver: false
-    },
-    disabled: reasons.length > 0,
-    reasons,
-    warnings,
-    costLabel: "1 Вмешательство"
-  };
+function defenseMethodOptions({
+  actor,
+  defenderToken,
+  protectedToken,
+  role,
+  defenseHistory = [],
+  actionContext,
+  procedures = null
+}) {
+  return resolveDefenseOptions({
+    actor,
+    defenderToken,
+    protectedToken,
+    role,
+    actionContext,
+    defenseHistory,
+    procedures
+  });
 }
 
-function defenseMethodOptions({ actor, defenderToken, protectedToken, role, damageState, attackType, actionTraits = {} }) {
-  const options = [];
-
-  if (role === "self") options.push(builtInSelfDefenseOption(actor, attackType, actionTraits));
-
-  for (const item of defenseAbilityItems(actor, role)) {
-    const config = defenseActionConfig(item);
-    const availability = evaluateDefenseAbility({
-      actor,
-      defenderToken,
-      protectedToken,
-      item,
-      role
-    });
-
-    const alreadyUsed = (damageState?.defenseHistory ?? []).some(entry =>
-      entry?.actorUuid === actor.uuid
-    );
-
-    if (alreadyUsed) {
-      availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
-    }
-
-    options.push({
-      id: `ability-${item.id}`,
-      actionName: item.name,
-      item,
-      config,
-      disabled: availability.disabled,
-      reasons: availability.reasons,
-      warnings: availability.warnings,
-      costLabel: defenseCostLabel(item, actor)
-    });
-  }
-
-  return options;
-}
-
-async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role, damageState, attackType, actionTraits = {} }) {
+async function chooseDefenseMethod({
+  actor,
+  defenderToken,
+  protectedToken,
+  role,
+  defenseHistory = [],
+  actionContext,
+  procedures = null
+}) {
   const { DialogV2 } = foundry.applications.api;
   const options = defenseMethodOptions({
     actor,
     defenderToken,
     protectedToken,
     role,
-    damageState,
-    attackType,
-    actionTraits
+    defenseHistory,
+    actionContext,
+    procedures
   });
 
   const targetName = protectedToken?.name || protectedToken?.actor?.name || actor.name;
@@ -2550,10 +2586,7 @@ async function chooseDefenseMethod({ actor, defenderToken, protectedToken, role,
       <div class="fast-nri-defense-method-intro">
         <div><strong>Защитник:</strong> ${esc(defenderToken.name)}</div>
         <div><strong>Защищаемая цель:</strong> ${esc(targetName)}</div>
-        ${role === "self"
-          ? "<p>Выберите способ Самозащиты.</p>"
-          : "<p>Показаны Защитные Ability выбранного персонажа, подходящие для союзника.</p>"
-        }
+        <p>Показаны все стандартные и специальные способы защиты, подходящие текущему ActionContext.</p>
         ${options.length ? "" : "<p><strong>У персонажа нет настроенных способов защиты этой цели.</strong></p>"}
         <small>
           Вмешательство, Движение и Воздействие не списываются автоматически.
@@ -2745,6 +2778,480 @@ export async function undoDefenseResource(element) {
   return { actor, restored, restoredAmount: spent };
 }
 
+
+async function actionContextTargetToken(actionContext) {
+  const context = normalizeActionContext(actionContext);
+  const target = context.targets?.[0] ?? null;
+  if (!target) return null;
+
+  if (target.tokenUuid) {
+    try {
+      const document = await fromUuid(target.tokenUuid);
+      if (document?.object) return document.object;
+      const placeable = Array.from(canvas?.tokens?.placeables ?? []).find(token =>
+        token?.document?.uuid === target.tokenUuid
+      );
+      if (placeable) return placeable;
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось найти target Token из ActionContext", error);
+    }
+  }
+
+  if (target.actorUuid) {
+    try {
+      const actor = await fromUuid(target.actorUuid);
+      const tokens = actor?.getActiveTokens?.(false, false) ?? [];
+      if (tokens.length === 1) return tokens[0];
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось найти target Actor из ActionContext", error);
+    }
+  }
+
+  return null;
+}
+
+async function chooseDodgeMovement(actionName = "Уворот") {
+  const { DialogV2 } = foundry.applications.api;
+  return DialogV2.wait({
+    window: { title: `${actionName}: способ перемещения` },
+    content: `
+      <div class="fast-nri-defense-choice">
+        <p>Выберите вариант Уворота. Foundry не перемещает токен автоматически.</p>
+        <small>После броска выполните выбранное перемещение вручную до применения результата исходного действия.</small>
+      </div>
+    `,
+    modal: true,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "step",
+        label: "Увернуться · 1 соседняя клетка",
+        icon: "fa-solid fa-person-walking-arrow-right",
+        callback: async () => "step"
+      },
+      {
+        action: "leap",
+        label: "Отпрыгнуть · 2 клетки по прямой · Сбит с ног",
+        icon: "fa-solid fa-person-falling",
+        callback: async () => "leap"
+      },
+      {
+        action: "cancel",
+        label: "Отмена",
+        icon: "fa-solid fa-xmark",
+        callback: async () => null
+      }
+    ]
+  });
+}
+
+async function chooseDodgeDegreeReduction(actionName = "Уворот") {
+  const { DialogV2 } = foundry.applications.api;
+  return DialogV2.wait({
+    window: { title: `${actionName}: итог перемещения` },
+    content: `
+      <div class="fast-nri-defense-choice">
+        <p>Укажите итог выбранного вручную перемещения.</p>
+        <small>Это выбор пользователя, а не автоматическая проверка геометрии системой.</small>
+      </div>
+    `,
+    modal: true,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "inside",
+        label: "Остался под действием атаки · степень −1",
+        icon: "fa-solid fa-location-dot",
+        callback: async () => 1
+      },
+      {
+        action: "safe",
+        label: "Достиг безопасного места · степень −2",
+        icon: "fa-solid fa-person-running",
+        callback: async () => 2
+      }
+    ]
+  });
+}
+
+function checkDefenseRollFlavorHTML({
+  actionName,
+  procedure,
+  defenderTokenName,
+  protectedTokenName,
+  role,
+  characteristic,
+  attackTotal,
+  defenseTotal,
+  defenseResult,
+  degreeBefore,
+  degreeAfter,
+  dodgeMovement = null,
+  result,
+  resource
+}) {
+  const procedureLabel = procedure === "dodge" ? "Уворот" : "Противодействие";
+  const movementLabel = dodgeMovement === "step"
+    ? "Увернуться: 1 соседняя клетка"
+    : dodgeMovement === "leap"
+      ? "Отпрыгнуть: 2 клетки по прямой; затем Сбит с ног"
+      : "";
+
+  return `
+    <div class="fast-nri-chat-roll fast-nri-defense-roll-card fast-nri-check-defense-roll-card">
+      ${rollCardHeader(`${actionName}: ${defenderTokenName}`, "fa-shield-halved")}
+      <div class="fast-nri-defense-roll-result">
+        ${role === "ally" ? `<span>Защищаемая цель: <strong>${esc(protectedTokenName)}</strong></span>` : ""}
+        <span>Процедура: <strong>${esc(procedureLabel)}</strong></span>
+        <span>Характеристика: <strong>${esc(checkTargetCharacteristicLabel(characteristic))}</strong></span>
+        <span>Исходный результат: <strong>${esc(attackTotal)}</strong></span>
+        <span>Защита: <strong>${esc(defenseTotal)}</strong></span>
+        <span>Результат: <strong>${esc(defenseResultLabel(defenseResult))}</strong></span>
+        ${degreeBefore ? `<span>Степень: <strong>${esc(DEGREE_LABELS[degreeBefore] ?? degreeBefore)}</strong> → <strong>${esc(DEGREE_LABELS[degreeAfter] ?? degreeAfter)}</strong></span>` : ""}
+        ${movementLabel ? `<span>Перемещение: <strong>${esc(movementLabel)}</strong></span>` : ""}
+      </div>
+      ${procedure === "dodge" && result?.naturalD20 === 1 ? `
+        <div class="fast-nri-damage-structure-warning">
+          Натуральная 1: не перемещайтесь и примените состояние «Сбит с ног» вручную.
+        </div>
+      ` : ""}
+      ${procedure === "dodge" && result?.naturalD20 !== 1 ? `
+        <small>Перемещение Уворота выполняется вручную; система фиксирует выбранный итог, но не двигает токен.</small>
+      ` : ""}
+      ${defenseResourceHTML(resource, false)}
+      ${rollSourcesHTML(result)}
+    </div>
+  `;
+}
+
+function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, defense }) {
+  const context = normalizeActionContext(actionContext);
+  const targetLabel = checkTargetCharacteristicLabel(context.check.targetCharacteristic);
+  const targetName = context.targets?.[0]?.name ?? "";
+  const traitsLabel = actionTraitsLabel(context.traits);
+  const followup = sourceActor && sourceItem?.type === "ability"
+    ? abilityAttackFollowupHTML(sourceActor, sourceItem)
+    : "";
+
+  return `
+    <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-check-card fast-nri-check-after-defense-card">
+      ${rollCardHeader(`Проверка после защиты: ${sourceItem?.name ?? context.source?.name ?? "Действие"}`, "fa-shield-halved")}
+      <div class="fast-nri-attack-summary">
+        <span>Исходный результат: <strong>${esc(context.check.total)}</strong></span>
+        <span>Против: <strong>${esc(targetLabel)}</strong></span>
+        ${targetName ? `<span>Цель: <strong>${esc(targetName)}</strong></span>` : ""}
+      </div>
+      <div class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)}">
+        <strong>${esc(defense.actionName)} — ${esc(defenseResultLabel(defense.result))}</strong>
+        <small>${esc(defense.defenderTokenName)}: ${esc(defense.total)} против ${esc(defense.attackTotal)}</small>
+        <div>Степень: <strong>${esc(DEGREE_LABELS[defense.degreeBefore] ?? defense.degreeBefore)}</strong> → <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
+      </div>
+      <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
+      ${degreeHTML(context.check.degree)}
+      ${abilityCheckDefenseHTML(context)}
+      ${followup}
+    </div>
+  `;
+}
+
+export async function checkDefenseFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-check") {
+    ui.notifications.error("Не удалось найти исходную проверку для Защитного действия.");
+    return null;
+  }
+
+  const actionContext = actionContextFromMessage(message);
+  if (!actionContext) {
+    ui.notifications.error("В этой карточке нет ActionContext 0.5.53. Повторите исходную проверку.");
+    return null;
+  }
+
+  const availableProcedures = ["counteraction", "dodge"].filter(procedure =>
+    actionHasDefenseProcedure(actionContext, procedure)
+  );
+  if (!availableProcedures.length) {
+    ui.notifications.info("Для этой проверки нет стандартного Противодействия или Уворота.");
+    return null;
+  }
+
+  const defenderToken = controlledSingleDefenderToken();
+  if (!defenderToken) return null;
+  const defender = defenderToken.actor;
+  if (!defender) return null;
+
+  const protectedToken = await actionContextTargetToken(actionContext);
+  if (!protectedToken) {
+    ui.notifications.error("Не удалось найти исходную цель проверки из ActionContext.");
+    return null;
+  }
+
+  const role = sameTokenOrActor(defenderToken, protectedToken) ? "self" : "ally";
+  const defenseHistory = Array.from(message.getFlag("fast-nri", "defenseHistory") ?? []);
+  const method = await chooseDefenseMethod({
+    actor: defender,
+    defenderToken,
+    protectedToken,
+    role,
+    defenseHistory,
+    actionContext,
+    procedures: availableProcedures
+  });
+  if (!method) return null;
+
+  if (method.warnings.length) {
+    ui.notifications.warn(`${method.actionName}: ${method.warnings.join("; ")}.`);
+  }
+
+  const procedure = method.procedure;
+  const characteristic = procedure === "dodge"
+    ? "reflex"
+    : normalizeCheckTargetCharacteristic(actionContext.check.targetCharacteristic);
+  if (!characteristic || characteristic === "armor") {
+    ui.notifications.error("Не удалось определить защитную характеристику для этой процедуры.");
+    return null;
+  }
+
+  let dodgeMovement = null;
+  if (procedure === "dodge") {
+    dodgeMovement = await chooseDodgeMovement(method.actionName);
+    if (!dodgeMovement) return null;
+  }
+
+  const sourceActor = actionContext.source?.actorUuid
+    ? await fromUuid(actionContext.source.actorUuid)
+    : null;
+  const sourceItem = actionContext.source?.itemUuid
+    ? await fromUuid(actionContext.source.itemUuid)
+    : null;
+
+  const characteristicState = effectiveDefenseCharacteristicForAction(
+    defenderToken,
+    characteristic,
+    sourceActor
+  );
+  const characteristicValue = finiteNumberOrNull(characteristicState.value);
+  if (characteristicValue === null) {
+    ui.notifications.error(
+      `У выбранного токена нет корректного значения «${checkTargetCharacteristicLabel(characteristic)}».`
+    );
+    return null;
+  }
+
+  const combatSource = defenseCombatTerm(defender, method.item, role);
+  const baseFormula = combatSource?.formula
+    ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
+    : `1d20 + ${characteristicValue}`;
+
+  const contextualModifiers = selfDefenseContextualModifiers(
+    defender,
+    sourceItem,
+    actionContext.check.degree
+  ).filter(modifier => modifier.id !== "weapon-deadly");
+
+  const result = await prepareRoll({
+    actor: defender,
+    label: `${method.actionName}: ${defenderToken.name}`,
+    baseFormula,
+    baseSources: [
+      { formula: "1d20", label: "Базовый d20", reason: method.actionName },
+      {
+        formula: String(characteristicValue),
+        label: checkTargetCharacteristicLabel(characteristic),
+        reason: characteristicState.state?.offGuard
+          ? `${defender.name} · Застигнут врасплох −2`
+          : defender.name
+      },
+      ...(combatSource ? [combatSource] : [])
+    ],
+    showDC: false,
+    additionalModifiers: contextualModifiers,
+    contextHTML: `
+      <section class="fast-nri-roll-context fast-nri-defense-roll-context">
+        <i class="fa-solid fa-shield-halved"></i>
+        <div>
+          <strong>${esc(method.actionName)}</strong>
+          <small>
+            ${esc(checkTargetCharacteristicLabel(characteristic))} ·
+            исходный результат ${esc(actionContext.check.total)} ·
+            ${esc(defenseCostLabel(method.item ?? method.config, defender))}
+          </small>
+        </div>
+      </section>
+    `
+  });
+  if (!result) return null;
+
+  const attackTotal = finiteNumberOrNull(actionContext.check.total);
+  if (attackTotal === null) {
+    ui.notifications.error("В ActionContext отсутствует результат исходной проверки.");
+    return null;
+  }
+
+  const degreeBefore = actionContext.check.degree;
+  let defenseResult = "failure";
+  let degreeAfter = degreeBefore;
+  let degreeReduction = 0;
+
+  if (result.naturalD20 === 1) {
+    defenseResult = "failure";
+  } else if (result.naturalD20 === 20) {
+    defenseResult = "success";
+    degreeAfter = "failure";
+    degreeReduction = 99;
+  } else if (result.roll.total >= attackTotal) {
+    defenseResult = "success";
+    if (procedure === "dodge") {
+      degreeReduction = Number(await chooseDodgeDegreeReduction(method.actionName)) || 1;
+    } else {
+      degreeReduction = Math.max(1, Number(method.config.effectDegreeReduction) || 1);
+    }
+    degreeAfter = lowerDegree(degreeBefore, degreeReduction);
+  }
+
+  const resource = await spendDefenseClassResource(defender, method.item);
+  const defenseEntry = {
+    kind: "check-defense",
+    procedure,
+    actionName: method.actionName,
+    abilityUuid: method.item?.uuid ?? null,
+    actorUuid: defender.uuid,
+    defenderTokenUuid: defenderToken.document?.uuid ?? null,
+    defenderTokenName: defenderToken.name || defender.name,
+    protectedTokenUuid: protectedToken.document?.uuid ?? null,
+    protectedActorUuid: protectedToken.actor?.uuid ?? null,
+    protectedTokenName: protectedToken.name || protectedToken.actor?.name,
+    characteristic,
+    attackTotal,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    result: defenseResult,
+    degreeBefore,
+    degreeAfter,
+    degreeReduction,
+    dodgeMovement,
+    interventionCost: Math.max(0, Number(method.config.interventionCost) || 0)
+  };
+  const nextHistory = [...defenseHistory, defenseEntry];
+  const nextContext = deriveActionContext(actionContext, {
+    check: {
+      ...actionContext.check,
+      degree: degreeAfter
+    },
+    parentMessageId: message.id
+  });
+  const defenseActionContext = actionContextForDefenseAction(actionContext, {
+    actor: defender,
+    item: method.item,
+    defenderToken,
+    protectedToken,
+    actionName: method.actionName,
+    procedure,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    parentMessageId: message.id
+  });
+
+  const defenseFlavor = checkDefenseRollFlavorHTML({
+    actionName: method.actionName,
+    procedure,
+    defenderTokenName: defenderToken.name,
+    protectedTokenName: protectedToken.name || protectedToken.actor?.name,
+    role,
+    characteristic,
+    attackTotal,
+    defenseTotal: result.roll.total,
+    defenseResult,
+    degreeBefore,
+    degreeAfter,
+    dodgeMovement,
+    result,
+    resource
+  });
+
+  const defenseMessage = await result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor: defender, token: defenderToken.document }),
+    flavor: defenseFlavor,
+    flags: {
+      "fast-nri": {
+        kind: "defense-roll",
+        actionName: method.actionName,
+        procedure,
+        role,
+        abilityUuid: method.item?.uuid ?? null,
+        sourceCheckMessageId: message.id,
+        defenderTokenUuid: defenderToken.document?.uuid ?? null,
+        defenderActorUuid: defender.uuid,
+        protectedTokenUuid: protectedToken.document?.uuid ?? null,
+        protectedActorUuid: protectedToken.actor?.uuid ?? null,
+        result: defenseResult,
+        attackTotal,
+        naturalD20: result.naturalD20,
+        resourceCost: resource.cost,
+        resourceLabel: resource.label,
+        resourceBefore: resource.before,
+        resourceAfter: resource.after,
+        resourceSpent: resource.spent,
+        resourceShortage: resource.shortage,
+        resourceUndone: false,
+        actionContext: defenseActionContext,
+        sourceActionContext: nextContext,
+        defenseDisplay: {
+          actionName: method.actionName,
+          defenderTokenName: defenderToken.name,
+          protectedTokenName: protectedToken.name || protectedToken.actor?.name,
+          role,
+          attackTotal,
+          defenseTotal: result.roll.total,
+          defenseResult,
+          sourcesHTML: rollSourcesHTML(result)
+        }
+      }
+    }
+  });
+
+  const derivedMessage = await ChatMessage.create({
+    speaker: message.speaker,
+    content: checkAfterDefenseCardHTML({
+      sourceActor,
+      sourceItem,
+      actionContext: nextContext,
+      defense: defenseEntry
+    }),
+    flags: {
+      "fast-nri": {
+        kind: "ability-check",
+        actorUuid: actionContext.source.actorUuid,
+        itemUuid: actionContext.source.itemUuid,
+        targetUuid: nextContext.targets?.[0]?.tokenUuid ?? null,
+        degree: degreeAfter,
+        originalDegree: message.getFlag("fast-nri", "originalDegree")
+          ?? message.getFlag("fast-nri", "degree")
+          ?? degreeBefore,
+        critical: Boolean(nextContext.check.critical),
+        rollTotal: nextContext.check.total,
+        naturalD20: nextContext.check.naturalD20,
+        targetCharacteristic: nextContext.check.targetCharacteristic,
+        actionTraits: nextContext.traits,
+        actionContext: nextContext,
+        defenseHistory: nextHistory,
+        attackType: directedAttackTypeFromActionContext(nextContext),
+        area: Boolean(nextContext.traits.area),
+        directedDefense: Boolean(nextContext.defenseProcedures.directed),
+        sourceCheckMessageId: message.id
+      }
+    }
+  });
+
+  return {
+    sourceMessage: message,
+    defenseMessage,
+    message: derivedMessage,
+    actionContext: nextContext,
+    defense: defenseEntry
+  };
+}
+
 export async function defenseFromChat(element) {
   const message = chatMessageFromElement(element);
 
@@ -2787,25 +3294,60 @@ export async function defenseFromChat(element) {
   }
 
   const sourceItem = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
-  const storedAttackType = normalizeAttackType(message.getFlag("fast-nri", "attackType"));
-  const attackType = storedAttackType
-    || (sourceItem?.type === "weapon" ? inferWeaponAttackType(sourceItem) : "")
-    || (sourceItem?.type === "ability"
-      ? directedAttackTypeFromTraits(abilityActionTraits(sourceItem))
-      : "");
-  const actionTraits = normalizeActionTraits(
-    message.getFlag("fast-nri", "actionTraits")
-      ?? (sourceItem?.type === "ability" ? abilityActionTraits(sourceItem) : {})
-  );
+  let actionContext = actionContextFromMessage(message);
+
+  // Compatibility for already existing chat messages: rebuild context only
+  // from structured flags/document fields. Runtime prose inference is not used.
+  if (!actionContext) {
+    const sourceActorUuid = message.getFlag("fast-nri", "actorUuid");
+    const sourceActor = sourceActorUuid ? await fromUuid(sourceActorUuid) : null;
+    const storedTraits = message.getFlag("fast-nri", "actionTraits");
+    const storedAttackType = normalizeAttackType(message.getFlag("fast-nri", "attackType"));
+    const base = sourceItem?.type === "weapon"
+      ? actionContextFromWeapon(sourceActor, sourceItem)
+      : sourceItem?.type === "ability"
+        ? actionContextFromAbility(sourceActor, sourceItem)
+        : normalizeActionContext({});
+
+    actionContext = deriveActionContext(base, {
+      targets: message.getFlag("fast-nri", "originalTargetUuid")
+        ? [{ tokenUuid: message.getFlag("fast-nri", "originalTargetUuid") }]
+        : base.targets,
+      traits: storedTraits ?? {
+        melee: storedAttackType === "melee",
+        ranged: storedAttackType === "ranged"
+      },
+      check: {
+        ...base.check,
+        enabled: true,
+        targetCharacteristic: message.getFlag("fast-nri", "targetCharacteristic")
+          ?? base.check.targetCharacteristic
+          ?? "armor",
+        total: message.getFlag("fast-nri", "attackTotal"),
+        naturalD20: message.getFlag("fast-nri", "attackNaturalD20"),
+        degree: message.getFlag("fast-nri", "attackDegree")
+      },
+      defenseProcedures: {
+        ...base.defenseProcedures,
+        directed: Boolean(
+          message.getFlag("fast-nri", "directedDefense")
+          ?? base.defenseProcedures.directed
+        )
+      }
+    });
+  }
+
+  const attackType = directedAttackTypeFromActionContext(actionContext);
+  const actionTraits = actionContext.traits;
 
   const method = await chooseDefenseMethod({
     actor: defender,
     defenderToken,
     protectedToken,
     role,
-    damageState,
-    attackType,
-    actionTraits
+    defenseHistory: damageState?.defenseHistory ?? [],
+    actionContext,
+    procedures: ["directed"]
   });
   if (!method) return null;
 
@@ -2850,9 +3392,11 @@ export async function defenseFromChat(element) {
   );
   if (selectedRemovalParts === null) return null;
 
-  const sourceActor = sourceItem?.parent?.documentName === "Actor"
-    ? sourceItem.parent
-    : null;
+  const sourceActor = actionContext.source?.actorUuid
+    ? await fromUuid(actionContext.source.actorUuid)
+    : sourceItem?.parent?.documentName === "Actor"
+      ? sourceItem.parent
+      : null;
 
   const selfDefenseOverride = role === "self"
     ? String(actionConfig.selfDefenseCharacteristic ?? "").trim()
@@ -3052,6 +3596,18 @@ export async function defenseFromChat(element) {
     sourcesHTML: rollSourcesHTML(result)
   };
 
+  const defenseActionContext = actionContextForDefenseAction(actionContext, {
+    actor: defender,
+    item: actionItem,
+    defenderToken,
+    protectedToken,
+    actionName,
+    procedure: "directed",
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    parentMessageId: message.id
+  });
+
   const defenseFlavor = defenseRollFlavorHTML({
     ...defenseDisplay,
     result,
@@ -3086,6 +3642,8 @@ export async function defenseFromChat(element) {
         resourceSpent: resource.spent,
         resourceShortage: resource.shortage,
         resourceUndone: false,
+        actionContext: defenseActionContext,
+        sourceActionContext: deriveActionContext(actionContext, { parentMessageId: message.id }),
         defenseDisplay
       }
     }
@@ -3119,6 +3677,10 @@ export async function defenseFromChat(element) {
         rolledTotal: message.getFlag("fast-nri", "rolledTotal"),
         finalTotal: damageState.currentTotal,
         modifierNotesHTML: modifiersHTML,
+        actionContext: deriveActionContext(actionContext, { parentMessageId: message.id }),
+        actionTraits: actionContext.traits,
+        targetCharacteristic: actionContext.check.targetCharacteristic,
+        attackType,
         damageState
       }
     }
@@ -3394,6 +3956,7 @@ export async function applyDamageFromChat(element) {
 
   const sourceMessage = chatMessageFromElement(element);
   const damageState = sourceMessage?.getFlag("fast-nri", "damageState") ?? null;
+  const sourceActionContext = actionContextFromMessage(sourceMessage);
 
   let resolution;
   if (damageState?.supported) {
@@ -3491,6 +4054,9 @@ export async function applyDamageFromChat(element) {
         afterTemp,
         multiplier,
         resolution,
+        actionContext: sourceActionContext
+          ? deriveActionContext(sourceActionContext, { parentMessageId: sourceMessage?.id ?? null })
+          : null,
         undone: false
       }
     }
@@ -3722,6 +4288,23 @@ export function activateChatInteractions(root = document) {
         await undoDefenseResource(undoDefenseResourceButton);
       } finally {
         delete undoDefenseResourceButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
+    const checkDefenseButton = event.target.closest("[data-fast-nri-check-defense]");
+    if (checkDefenseButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (checkDefenseButton.dataset.fastNriBusy === "true") return;
+      checkDefenseButton.dataset.fastNriBusy = "true";
+
+      try {
+        await checkDefenseFromChat(checkDefenseButton);
+      } finally {
+        delete checkDefenseButton.dataset.fastNriBusy;
       }
 
       return;

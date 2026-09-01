@@ -28,6 +28,7 @@ import {
 } from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
 import {
+  DEFENSE_ACTION_PROCEDURES,
   DEFENSE_DAMAGE_SELECTION_MODES,
   DEFENSE_MODIFIER_SCOPES,
   DEFENSE_MOVEMENT_MODES,
@@ -1074,6 +1075,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
               round: Number(game.combat.round) || 0
             } : null)
           : "",
+      defenseProcedureChoices: DEFENSE_ACTION_PROCEDURES,
       defenseTargetScopeChoices: DEFENSE_TARGET_SCOPES,
       defenseRangeModeChoices: DEFENSE_RANGE_MODES,
       defenseMovementModeChoices: DEFENSE_MOVEMENT_MODES,

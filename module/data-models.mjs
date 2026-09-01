@@ -282,9 +282,9 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
     return {
       ...itemBaseSchema(),
       range: text("Ближняя"),
-      // 6.3: вид направленной атаки против КЗ. Пустое legacy-значение
-      // разрешается runtime через однозначные данные оружия и мигрируется GM.
-      attackType: text(""),
+      // 6.3: вид направленной атаки против КЗ. Новое оружие по умолчанию
+      // является ближним; допустимы только melee/ranged.
+      attackType: text("melee"),
       // Канонические стабильные ID свойств.
       propertyIds: stringArray(),
 
@@ -368,14 +368,15 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         intervention: flag(false)
       }),
 
-      // Минимальный структурированный контракт защитной процедуры. Полный
-      // selector будет строиться поверх него в следующих шагах 0.5.52.
+      // Структурированный контракт исходного действия для стандартной
+      // Направленной защиты. В 0.5.53 общий defense resolver дополняет его
+      // Противодействием, Уворотом и специальными защитными Ability.
       defenseProcedure: new SchemaField({
         directedDefense: flag(false)
       }),
 
       // Legacy 0.5.51. Оставлено для безопасного чтения старых документов;
-      // runtime 0.5.52 предпочитает check/actionTraits после миграции.
+      // runtime 0.5.53 предпочитает check/actionTraits после миграции.
       attackCheck: new SchemaField({
         enabled: flag(false),
         formula: text("1d20 + {combatDie}"),
@@ -387,6 +388,9 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       // признаки у Ability Item и не зависит от названия или класса.
       defenseAction: new SchemaField({
         enabled: flag(false),
+        // Какую процедуру исходного действия реализует эта защитная Ability.
+        // Legacy-защиты до 0.5.53 мигрируются в directed.
+        procedure: text("directed"),
         targetScope: text("ally"),
         interventionCost: integer(1),
         rangeMode: text("adjacent"),

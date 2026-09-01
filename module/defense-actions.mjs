@@ -1,5 +1,13 @@
+import {
+  DEFENSE_PROCEDURE_IDS,
+  actionContextDefenseProcedureIds,
+  normalizeActionContext
+} from "./action-context.mjs";
+
 const SYSTEM_ID = "fast-nri";
 const MIGRATION_SETTING = "defenseInfrastructureMigrated";
+
+export const DEFENSE_ACTION_PROCEDURES = DEFENSE_PROCEDURE_IDS;
 
 export const DEFENSE_TARGET_SCOPES = Object.freeze({
   ally: "Союзник",
@@ -52,6 +60,9 @@ export function defenseActionConfig(item) {
 
   return {
     enabled: Boolean(config.enabled),
+    procedure: Object.hasOwn(DEFENSE_ACTION_PROCEDURES, config.procedure)
+      ? config.procedure
+      : "directed",
     targetScope: ["ally", "self", "either"].includes(config.targetScope)
       ? config.targetScope
       : "ally",
@@ -94,15 +105,16 @@ export function defenseRoleMatches(scope, role) {
   return scope === role;
 }
 
-export function isDefenseAbilityForRole(item, role) {
+export function isDefenseAbilityForRole(item, role, procedure = null) {
   if (item?.type !== "ability") return false;
   const config = defenseActionConfig(item);
-  return config.enabled && defenseRoleMatches(config.targetScope, role);
+  if (!config.enabled || !defenseRoleMatches(config.targetScope, role)) return false;
+  return !procedure || config.procedure === procedure;
 }
 
-export function defenseAbilityItems(actor, role) {
+export function defenseAbilityItems(actor, role, procedure = null) {
   return actorItems(actor)
-    .filter(item => isDefenseAbilityForRole(item, role))
+    .filter(item => isDefenseAbilityForRole(item, role, procedure))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
 }
 
@@ -293,6 +305,140 @@ export function evaluateDefenseAbility({ actor, defenderToken, protectedToken, i
   };
 }
 
+function builtInDefenseConfig(procedure) {
+  const base = {
+    enabled: true,
+    procedure,
+    targetScope: "self",
+    interventionCost: 1,
+    rangeMode: "manual",
+    rangeCells: 0,
+    requiresVisibility: false,
+    movementMode: "none",
+    damageSelectionMode: "standard",
+    combatDiceFormula: "",
+    selfDefenseCharacteristic: "",
+    removeDamageParts: procedure === "directed" ? 1 : 0,
+    effectDegreeReduction: 1,
+    allowManeuver: false
+  };
+
+  return base;
+}
+
+function builtInDefenseOption(actor, procedure) {
+  const labels = {
+    directed: "Самозащита",
+    counteraction: "Противодействие",
+    dodge: "Уворот"
+  };
+  const ids = {
+    directed: "system-self-defense",
+    counteraction: "system-counteraction",
+    dodge: "system-dodge"
+  };
+  const warnings = [];
+  const interventions = Number(actor?.system?.resources?.intervention);
+  if (Number.isFinite(interventions) && interventions < 1) {
+    warnings.push(`в листе ${interventions} Вмешательств из требуемых 1`);
+  }
+
+  if (procedure === "dodge") {
+    warnings.push("перемещение Уворота и достижение безопасного места подтверждаются игроком вручную");
+  }
+
+  return {
+    id: ids[procedure],
+    kind: "builtin",
+    procedure,
+    actionName: labels[procedure],
+    item: null,
+    config: builtInDefenseConfig(procedure),
+    disabled: false,
+    reasons: [],
+    warnings,
+    costLabel: "1 Вмешательство"
+  };
+}
+
+/**
+ * Canonical 0.5.53 defense resolver.
+ *
+ * It returns every currently applicable defense instead of selecting one for
+ * the player. Standard procedures and Ability-provided defenses are combined;
+ * a special Ability therefore never removes the built-in option by itself.
+ */
+export function resolveDefenseOptions({
+  actor,
+  defenderToken = null,
+  protectedToken = null,
+  role = "self",
+  actionContext = {},
+  defenseHistory = [],
+  procedures = null
+} = {}) {
+  const context = normalizeActionContext(actionContext);
+  const allowed = new Set(actionContextDefenseProcedureIds(context));
+  const requested = procedures
+    ? new Set(Array.isArray(procedures) ? procedures : [procedures])
+    : null;
+  const activeProcedures = Array.from(allowed).filter(id => !requested || requested.has(id));
+  const options = [];
+
+  const alreadyUsed = Array.from(defenseHistory ?? []).some(entry =>
+    entry?.actorUuid === actor?.uuid
+  );
+
+  if (role === "self") {
+    for (const procedure of activeProcedures) {
+      const option = builtInDefenseOption(actor, procedure);
+      if (alreadyUsed) {
+        option.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
+      }
+      options.push(option);
+    }
+  }
+
+  for (const item of actorItems(actor)) {
+    if (item?.type !== "ability") continue;
+    const config = defenseActionConfig(item);
+    if (!config.enabled) continue;
+    if (!activeProcedures.includes(config.procedure)) continue;
+    if (!defenseRoleMatches(config.targetScope, role)) continue;
+
+    const availability = evaluateDefenseAbility({
+      actor,
+      defenderToken,
+      protectedToken,
+      item,
+      role
+    });
+
+    if (alreadyUsed) {
+      availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
+    }
+
+    options.push({
+      id: `ability-${item.id}`,
+      kind: "ability",
+      procedure: config.procedure,
+      actionName: item.name,
+      item,
+      config,
+      disabled: availability.disabled,
+      reasons: availability.reasons,
+      warnings: availability.warnings,
+      costLabel: defenseCostLabel(item, actor)
+    });
+  }
+
+  return options;
+}
+
+export function actionHasDefenseProcedure(actionContext, procedure) {
+  return actionContextDefenseProcedureIds(actionContext).includes(String(procedure ?? ""));
+}
+
 export function registerDefenseActionSettings() {
   game.settings.register(SYSTEM_ID, MIGRATION_SETTING, {
     scope: "world",
@@ -306,6 +452,7 @@ const MIGRATION_PRESETS = Object.freeze({
   "защита союзника": {
     defenseAction: {
       enabled: true,
+      procedure: "directed",
       targetScope: "ally",
       interventionCost: 1,
       rangeMode: "adjacent",
@@ -322,6 +469,7 @@ const MIGRATION_PRESETS = Object.freeze({
   "рывок на защиту": {
     defenseAction: {
       enabled: true,
+      procedure: "directed",
       targetScope: "ally",
       interventionCost: 2,
       rangeMode: "speedAdjacent",
@@ -338,6 +486,7 @@ const MIGRATION_PRESETS = Object.freeze({
   "прикрытие": {
     defenseAction: {
       enabled: true,
+      procedure: "directed",
       targetScope: "ally",
       interventionCost: 1,
       rangeMode: "adjacent",
@@ -354,6 +503,7 @@ const MIGRATION_PRESETS = Object.freeze({
   "мультикласс защитника — прикрытие": {
     defenseAction: {
       enabled: true,
+      procedure: "directed",
       targetScope: "ally",
       interventionCost: 1,
       rangeMode: "adjacent",
@@ -371,6 +521,7 @@ const MIGRATION_PRESETS = Object.freeze({
     classResourceCost: 1,
     defenseAction: {
       enabled: true,
+      procedure: "directed",
       targetScope: "ally",
       interventionCost: 1,
       rangeMode: "manual",

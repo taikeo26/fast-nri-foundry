@@ -139,17 +139,16 @@ export function abilityActionTraits(itemOrSystem) {
 
   if (modernStored) return modern;
 
-  const legacy = inferLegacyAbilityActionTraits(
-    system.description,
-    system.attackCheck?.attackType
-  );
-
-  return {
-    melee: modern.melee || legacy.melee,
-    ranged: modern.ranged || legacy.ranged,
-    area: modern.area || legacy.area,
-    intervention: modern.intervention || legacy.intervention
-  };
+  // 0.5.53: runtime no longer parses HTML/description to discover rules.
+  // The only compatibility read left here is the old structured attackType;
+  // prose inference exists exclusively in data-migrations.mjs.
+  const legacyType = String(system.attackCheck?.attackType ?? "").trim().toLowerCase();
+  return normalizeActionTraits({
+    melee: legacyType === "melee",
+    ranged: legacyType === "ranged",
+    area: legacyType === "area",
+    intervention: false
+  });
 }
 
 /**

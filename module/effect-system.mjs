@@ -1,3 +1,5 @@
+import { normalizeActionContext } from "./action-context.mjs";
+
 const SYSTEM_ID = "fast-nri";
 const SEED_SETTING = "builtinEffectsSeeded";
 
@@ -671,7 +673,7 @@ async function deleteMirror(item) {
   refreshEffectTokenIcons(actor);
 }
 
-export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly = false } = {}) {
+export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly = false, actionContext = null } = {}) {
   if (!sourceEffect || sourceEffect.type !== "effect" || !actor) return null;
   if (isSystemOnlyEffect(sourceEffect) && !allowSystemOnly) return null;
 
@@ -705,6 +707,9 @@ export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly 
       "system.runtime.stackCount": next.stackCount,
       "system.runtime.timers": next.timers
     };
+    if (actionContext) {
+      update["flags.fast-nri.actionContext"] = normalizeActionContext(actionContext);
+    }
 
     await existing.update(update);
 
@@ -726,6 +731,13 @@ export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly 
     mirrorEffectId: "",
     timers: [timer]
   };
+  if (actionContext) {
+    data.flags = foundry.utils.deepClone(data.flags ?? {});
+    data.flags[SYSTEM_ID] = {
+      ...(data.flags[SYSTEM_ID] ?? {}),
+      actionContext: normalizeActionContext(actionContext)
+    };
+  }
 
   // ActiveEffect mirrors are runtime-only and must not be copied from source.
   data.effects = [];
@@ -901,14 +913,17 @@ async function onCanvasDrop(data) {
     return;
   }
 
-  await applyEffectToActor(source, token.actor);
+  await applyEffectToActor(source, token.actor, {
+    actionContext: data.fastNriActionContext ?? null
+  });
 }
 
-export function effectDragData(effect) {
+export function effectDragData(effect, { actionContext = null } = {}) {
   return {
     type: "Item",
     uuid: effect.uuid,
-    fastNriEffect: true
+    fastNriEffect: true,
+    ...(actionContext ? { fastNriActionContext: normalizeActionContext(actionContext) } : {})
   };
 }
 
@@ -1069,9 +1084,13 @@ export function activateEffectChatInteractions(root = document) {
     const effect = effectUuid ? fromUuidSync(effectUuid) : null;
     if (!effect || effect.type !== "effect") return;
 
+    const messageId = element.closest(".chat-message, .message")?.dataset?.messageId ?? null;
+    const message = messageId ? game.messages?.get(messageId) : null;
+    const actionContext = message?.getFlag(SYSTEM_ID, "actionContext") ?? null;
+
     event.dataTransfer?.setData(
       "text/plain",
-      JSON.stringify(effectDragData(effect))
+      JSON.stringify(effectDragData(effect, { actionContext }))
     );
 
     if (event.dataTransfer) {

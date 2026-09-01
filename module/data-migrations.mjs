@@ -1,6 +1,5 @@
 import {
   inferAbilityAttackTypeFromDescription,
-  inferWeaponAttackType,
   normalizeAttackType,
   normalizeSelfDefenseCharacteristic
 } from "./attack-types.mjs";
@@ -181,7 +180,7 @@ export async function migrateEquipmentStateOnce() {
 }
 
 const RULES_63_MIGRATION_SETTING = "rules63AttackTypesMigration";
-const RULES_63_MIGRATION_VERSION = 2;
+const RULES_63_MIGRATION_VERSION = 4;
 
 function normalizeRussianName(value) {
   return String(value ?? "")
@@ -210,51 +209,68 @@ function rules63ItemUpdate(item) {
     const raw = foundry.utils.getProperty(item._source, "system.attackType");
     if (normalizeAttackType(raw)) return null;
 
-    const attackType = inferWeaponAttackType(item);
-    return attackType ? { _id: item.id, "system.attackType": attackType } : null;
+    // 0.5.52: legacy/empty weapon attack type is removed. Every old weapon
+    // without an explicit valid type is migrated to melee; ranged is only
+    // preserved when it was explicitly stored as ranged.
+    return { _id: item.id, "system.attackType": "melee" };
   }
 
-  if (item.type === "ability" && item.system?.attackCheck?.enabled) {
+  if (item.type === "ability") {
     const update = { _id: item.id };
-    const rawLegacyType = String(
-      foundry.utils.getProperty(item._source, "system.attackCheck.attackType") ?? ""
-    ).trim().toLowerCase();
-    const inferredType = normalizeAttackType(rawLegacyType) || legacyAbilityAttackType(item);
-    const traits = inferLegacyAbilityActionTraits(
-      item.system?.description,
-      rawLegacyType || inferredType
-    );
 
-    // Keep old melee/ranged data materialized for backwards compatibility.
-    if (!normalizeAttackType(rawLegacyType) && inferredType) {
-      update["system.attackCheck.attackType"] = inferredType;
+    // 0.5.53: every existing Defense Ability receives an explicit procedure.
+    // All defense infrastructure which existed before 0.5.53 implemented the
+    // Directed Defense rules, so the migration is deterministic and does not
+    // infer anything from the description.
+    const rawProcedure = String(
+      foundry.utils.getProperty(item._source, "system.defenseAction.procedure") ?? ""
+    ).trim();
+    if (item.system?.defenseAction?.enabled && !["directed", "counteraction", "dodge"].includes(rawProcedure)) {
+      update["system.defenseAction.procedure"] = "directed";
     }
 
-    // 0.5.52 universal Check. Legacy attackCheck was always a KZ check.
-    update["system.check.enabled"] = true;
-    update["system.check.formula"] = String(
-      item.system?.attackCheck?.formula ?? "1d20 + {combatDie}"
-    );
-    update["system.check.targetCharacteristic"] = "armor";
-    update["system.actionTraits.melee"] = traits.melee;
-    update["system.actionTraits.ranged"] = traits.ranged;
-    update["system.actionTraits.area"] = traits.area;
-    update["system.actionTraits.intervention"] = traits.intervention;
-    update["system.defenseProcedure.directedDefense"] = Boolean(
-      item.system?.attackCheck?.directedDefense
-    );
+    if (item.system?.attackCheck?.enabled) {
+      const rawLegacyType = String(
+        foundry.utils.getProperty(item._source, "system.attackCheck.attackType") ?? ""
+      ).trim().toLowerCase();
+      const inferredType = normalizeAttackType(rawLegacyType) || legacyAbilityAttackType(item);
+      const traits = inferLegacyAbilityActionTraits(
+        item.system?.description,
+        rawLegacyType || inferredType
+      );
 
-    return update;
+      // Keep old melee/ranged data materialized for backwards compatibility.
+      if (!normalizeAttackType(rawLegacyType) && inferredType) {
+        update["system.attackCheck.attackType"] = inferredType;
+      }
+
+      // 0.5.52 universal Check. Legacy attackCheck was always a KZ check.
+      update["system.check.enabled"] = true;
+      update["system.check.formula"] = String(
+        item.system?.attackCheck?.formula ?? "1d20 + {combatDie}"
+      );
+      update["system.check.targetCharacteristic"] = "armor";
+      update["system.actionTraits.melee"] = traits.melee;
+      update["system.actionTraits.ranged"] = traits.ranged;
+      update["system.actionTraits.area"] = traits.area;
+      update["system.actionTraits.intervention"] = traits.intervention;
+      update["system.defenseProcedure.directedDefense"] = Boolean(
+        item.system?.attackCheck?.directedDefense
+      );
+    }
+
+    return Object.keys(update).length > 1 ? update : null;
   }
 
   return null;
 }
 
 /**
- * 0.5.50–0.5.52 / rules 6.3:
- * - materialize melee/ranged attack type on existing Weapon Items;
+ * 0.5.50–0.5.53 / rules 6.3:
+ * - migrate every legacy/empty Weapon attack type to melee;
  * - migrate legacy Ability attackCheck into the universal Check model;
  * - split melee/ranged from the independent area action property;
+ * - materialize the 0.5.53 Defense Ability procedure (legacy = directed);
  * - migrate the Rift Fairy's explicit rule: Self Defense always uses Reflex.
  *
  * Runtime never relies on the name after this one-time migration.

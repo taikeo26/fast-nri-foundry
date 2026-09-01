@@ -27,7 +27,6 @@
         <label>
           Вид атаки 6.3
           <select name="system.attackType">
-            <option value="" {{#unless system.attackType}}selected{{/unless}}>Авто по оружию (legacy)</option>
             <option value="melee" {{#if (eq system.attackType "melee")}}selected{{/if}}>Ближняя атака</option>
             <option value="ranged" {{#if (eq system.attackType "ranged")}}selected{{/if}}>Дистанционная атака</option>
           </select>
@@ -287,6 +286,13 @@
 
         {{#if system.defenseAction.enabled}}
           <div class="fast-nri-two">
+            <label>
+              Процедура защиты
+              <select name="system.defenseAction.procedure">
+                {{selectOptions defenseProcedureChoices selected=system.defenseAction.procedure}}
+              </select>
+            </label>
+
             <label>
               Кого можно защищать
               <select name="system.defenseAction.targetScope">

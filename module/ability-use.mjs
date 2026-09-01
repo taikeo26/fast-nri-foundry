@@ -1,6 +1,7 @@
 import { rollAbilityCheck, rollAbilityOutcome } from "./rolls.mjs";
 import { abilityCheckConfig } from "./check-system.mjs";
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
+import { actionContextFromAbility } from "./action-context.mjs";
 
 function esc(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -204,6 +205,7 @@ export async function useAbility(actor, item) {
   const linkedEffects = await resolveEffectDocuments(
     item.system?.effectUuids ?? []
   );
+  const actionContext = actionContextFromAbility(actor, item);
 
   const content = abilityCardHTML({
     actor,
@@ -230,7 +232,8 @@ export async function useAbility(actor, item) {
         after,
         spent,
         shortage,
-        resourceUndone: false
+        resourceUndone: false,
+        actionContext
       }
     }
   });
@@ -244,6 +247,7 @@ export async function useAbility(actor, item) {
     after,
     spent,
     shortage,
+    actionContext,
     outcomeKinds: configuredOutcomeKinds(item)
   };
 }
@@ -346,7 +350,14 @@ export function activateAbilityChatInteractions(root = document) {
           ui.notifications.error("Не удалось найти способность или заклинание.");
           return;
         }
-        await rollAbilityCheck(actor, item);
+        const sourceMessageId = messageIdFromElement(checkButton);
+        const sourceMessage = sourceMessageId
+          ? game.messages?.get(sourceMessageId) ?? null
+          : null;
+        await rollAbilityCheck(actor, item, {
+          actionContext: sourceMessage?.getFlag("fast-nri", "actionContext") ?? null,
+          parentMessageId: sourceMessage?.id ?? null
+        });
       } finally {
         delete checkButton.dataset.fastNriBusy;
       }
@@ -368,13 +379,14 @@ export function activateAbilityChatInteractions(root = document) {
           ui.notifications.error("Не удалось найти способность или заклинание.");
           return;
         }
+        const sourceMessageId = messageIdFromElement(outcomeButton);
+        const sourceMessage = sourceMessageId
+          ? game.messages?.get(sourceMessageId) ?? null
+          : null;
+        const sourceActionContext = sourceMessage?.getFlag("fast-nri", "actionContext") ?? null;
+
         let sourceAttack = null;
         if (outcomeButton.dataset.sourceAttack === "true") {
-          const sourceMessageId = messageIdFromElement(outcomeButton);
-          const sourceMessage = sourceMessageId
-            ? game.messages?.get(sourceMessageId) ?? null
-            : null;
-
           const sourceKind = sourceMessage?.getFlag("fast-nri", "kind");
           if (!sourceMessage || !["ability-check", "ability-attack"].includes(sourceKind)) {
             ui.notifications.error("Не удалось найти исходную проверку способности.");
@@ -391,7 +403,8 @@ export function activateAbilityChatInteractions(root = document) {
             directedDefense: Boolean(sourceMessage.getFlag("fast-nri", "directedDefense")),
             attackType: sourceMessage.getFlag("fast-nri", "attackType"),
             targetCharacteristic: sourceMessage.getFlag("fast-nri", "targetCharacteristic") ?? "armor",
-            actionTraits: sourceMessage.getFlag("fast-nri", "actionTraits") ?? {}
+            actionTraits: sourceMessage.getFlag("fast-nri", "actionTraits") ?? {},
+            actionContext: sourceActionContext
           };
         }
 
@@ -399,7 +412,8 @@ export function activateAbilityChatInteractions(root = document) {
           actor,
           item,
           outcomeButton.dataset.outcomeKind,
-          sourceAttack
+          sourceAttack,
+          sourceActionContext
         );
       } finally {
         delete outcomeButton.dataset.fastNriBusy;

@@ -21,22 +21,15 @@ export function normalizeSelfDefenseCharacteristic(value) {
 }
 
 /**
- * 6.3 attack-type fallback for pre-migration Weapon Items.
+ * Weapon attack type is explicit in rules 6.3: only melee/ranged.
  *
- * Weapon attack type is only melee/ranged. Area is an action property and is
- * deliberately not part of this enum in 0.5.52.
+ * Empty or invalid values can only come from documents created before the
+ * 0.5.52 migration. They are treated as melee immediately and persisted as
+ * melee by migrateRules63Once(); runtime no longer guesses from range/properties.
  */
 export function inferWeaponAttackType(weaponOrSystem) {
   const system = weaponOrSystem?.system ?? weaponOrSystem ?? {};
-  const explicit = normalizeAttackType(system.attackType);
-  if (explicit) return explicit;
-
-  const properties = new Set(Array.from(system.propertyIds ?? []).map(String));
-  const range = String(system.range ?? "").trim().toLocaleLowerCase("ru-RU");
-
-  if (properties.has("reach") || range.startsWith("ближ")) return "melee";
-  if (range) return "ranged";
-  return "";
+  return normalizeAttackType(system.attackType) || "melee";
 }
 
 /**
