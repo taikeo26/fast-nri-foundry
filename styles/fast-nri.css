@@ -2969,6 +2969,12 @@ body.theme-dark .fast-nri-hp-line label {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: min(68vh, 760px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
 }
 
 .fast-nri-implementation-card {
@@ -3011,4 +3017,9 @@ body.theme-dark .fast-nri-hp-line label {
 
 .fast-nri-degree-choice.recommended {
   border-left-color: currentColor;
+}
+
+/* 0.5.55.4 — implementation editor scrolling */
+@media (max-height: 760px) {
+  .fast-nri-implementation-list { max-height: 60vh; }
 }
