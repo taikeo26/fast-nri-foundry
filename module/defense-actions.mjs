@@ -3,6 +3,8 @@ import {
   actionContextDefenseProcedureIds,
   normalizeActionContext
 } from "./action-context.mjs";
+import { hardBlockDefenseCandidate } from "./hard-blocks.mjs";
+import { abilityCosts } from "./ability-authoring.mjs";
 
 const SYSTEM_ID = "fast-nri";
 const MIGRATION_SETTING = "defenseInfrastructureMigrated";
@@ -233,10 +235,13 @@ export function defenseCostLabel(itemOrConfig, actor = null) {
     chunks.push(`${interventions} ${interventions === 1 ? "Вмешательство" : "Вмешательства"}`);
   }
 
-  const classCost = positiveInt(item?.system?.classResourceCost, 0);
-  if (classCost > 0) {
+  const costs = item ? abilityCosts(item) : { classResourceMin: 0, classResourceMax: 0 };
+  if (costs.classResourceMin > 0 || costs.classResourceMax > 0) {
     const label = String(actor?.system?.classResource?.label ?? "Классовый ресурс").trim();
-    chunks.push(`${classCost} ${label || "Классового ресурса"}`);
+    const amount = costs.classResourceMax > costs.classResourceMin
+      ? `${costs.classResourceMin}–${costs.classResourceMax}`
+      : `${costs.classResourceMin}`;
+    chunks.push(`${amount} ${label || "Классового ресурса"}`);
   }
 
   return chunks.length ? chunks.join(" + ") : "без стоимости";
@@ -248,24 +253,24 @@ export function evaluateDefenseAbility({ actor, defenderToken, protectedToken, i
   const warnings = [];
 
   if (!config.enabled) reasons.push("не отмечено как Защитное действие");
-  if (!defenseRoleMatches(config.targetScope, role)) reasons.push("не подходит выбранной цели");
+  if (!defenseRoleMatches(config.targetScope, role)) warnings.push("по правилу способность не предназначена для выбранной роли цели");
 
   if (role === "ally") {
     if (!protectedToken?.actor) {
       reasons.push("нет выбранной защищаемой цели");
     } else if (protectedToken?.id === defenderToken?.id) {
-      reasons.push("эта способность предназначена для другого существа");
+      warnings.push("по правилу эта способность предназначена для другого существа");
     }
 
     if (config.rangeMode === "adjacent" && !tokensAdjacent(defenderToken, protectedToken)) {
-      reasons.push("цель не соседствует с защитником");
+      warnings.push("по правилу цель должна соседствовать с защитником");
     }
 
     if (config.rangeMode === "speedAdjacent") {
       const gap = tokenGapCells(defenderToken, protectedToken);
       const speed = Math.max(0, Number(actor?.system?.speed) || 0);
       if (Number.isFinite(gap) && gap > speed) {
-        reasons.push(`до цели больше Скорости (${speed})`);
+        warnings.push(`по правилу до цели не должно быть больше Скорости (${speed})`);
       } else {
         warnings.push("маршрут и свободная клетка рядом с целью проверяются за столом");
       }
@@ -274,7 +279,7 @@ export function evaluateDefenseAbility({ actor, defenderToken, protectedToken, i
     if (config.rangeMode === "cells") {
       const gap = tokenGapCells(defenderToken, protectedToken);
       if (Number.isFinite(gap) && gap > config.rangeCells) {
-        reasons.push(`цель дальше ${config.rangeCells} кл.`);
+        warnings.push(`по правилу цель не должна быть дальше ${config.rangeCells} кл.`);
       }
     }
 
@@ -283,7 +288,7 @@ export function evaluateDefenseAbility({ actor, defenderToken, protectedToken, i
     }
 
     if (config.requiresVisibility && protectedToken?.visible === false) {
-      reasons.push("цель не видима текущему пользователю");
+      warnings.push("по правилу цель должна быть видима");
     }
   }
 
@@ -292,10 +297,11 @@ export function evaluateDefenseAbility({ actor, defenderToken, protectedToken, i
     warnings.push(`в листе ${intervention} Вмешательств из требуемых ${config.interventionCost}`);
   }
 
-  const classCost = positiveInt(item?.system?.classResourceCost, 0);
+  const costs = abilityCosts(item);
+  const classCost = costs.classResourceMin;
   const classValue = Number(actor?.system?.classResource?.value);
   if (classCost > 0 && Number.isFinite(classValue) && classValue < classCost) {
-    warnings.push(`классового ресурса ${classValue} из требуемых ${classCost}`);
+    warnings.push(`классового ресурса ${classValue} из минимально требуемых ${classCost}`);
   }
 
   return {
@@ -326,7 +332,7 @@ function builtInDefenseConfig(procedure) {
   return base;
 }
 
-function builtInDefenseOption(actor, procedure) {
+function builtInDefenseOption(actor, procedure, actionContext = {}) {
   const labels = {
     directed: "Самозащита",
     counteraction: "Противодействие",
@@ -347,6 +353,12 @@ function builtInDefenseOption(actor, procedure) {
     warnings.push("перемещение Уворота и достижение безопасного места подтверждаются игроком вручную");
   }
 
+  const hardBlock = hardBlockDefenseCandidate(actionContext, {
+    interventionCost: 1,
+    actionName: labels[procedure],
+    actionTraits: { intervention: true }
+  });
+
   return {
     id: ids[procedure],
     kind: "builtin",
@@ -354,15 +366,16 @@ function builtInDefenseOption(actor, procedure) {
     actionName: labels[procedure],
     item: null,
     config: builtInDefenseConfig(procedure),
-    disabled: false,
-    reasons: [],
+    disabled: hardBlock.blocked,
+    reasons: hardBlock.blocked ? [hardBlock.message] : [],
     warnings,
+    hardBlock,
     costLabel: "1 Вмешательство"
   };
 }
 
 /**
- * Canonical 0.5.53 defense resolver.
+ * Canonical defense resolver (0.5.53+, with HB-02 enforcement from 0.5.54).
  *
  * It returns every currently applicable defense instead of selecting one for
  * the player. Standard procedures and Ability-provided defenses are combined;
@@ -391,7 +404,7 @@ export function resolveDefenseOptions({
 
   if (role === "self") {
     for (const procedure of activeProcedures) {
-      const option = builtInDefenseOption(actor, procedure);
+      const option = builtInDefenseOption(actor, procedure, context);
       if (alreadyUsed) {
         option.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
       }
@@ -404,7 +417,6 @@ export function resolveDefenseOptions({
     const config = defenseActionConfig(item);
     if (!config.enabled) continue;
     if (!activeProcedures.includes(config.procedure)) continue;
-    if (!defenseRoleMatches(config.targetScope, role)) continue;
 
     const availability = evaluateDefenseAbility({
       actor,
@@ -418,6 +430,17 @@ export function resolveDefenseOptions({
       availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
     }
 
+    const hardBlock = hardBlockDefenseCandidate(context, {
+      interventionCost: config.interventionCost,
+      item,
+      actionName: item.name,
+      actionTraits: item?.system?.actionTraits ?? {}
+    });
+    if (hardBlock.blocked) {
+      availability.disabled = true;
+      availability.reasons.push(hardBlock.message);
+    }
+
     options.push({
       id: `ability-${item.id}`,
       kind: "ability",
@@ -428,11 +451,34 @@ export function resolveDefenseOptions({
       disabled: availability.disabled,
       reasons: availability.reasons,
       warnings: availability.warnings,
+      hardBlock,
       costLabel: defenseCostLabel(item, actor)
     });
   }
 
   return options;
+}
+
+/** Resolve defenses strictly from the Actor embedded in the selected defender Token. */
+export function resolveDefenseOptionsForToken({
+  defenderToken = null,
+  protectedToken = null,
+  role = "self",
+  actionContext = {},
+  defenseHistory = [],
+  procedures = null
+} = {}) {
+  const actor = defenderToken?.actor ?? null;
+  if (!actor) return [];
+  return resolveDefenseOptions({
+    actor,
+    defenderToken,
+    protectedToken,
+    role,
+    actionContext,
+    defenseHistory,
+    procedures
+  });
 }
 
 export function actionHasDefenseProcedure(actionContext, procedure) {

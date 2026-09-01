@@ -2812,3 +2812,154 @@ body.theme-dark .fast-nri-hp-line label {
 .fast-nri-effect-system-only:not(.active) {
   opacity: 0.55;
 }
+
+/* v0.5.55 — Ability / Spell authoring */
+.fast-nri-ability-editor-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 14px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 6px 0;
+  background: var(--color-bg, transparent);
+}
+
+.fast-nri-ability-editor-tabs button {
+  min-width: 0;
+  padding: 7px 6px;
+}
+
+.fast-nri-ability-editor-tabs button.active {
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 currentColor;
+}
+
+.fast-nri-ability-editor-pane { display: none; }
+.fast-nri-ability-editor-pane.active {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fast-nri-ability-editor-pane > h3,
+.fast-nri-result-profile h3 { margin: 4px 0 0; }
+
+.fast-nri-rich-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fast-nri-rich-label prose-mirror,
+.fast-nri-item-sheet prose-mirror {
+  min-height: 82px;
+}
+
+.fast-nri-rich-grid > label { min-width: 0; }
+
+.fast-nri-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fast-nri-result-profile {
+  border: 1px solid var(--color-border-light-2, rgba(0, 0, 0, 0.25));
+  border-radius: 6px;
+  padding: 9px;
+}
+
+.fast-nri-result-profile.enabled {
+  border-color: var(--color-border-highlight, currentColor);
+}
+
+.fast-nri-result-profile-heading,
+.fast-nri-profile-channel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fast-nri-profile-channel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border-light-2, rgba(0, 0, 0, 0.2));
+}
+
+.fast-nri-profile-effect-zone { margin-top: 10px; }
+
+.fast-nri-ability-rule-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0;
+}
+
+.fast-nri-ability-rule-row {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.fast-nri-ability-rule-row > span > :first-child { margin-top: 0; }
+.fast-nri-ability-rule-row > span > :last-child { margin-bottom: 0; }
+
+.fast-nri-ability-profile-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.fast-nri-chat-degree-profile {
+  border-left: 3px solid currentColor;
+  padding: 6px 8px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.fast-nri-chat-profile-formulas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.fast-nri-chat-profile-text { margin-top: 5px; }
+.fast-nri-chat-profile-text > :first-child,
+.fast-nri-effect-chat-description > :first-child { margin-top: 0; }
+.fast-nri-chat-profile-text > :last-child,
+.fast-nri-effect-chat-description > :last-child { margin-bottom: 0; }
+
+.fast-nri-effect-chat-description {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  .fast-nri-ability-editor-tabs { grid-template-columns: repeat(2, 1fr); position: static; }
+  .fast-nri-cost-grid { grid-template-columns: repeat(2, 1fr); }
+  .fast-nri-ability-rule-row { grid-template-columns: 1fr; }
+}
+
+/* 0.5.55 — compact Ability/Spell summaries on Actor sheet */
+.fast-nri-ability-row-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.fast-nri-ability-row-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fast-nri-damage-part-stack.profile-zeroed {
+  opacity: 0.56;
+  text-decoration: line-through;
+}

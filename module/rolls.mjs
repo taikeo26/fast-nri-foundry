@@ -11,7 +11,7 @@ import {
   defenseActionConfig,
   defenseCostLabel,
   resolveDefenseCombatSource,
-  resolveDefenseOptions
+  resolveDefenseOptionsForToken
 } from "./defense-actions.mjs";
 import {
   itemIsEquipped,
@@ -50,6 +50,15 @@ import {
   normalizeActionTraits,
   normalizeCheckTargetCharacteristic
 } from "./check-system.mjs";
+import { hardBlockDefenseCandidate } from "./hard-blocks.mjs";
+import {
+  abilityConfiguredOutcomeKinds,
+  abilityCosts,
+  abilityIsSpell,
+  abilityOutcomeChannelForDegree,
+  abilityProfile
+} from "./ability-authoring.mjs";
+import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -1273,9 +1282,11 @@ function damagePartsHTML(state) {
     const changed = current !== original;
     const statusClass = part.immuneRemoved
       ? "immune-removed"
-      : part.defenseZeroed
-        ? "defense-zeroed"
-        : "";
+      : part.profileZeroed
+        ? "profile-zeroed"
+        : part.defenseZeroed
+          ? "defense-zeroed"
+          : "";
 
     if (part.kind === "die") {
       const nativeLabel = part.nativeLabel ?? original;
@@ -1692,21 +1703,8 @@ function outcomeComponentTraitIds(component, item, actor) {
   return Array.from(traits);
 }
 
-function abilityOutcomeChannel(item, kind) {
-  const modern = item?.system?.outcomes?.[kind] ?? null;
-  const legacy = item?.system?.outcome ?? null;
-
-  // Backward-compatible read of items configured in 0.5.16.
-  const legacyMatches = String(legacy?.kind ?? "none") === kind;
-  const modernComponents = Array.from(modern?.components ?? []);
-  const legacyComponents = legacyMatches
-    ? Array.from(legacy?.components ?? [])
-    : [];
-
-  return {
-    enabled: Boolean(modern?.enabled) || legacyMatches,
-    components: modernComponents.length ? modernComponents : legacyComponents
-  };
+function abilityOutcomeChannel(item, kind, degree = null) {
+  return abilityOutcomeChannelForDegree(item, kind, degree);
 }
 
 function abilityCheckDefenseHTML(actionContext) {
@@ -1729,28 +1727,76 @@ function abilityCheckDefenseHTML(actionContext) {
   `;
 }
 
-export function abilityAttackFollowupHTML(actor, item) {
-  if (!abilityOutcomeChannel(item, "damage").enabled) return "";
-
+function abilityFollowupButtonHTML(actor, item, kind) {
+  const labels = {
+    damage: ["fa-burst", "Бросить урон"],
+    healing: ["fa-heart-pulse", "Бросить лечение"],
+    tempHp: ["fa-shield-heart", "Бросить временные HP"]
+  };
+  const [icon, label] = labels[kind] ?? ["fa-dice", "Выполнить результат"];
   return `
-    <div class="fast-nri-ability-outcome-actions">
-      <button
-        type="button"
-        data-fast-nri-roll-ability-outcome
-        data-source-attack="true"
-        data-actor-uuid="${escAttr(actor.uuid)}"
-        data-item-uuid="${escAttr(item.uuid)}"
-        data-outcome-kind="damage"
-      >
-        <i class="fa-solid fa-burst"></i>
-        <span>Бросить урон</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      data-fast-nri-roll-ability-outcome
+      data-source-attack="true"
+      data-actor-uuid="${escAttr(actor.uuid)}"
+      data-item-uuid="${escAttr(item.uuid)}"
+      data-outcome-kind="${escAttr(kind)}"
+    >
+      <i class="fa-solid ${icon}"></i>
+      <span>${label}</span>
+    </button>
   `;
 }
 
-function abilityOutcomeComponents(actor, item, kind) {
-  const channel = abilityOutcomeChannel(item, kind);
+export function abilityAttackFollowupHTML(actor, item, degree = null) {
+  // Compatibility for pre-0.5.55 callers: an undifferentiated Attack follow-up
+  // historically exposed only Damage. New Check cards always pass a degree.
+  const kinds = degree
+    ? abilityConfiguredOutcomeKinds(item, degree)
+    : abilityOutcomeChannel(item, "damage").enabled ? ["damage"] : [];
+  if (!kinds.length) return "";
+  return `<div class="fast-nri-ability-outcome-actions">${kinds.map(kind => abilityFollowupButtonHTML(actor, item, kind)).join("")}</div>`;
+}
+
+function applyAbilityProfileDamageTransform(state, channel = {}) {
+  if (!state?.supported) return state;
+
+  const removeAll = Boolean(channel?.removeAll);
+  const removeHighest = Math.max(0, Math.trunc(Number(channel?.removeHighest) || 0));
+  const removeLowest = Math.max(0, Math.trunc(Number(channel?.removeLowest) || 0));
+  if (!removeAll && removeHighest === 0 && removeLowest === 0) return state;
+
+  const candidates = Array.from(state.parts ?? [])
+    .filter(part => Math.max(0, Number(part.currentValue ?? part.value) || 0) > 0);
+  const selected = new Set();
+
+  if (removeAll) {
+    for (const part of candidates) selected.add(part.id);
+  } else {
+    const ascending = [...candidates].sort((a, b) => {
+      const delta = (Number(a.currentValue ?? a.value) || 0) - (Number(b.currentValue ?? b.value) || 0);
+      return delta || String(a.id).localeCompare(String(b.id));
+    });
+    for (const part of ascending.slice(0, removeLowest)) selected.add(part.id);
+    for (const part of ascending.slice(Math.max(0, ascending.length - removeHighest))) selected.add(part.id);
+  }
+
+  state.parts = Array.from(state.parts ?? []).map(part => selected.has(part.id)
+    ? { ...part, currentValue: 0, profileZeroed: true }
+    : part
+  );
+  state.profileDamageTransform = {
+    removeAll,
+    removeHighest,
+    removeLowest,
+    removedPartIds: Array.from(selected)
+  };
+  return recalculateDamageState(state);
+}
+
+function abilityOutcomeComponents(actor, item, kind, degree = null) {
+  const channel = abilityOutcomeChannel(item, kind, degree);
   const raw = Array.from(channel.components ?? []);
   const components = raw.length
     ? raw
@@ -1763,6 +1809,46 @@ function abilityOutcomeComponents(actor, item, kind) {
       traitIds: outcomeComponentTraitIds(component, item, actor)
     }))
     .filter(component => component.formula);
+}
+
+async function enrichAbilityProfileHTML(item, degree) {
+  if (!degree) return "";
+  const profile = abilityProfile(item, degree);
+  if (!profile.enabled) return "";
+
+  const editor = globalThis.foundry?.applications?.ux?.TextEditor?.implementation
+    ?? globalThis.foundry?.applications?.ux?.TextEditor;
+  let richText = String(profile.text ?? "").trim();
+  if (richText && typeof editor?.enrichHTML === "function") {
+    try {
+      richText = await editor.enrichHTML(richText, { async: true });
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось обогатить текст профиля", error);
+    }
+  }
+
+  const effects = await resolveEffectDocuments(profile.effectUuids);
+  const effectCards = [];
+  for (const effect of effects) {
+    let descriptionHTML = String(effect.system?.description ?? "").trim();
+    if (descriptionHTML && typeof editor?.enrichHTML === "function") {
+      try {
+        descriptionHTML = await editor.enrichHTML(descriptionHTML, { async: true });
+      } catch (error) {
+        console.warn("Быстрая НРИ | Не удалось обогатить текст Effect профиля", error);
+      }
+    }
+    effectCards.push(effectChatCardHTML(effect, { compact: true, descriptionHTML }));
+  }
+
+  if (!richText && !effectCards.length) return "";
+  return `
+    <section class="fast-nri-chat-degree-profile active">
+      <strong>Эффект степени: ${esc(DEGREE_LABELS[degree] ?? degree)}</strong>
+      ${richText ? `<div class="fast-nri-chat-profile-text">${richText}</div>` : ""}
+      ${effectCards.length ? `<div class="fast-nri-ability-linked-effects">${effectCards.join("")}</div>` : ""}
+    </section>
+  `;
 }
 
 function hpGainComponentFlavor(component) {
@@ -2109,6 +2195,7 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     parentMessageId
   });
   const traitsLabel = actionTraitsLabel(actionTraits);
+  const profileHTML = await enrichAbilityProfileHTML(item, degree);
 
   const natural20HTML = result.naturalD20 === 20
     ? targetCharacteristic === "armor"
@@ -2138,8 +2225,9 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
       ${natural20HTML}
       <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(degree)}
+      ${profileHTML}
       ${abilityCheckDefenseHTML(actionContext)}
-      ${abilityAttackFollowupHTML(actor, item)}
+      ${abilityAttackFollowupHTML(actor, item, degree)}
       ${rollSourcesHTML(result)}
     </div>
   `;
@@ -2226,13 +2314,14 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     return null;
   }
 
-  const channel = abilityOutcomeChannel(item, kind);
+  const outcomeDegree = actionContext.check?.degree ?? sourceAttack?.degree ?? null;
+  const channel = abilityOutcomeChannel(item, kind, outcomeDegree);
   if (!channel.enabled) {
     ui.notifications.info(`${item.name}: этот результат не включён.`);
     return null;
   }
 
-  const components = abilityOutcomeComponents(actor, item, kind);
+  const components = abilityOutcomeComponents(actor, item, kind, outcomeDegree);
   if (!components.length) {
     ui.notifications.warn(`${item.name}: добавь хотя бы один компонент результата.`);
     return null;
@@ -2248,7 +2337,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
       baseSources: [{
         formula: displayFormula,
         label: item.name,
-        reason: item.system?.category === "spell" ? "Урон заклинания" : "Урон способности"
+        reason: abilityIsSpell(item) ? "Урон заклинания" : "Урон способности"
       }],
       showDC: false
     });
@@ -2259,6 +2348,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
       damageType: components[0]?.damageType ?? "physical",
       traitIds: components[0]?.traitIds ?? []
     });
+    state = applyAbilityProfileDamageTransform(state, channel);
 
     // Если у способности была исходная Атака против КЗ, её степень
     // становится исходной степенью Эффекта для Направленной защиты.
@@ -2278,7 +2368,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
 
     const flavor = damageCardHTML({
       sourceName: item.name,
-      profileLabel: item.system?.category === "spell" ? "Заклинание" : "Способность",
+      profileLabel: abilityIsSpell(item) ? "Заклинание" : "Способность",
       critical: Boolean(sourceAttack?.critical),
       state,
       modifiersHTML,
@@ -2502,6 +2592,23 @@ function sameTokenOrActor(a, b) {
   return Boolean(a.actor?.uuid && b.actor?.uuid && a.actor.uuid === b.actor.uuid);
 }
 
+function defenseMethodHardBlock(actionContext, method) {
+  return hardBlockDefenseCandidate(actionContext, {
+    interventionCost: Math.max(0, Number(method?.config?.interventionCost) || 0),
+    item: method?.item ?? null,
+    actionName: method?.actionName ?? "Защита",
+    actionTraits: method?.item?.system?.actionTraits
+      ?? (Number(method?.config?.interventionCost) > 0 ? { intervention: true } : {})
+  });
+}
+
+function enforceDefenseMethodHardBlock(actionContext, method) {
+  const hardBlock = defenseMethodHardBlock(actionContext, method);
+  if (!hardBlock.blocked) return true;
+  ui.notifications.error(hardBlock.message);
+  return false;
+}
+
 function defenseMethodOptions({
   actor,
   defenderToken,
@@ -2511,8 +2618,10 @@ function defenseMethodOptions({
   actionContext,
   procedures = null
 }) {
-  return resolveDefenseOptions({
-    actor,
+  // The selected Token is the authority for available special defenses.
+  // Do not search another Actor or a cached source: every click re-reads the
+  // embedded Ability Items of the currently controlled defender Token.
+  return resolveDefenseOptionsForToken({
     defenderToken,
     protectedToken,
     role,
@@ -2603,8 +2712,37 @@ async function chooseDefenseMethod({
   return options.find(option => option.id === selected) ?? null;
 }
 
-async function spendDefenseClassResource(actor, item) {
-  const cost = Math.max(0, Number(item?.system?.classResourceCost) || 0);
+async function chooseDefenseClassResourceCost(actor, item) {
+  if (!item || item.type !== "ability") return 0;
+  const costs = abilityCosts(item);
+  const min = costs.classResourceMin;
+  const max = costs.classResourceMax;
+  if (max <= min) return min;
+
+  const { DialogV2 } = foundry.applications.api;
+  const choices = [];
+  for (let amount = min; amount <= max; amount += 1) {
+    choices.push({
+      action: `defense-cost-${amount}`,
+      label: `${amount}`,
+      callback: async () => amount
+    });
+  }
+  choices.push({ action: "cancel", label: "Отмена", callback: async () => null });
+
+  return DialogV2.wait({
+    window: { title: `${item.name}: расход ресурса` },
+    content: `<p>Выберите количество «${esc(actor.system?.classResource?.label || "Классового ресурса")}": <strong>${min}–${max}</strong>.</p>`,
+    modal: true,
+    rejectClose: false,
+    buttons: choices
+  });
+}
+
+async function spendDefenseClassResource(actor, item, selectedCost = null) {
+  const configured = abilityCosts(item);
+  const defaultCost = configured.classResourceMin;
+  const cost = Math.max(0, Number(selectedCost ?? defaultCost) || 0);
   const resource = actor?.system?.classResource ?? {};
   const before = Math.max(0, Number(resource.value) || 0);
   const max = Math.max(0, Number(resource.max) || 0);
@@ -2924,13 +3062,13 @@ function checkDefenseRollFlavorHTML({
   `;
 }
 
-function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, defense }) {
+function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, defense, profileHTML = "" }) {
   const context = normalizeActionContext(actionContext);
   const targetLabel = checkTargetCharacteristicLabel(context.check.targetCharacteristic);
   const targetName = context.targets?.[0]?.name ?? "";
   const traitsLabel = actionTraitsLabel(context.traits);
   const followup = sourceActor && sourceItem?.type === "ability"
-    ? abilityAttackFollowupHTML(sourceActor, sourceItem)
+    ? abilityAttackFollowupHTML(sourceActor, sourceItem, context.check.degree)
     : "";
 
   return `
@@ -2948,6 +3086,7 @@ function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, def
       </div>
       <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(context.check.degree)}
+      ${profileHTML}
       ${abilityCheckDefenseHTML(context)}
       ${followup}
     </div>
@@ -2998,6 +3137,7 @@ export async function checkDefenseFromChat(element) {
     procedures: availableProcedures
   });
   if (!method) return null;
+  if (!enforceDefenseMethodHardBlock(actionContext, method)) return null;
 
   if (method.warnings.length) {
     ui.notifications.warn(`${method.actionName}: ${method.warnings.join("; ")}.`);
@@ -3042,6 +3182,9 @@ export async function checkDefenseFromChat(element) {
   const baseFormula = combatSource?.formula
     ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
     : `1d20 + ${characteristicValue}`;
+
+  const selectedClassResourceCost = await chooseDefenseClassResourceCost(defender, method.item);
+  if (selectedClassResourceCost === null) return null;
 
   const contextualModifiers = selfDefenseContextualModifiers(
     defender,
@@ -3109,7 +3252,7 @@ export async function checkDefenseFromChat(element) {
     degreeAfter = lowerDegree(degreeBefore, degreeReduction);
   }
 
-  const resource = await spendDefenseClassResource(defender, method.item);
+  const resource = await spendDefenseClassResource(defender, method.item, selectedClassResourceCost);
   const defenseEntry = {
     kind: "check-defense",
     procedure,
@@ -3210,13 +3353,18 @@ export async function checkDefenseFromChat(element) {
     }
   });
 
+  const derivedProfileHTML = sourceItem?.type === "ability"
+    ? await enrichAbilityProfileHTML(sourceItem, nextContext.check.degree)
+    : "";
+
   const derivedMessage = await ChatMessage.create({
     speaker: message.speaker,
     content: checkAfterDefenseCardHTML({
       sourceActor,
       sourceItem,
       actionContext: nextContext,
-      defense: defenseEntry
+      defense: defenseEntry,
+      profileHTML: derivedProfileHTML
     }),
     flags: {
       "fast-nri": {
@@ -3350,6 +3498,7 @@ export async function defenseFromChat(element) {
     procedures: ["directed"]
   });
   if (!method) return null;
+  if (!enforceDefenseMethodHardBlock(actionContext, method)) return null;
 
   const actionItem = method.item;
   const actionConfig = method.config;
@@ -3449,6 +3598,9 @@ export async function defenseFromChat(element) {
     );
   }
 
+  const selectedClassResourceCost = await chooseDefenseClassResourceCost(defender, actionItem);
+  if (selectedClassResourceCost === null) return null;
+
   const contextualModifiers = selfDefenseContextualModifiers(
     defender,
     sourceItem,
@@ -3532,7 +3684,7 @@ export async function defenseFromChat(element) {
     damageState.effectDegree = effectDegreeAfter;
   }
 
-  const resource = await spendDefenseClassResource(defender, actionItem);
+  const resource = await spendDefenseClassResource(defender, actionItem, selectedClassResourceCost);
 
   damageState.defense = {
     kind: role === "self" ? "self-defense" : "ally-defense",

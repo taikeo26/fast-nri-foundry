@@ -86,6 +86,35 @@ const outcomeChannelSchema = () =>
   });
 
 
+const richText = (initial = "") =>
+  new HTMLField({
+    required: true,
+    nullable: false,
+    initial
+  });
+
+const profileDamageChannelSchema = () =>
+  new SchemaField({
+    enabled: flag(false),
+    components: outcomeComponentArray(),
+    // Rulebook area profiles frequently roll one pool and then remove the
+    // largest/smallest already rolled damage parts for the final degree.
+    removeHighest: integer(0),
+    removeLowest: integer(0),
+    removeAll: flag(false)
+  });
+
+const abilityProfileSchema = () =>
+  new SchemaField({
+    enabled: flag(false),
+    text: richText(""),
+    damage: profileDamageChannelSchema(),
+    healing: outcomeChannelSchema(),
+    tempHp: outcomeChannelSchema(),
+    effectUuids: stringArray()
+  });
+
+
 
 const formationRulesSchema = () =>
   new SchemaField({
@@ -334,6 +363,41 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       category: text("ability"),
       timing: text("Действие"),
       classResourceCost: integer(0),
+
+      // 0.5.55 authoring model. category/timing/classResourceCost remain as
+      // compatibility fields; new Items should use the structured fields below.
+      traitIds: stringArray(),
+      costs: new SchemaField({
+        action: integer(0),
+        movement: integer(0),
+        intervention: integer(0),
+        freeAction: flag(false),
+        classResourceMin: integer(0),
+        classResourceMax: integer(0),
+        additionalText: richText("")
+      }),
+      targeting: new SchemaField({
+        mode: text("none"),
+        relation: text("any"),
+        countMin: integer(0),
+        countMax: integer(0),
+        rangeMode: text("none"),
+        rangeCells: integer(0),
+        requiresVisibility: flag(false),
+        areaShape: text("none"),
+        areaSize: text(""),
+        text: richText("")
+      }),
+      conditionText: richText(""),
+      requirementText: richText(""),
+      limitationText: richText(""),
+      exceptionText: richText(""),
+      profiles: new SchemaField({
+        failure: abilityProfileSchema(),
+        partial: abilityProfileSchema(),
+        success: abilityProfileSchema(),
+        great: abilityProfileSchema()
+      }),
 
       // Legacy-поле 0.5.16 оставлено для чтения уже созданных Item.
       // Новый UI и runtime используют независимые каналы outcomes ниже.

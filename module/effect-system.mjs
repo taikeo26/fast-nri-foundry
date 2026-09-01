@@ -927,7 +927,7 @@ export function effectDragData(effect, { actionContext = null } = {}) {
   };
 }
 
-export function effectChatCardHTML(effect, { compact = false } = {}) {
+export function effectChatCardHTML(effect, { compact = false, descriptionHTML = "" } = {}) {
   if (!effect || effect.type !== "effect") return "";
 
   const duration = durationDefinitionLabel(effect.system);
@@ -947,6 +947,7 @@ export function effectChatCardHTML(effect, { compact = false } = {}) {
         <strong>${esc(effect.name)}</strong>
         <small>${esc(duration)}</small>
         ${compact ? "" : `<small>${esc(stacking)}</small>`}
+        ${descriptionHTML ? `<div class="fast-nri-effect-chat-description">${descriptionHTML}</div>` : ""}
       </div>
       <i class="fa-solid fa-hand-pointer"></i>
     </div>
@@ -956,11 +957,23 @@ export function effectChatCardHTML(effect, { compact = false } = {}) {
 export async function postEffectToChat(effect, { actor = null } = {}) {
   if (!effect || effect.type !== "effect") return null;
 
+  const rawDescription = String(effect.system?.description ?? "").trim();
+  let descriptionHTML = rawDescription;
+  const editor = globalThis.foundry?.applications?.ux?.TextEditor?.implementation
+    ?? globalThis.foundry?.applications?.ux?.TextEditor;
+  if (rawDescription && typeof editor?.enrichHTML === "function") {
+    try {
+      descriptionHTML = await editor.enrichHTML(rawDescription, { async: true });
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось обогатить rich text Effect", error);
+    }
+  }
+
   return ChatMessage.create({
     speaker: actor
       ? ChatMessage.getSpeaker({ actor })
       : ChatMessage.getSpeaker(),
-    content: effectChatCardHTML(effect),
+    content: effectChatCardHTML(effect, { descriptionHTML }),
     flags: {
       [SYSTEM_ID]: {
         kind: "effect-card",

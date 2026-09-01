@@ -1,4 +1,5 @@
 import { inferWeaponAttackType } from "./attack-types.mjs";
+import { abilityTraitIds } from "./ability-authoring.mjs";
 import {
   abilityActionTraits,
   abilityCheckConfig,
@@ -7,7 +8,7 @@ import {
   normalizeCheckTargetCharacteristic
 } from "./check-system.mjs";
 
-export const ACTION_CONTEXT_SCHEMA_VERSION = 1;
+export const ACTION_CONTEXT_SCHEMA_VERSION = 2;
 
 export const DEFENSE_PROCEDURE_IDS = Object.freeze({
   directed: "Направленная защита",
@@ -29,6 +30,20 @@ function cloneData(value) {
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+function normalizeTraitIds(value = [], traits = {}) {
+  const result = new Set();
+  for (const entry of Array.from(value ?? [])) {
+    const id = text(entry);
+    if (id) result.add(id);
+  }
+  const actionTraits = normalizeActionTraits(traits);
+  if (actionTraits.melee) result.add("melee");
+  if (actionTraits.ranged) result.add("ranged");
+  if (actionTraits.area) result.add("area");
+  if (actionTraits.intervention) result.add("intervention");
+  return Array.from(result);
 }
 
 function finiteNumberOrNull(value) {
@@ -156,6 +171,7 @@ function deriveStandardDefenseProcedures({ check, traits, directedDefense = fals
 
 export function normalizeActionContext(value = {}) {
   const traits = normalizeActionTraits(value?.traits ?? value?.actionTraits);
+  const traitIds = normalizeTraitIds(value?.traitIds ?? value?.actionTraitIds ?? [], traits);
   const check = normalizeCheck(value?.check);
   const explicitProcedures = normalizeDefenseProcedures(value?.defenseProcedures);
   const derivedProcedures = deriveStandardDefenseProcedures({
@@ -188,6 +204,7 @@ export function normalizeActionContext(value = {}) {
     targets: normalizeTargets(value?.targets ?? []),
     check,
     traits,
+    traitIds,
     defenseProcedures: {
       directed: explicitProcedures.directed || derivedProcedures.directed,
       counteraction: explicitProcedures.counteraction || derivedProcedures.counteraction,
@@ -195,7 +212,7 @@ export function normalizeActionContext(value = {}) {
     },
     origin: {
       // Once an action originates from an Intervention, every derivative keeps
-      // the marker. 0.5.54 will attach HB-02 to this canonical field.
+      // the marker. HB-02 reads this canonical field in 0.5.54.
       intervention: Boolean(origin?.intervention || traits.intervention)
     },
     parentActionId: text(value?.parentActionId) || null,
@@ -211,6 +228,7 @@ export function createActionContext({
   targets = null,
   check = {},
   traits = {},
+  traitIds = [],
   directedDefense = false,
   defenseProcedures = {},
   originActionContext = null,
@@ -249,6 +267,10 @@ export function createActionContext({
       ...(inherited?.traits ?? {}),
       ...traits
     },
+    traitIds: Array.from(new Set([
+      ...(inherited?.traitIds ?? []),
+      ...Array.from(traitIds ?? [])
+    ])),
     defenseProcedures: {
       ...(inherited?.defenseProcedures ?? {}),
       ...defenseProcedures
@@ -284,6 +306,11 @@ export function actionContextFromWeapon(actor, weapon, { target = null, originAc
       area: false,
       intervention: false
     },
+    traitIds: [
+      "attack",
+      attackType,
+      ...Array.from(weapon?.system?.propertyIds ?? [])
+    ].filter(Boolean),
     directedDefense: true
   });
 }
@@ -305,6 +332,7 @@ export function actionContextFromAbility(actor, item, { target = null, originAct
         : null
     },
     traits,
+    traitIds: abilityTraitIds(item),
     directedDefense: Boolean(config.directedDefense)
   });
 }
@@ -319,6 +347,10 @@ export function deriveActionContext(context, patch = {}) {
     ...base.check,
     ...(patch.check ?? {})
   };
+  const nextTraitIds = normalizeTraitIds(
+    patch.traitIds ?? patch.actionTraitIds ?? base.traitIds,
+    nextTraits
+  );
 
   return normalizeActionContext({
     ...cloneData(base),
@@ -335,6 +367,7 @@ export function deriveActionContext(context, patch = {}) {
     targets: patch.targets ?? base.targets,
     check: nextCheck,
     traits: nextTraits,
+    traitIds: nextTraitIds,
     defenseProcedures: {
       ...base.defenseProcedures,
       ...(patch.defenseProcedures ?? {})
@@ -408,6 +441,9 @@ export function actionContextForDefenseAction(sourceActionContext, {
       area: false,
       intervention: true
     },
+    traitIds: item?.type === "ability"
+      ? Array.from(new Set([...abilityTraitIds(item), "defensive", "intervention"]))
+      : ["defensive", "intervention"],
     defenseProcedures: {
       directed: false,
       counteraction: false,

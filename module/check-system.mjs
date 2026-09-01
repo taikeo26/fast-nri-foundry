@@ -1,4 +1,5 @@
 import { normalizeAttackType } from "./attack-types.mjs";
+import { abilityTraitIds } from "./ability-authoring.mjs";
 
 export const CHECK_TARGET_CHARACTERISTICS = Object.freeze({
   armor: "КЗ",
@@ -133,15 +134,26 @@ export function abilityCheckConfig(itemOrSystem) {
 
 export function abilityActionTraits(itemOrSystem) {
   const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const canonicalIds = new Set(abilityTraitIds(itemOrSystem));
+
+  // 0.5.55: traitIds is the authoring source. Legacy actionTraits is folded
+  // into abilityTraitIds without any prose inference, so old Items remain safe.
+  if (canonicalIds.size) {
+    return normalizeActionTraits({
+      melee: canonicalIds.has("melee"),
+      ranged: canonicalIds.has("ranged"),
+      area: canonicalIds.has("area"),
+      intervention: canonicalIds.has("intervention")
+    });
+  }
+
   const modern = normalizeActionTraits(system.actionTraits);
   const modernStored = sourceHasModernCheck(itemOrSystem)
     || Object.hasOwn(system, "actionTraits") && !Object.hasOwn(system, "attackCheck");
 
   if (modernStored) return modern;
 
-  // 0.5.53: runtime no longer parses HTML/description to discover rules.
-  // The only compatibility read left here is the old structured attackType;
-  // prose inference exists exclusively in data-migrations.mjs.
+  // Runtime does not parse HTML/description to discover rules.
   const legacyType = String(system.attackCheck?.attackType ?? "").trim().toLowerCase();
   return normalizeActionTraits({
     melee: legacyType === "melee",

@@ -180,7 +180,7 @@ export async function migrateEquipmentStateOnce() {
 }
 
 const RULES_63_MIGRATION_SETTING = "rules63AttackTypesMigration";
-const RULES_63_MIGRATION_VERSION = 4;
+const RULES_63_MIGRATION_VERSION = 5;
 
 function normalizeRussianName(value) {
   return String(value ?? "")
@@ -217,6 +217,28 @@ function rules63ItemUpdate(item) {
 
   if (item.type === "ability") {
     const update = { _id: item.id };
+
+    // 0.5.55: materialize the new authoring fields from existing structured
+    // data. No prose is parsed here. category/actionTraits/defenseAction are
+    // deterministic sources which existed before the new editor.
+    const rawTraitIds = foundry.utils.getProperty(item._source, "system.traitIds");
+    if (!Array.isArray(rawTraitIds)) {
+      const ids = new Set();
+      if (item.system?.category === "spell") ids.add("spell");
+      if (item.system?.actionTraits?.melee) ids.add("melee");
+      if (item.system?.actionTraits?.ranged) ids.add("ranged");
+      if (item.system?.actionTraits?.area) ids.add("area");
+      if (item.system?.actionTraits?.intervention) ids.add("intervention");
+      if (item.system?.defenseAction?.enabled) ids.add("defensive");
+      update["system.traitIds"] = Array.from(ids);
+    }
+
+    const rawCosts = foundry.utils.getProperty(item._source, "system.costs");
+    if (!rawCosts || typeof rawCosts !== "object") {
+      const legacyCost = Math.max(0, Math.trunc(Number(item.system?.classResourceCost) || 0));
+      update["system.costs.classResourceMin"] = legacyCost;
+      update["system.costs.classResourceMax"] = legacyCost;
+    }
 
     // 0.5.53: every existing Defense Ability receives an explicit procedure.
     // All defense infrastructure which existed before 0.5.53 implemented the
@@ -266,11 +288,12 @@ function rules63ItemUpdate(item) {
 }
 
 /**
- * 0.5.50–0.5.53 / rules 6.3:
+ * 0.5.50–0.5.55 / rules 6.3 runtime + Ability authoring:
  * - migrate every legacy/empty Weapon attack type to melee;
  * - migrate legacy Ability attackCheck into the universal Check model;
  * - split melee/ranged from the independent area action property;
  * - materialize the 0.5.53 Defense Ability procedure (legacy = directed);
+ * - materialize 0.5.55 Ability traitIds and class-resource cost fields;
  * - migrate the Rift Fairy's explicit rule: Self Defense always uses Reflex.
  *
  * Runtime never relies on the name after this one-time migration.

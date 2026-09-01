@@ -326,7 +326,10 @@
             <div class="fast-nri-item-row fast-nri-ability-row item draggable" data-item-id="{{item.id}}">
               <img src="{{item.img}}" alt="" />
               <a data-action="editItem">{{item.name}}</a>
-              <small>{{item.system.timing}}</small>
+              <small class="fast-nri-ability-row-summary">
+                <span>{{item.costLabel}}</span>
+                {{#if item.traitLabel}}<span>{{item.traitLabel}}</span>{{/if}}
+              </small>
               <button
                 type="button"
                 class="fast-nri-use-ability-button"
@@ -471,7 +474,7 @@
         <div class="fast-nri-section-heading">
           <div>
             <h2>Заклинания</h2>
-            <p class="fast-nri-help">Заклинание хранится как Ability Item с категорией «Заклинание».</p>
+            <p class="fast-nri-help">Заклинание хранится как обычный Ability Item со свойством «Заклинание».</p>
           </div>
           <button type="button" data-action="createItem" data-item-type="ability" data-item-category="spell">
             + Заклинание
@@ -483,7 +486,10 @@
             <div class="fast-nri-item-row fast-nri-ability-row item draggable" data-item-id="{{item.id}}">
               <img src="{{item.img}}" alt="" />
               <a data-action="editItem">{{item.name}}</a>
-              <small>{{item.system.timing}}</small>
+              <small class="fast-nri-ability-row-summary">
+                <span>{{item.costLabel}}</span>
+                {{#if item.traitLabel}}<span>{{item.traitLabel}}</span>{{/if}}
+              </small>
               <button
                 type="button"
                 class="fast-nri-use-ability-button"

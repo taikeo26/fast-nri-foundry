@@ -1,6 +1,19 @@
 import { rollAbilityCheck, rollAbilityOutcome } from "./rolls.mjs";
-import { abilityCheckConfig } from "./check-system.mjs";
+import { abilityCheckConfig, checkTargetCharacteristicLabel } from "./check-system.mjs";
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
+import {
+  ABILITY_PROFILE_DEGREES,
+  abilityAreaSummary,
+  abilityConfiguredOutcomeKinds,
+  abilityCostLabel,
+  abilityCosts,
+  abilityHasDegreeProfiles,
+  abilityIsSpell,
+  abilityProfile,
+  abilityRangeSummary,
+  abilityTargetSummary,
+  abilityTraitLabels
+} from "./ability-authoring.mjs";
 import { actionContextFromAbility } from "./action-context.mjs";
 
 function esc(value) {
@@ -18,24 +31,8 @@ function messageIdFromElement(element) {
 }
 
 
-export function configuredOutcomeKinds(item) {
-  const config = item.system?.outcomes ?? {};
-  const result = [];
-
-  for (const kind of ["damage", "healing", "tempHp"]) {
-    if (config?.[kind]?.enabled) result.push(kind);
-  }
-
-  // Backward-compatible read for 0.5.16 Items.
-  const legacyKind = String(item.system?.outcome?.kind ?? "none");
-  if (
-    ["damage", "healing", "tempHp"].includes(legacyKind)
-    && !result.includes(legacyKind)
-  ) {
-    result.push(legacyKind);
-  }
-
-  return result;
+export function configuredOutcomeKinds(item, degree = null) {
+  return abilityConfiguredOutcomeKinds(item, degree);
 }
 
 function outcomeActionButtonHTML(actor, item, kind) {
@@ -61,8 +58,9 @@ function outcomeActionButtonHTML(actor, item, kind) {
 }
 
 function abilityActionsHTML(actor, item) {
-  const outcomeKinds = configuredOutcomeKinds(item);
   const checkEnabled = abilityCheckConfig(item).enabled;
+  const profileDriven = abilityHasDegreeProfiles(item);
+  const outcomeKinds = configuredOutcomeKinds(item);
   const actions = [];
 
   if (checkEnabled) {
@@ -79,21 +77,83 @@ function abilityActionsHTML(actor, item) {
     `);
   }
 
-  for (const kind of outcomeKinds) {
-    // Урон Ability с Check становится явным следующим шагом на карточке
-    // уже выполненной проверки. Остальные независимые результаты остаются
-    // доступны прямо из исходной карточки Ability.
-    if (kind === "damage" && checkEnabled) continue;
-    actions.push(outcomeActionButtonHTML(actor, item, kind));
+  // Degree profiles are resolved only after the Check. Legacy/no-Check
+  // channels remain available from the source card for compatibility.
+  if (!checkEnabled || !profileDriven) {
+    for (const kind of outcomeKinds) {
+      if (kind === "damage" && checkEnabled) continue;
+      actions.push(outcomeActionButtonHTML(actor, item, kind));
+    }
   }
 
   if (!actions.length) return "";
+  return `<div class="fast-nri-ability-outcome-actions">${actions.join("")}</div>`;
+}
 
-  return `
-    <div class="fast-nri-ability-outcome-actions">
-      ${actions.join("")}
-    </div>
-  `;
+async function enrichHTML(value) {
+  const source = String(value ?? "").trim();
+  if (!source) return "";
+  const editor = globalThis.foundry?.applications?.ux?.TextEditor?.implementation
+    ?? globalThis.foundry?.applications?.ux?.TextEditor;
+  if (typeof editor?.enrichHTML === "function") {
+    try {
+      return await editor.enrichHTML(source, { async: true });
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось обогатить rich text Ability", error);
+    }
+  }
+  return source;
+}
+
+function metaRow(label, value) {
+  return value ? `<div class="fast-nri-ability-rule-row"><strong>${esc(label)}:</strong><span>${value}</span></div>` : "";
+}
+
+function profileFormulaSummary(profile, kind) {
+  const channel = profile?.[kind];
+  if (!channel?.enabled) return "";
+  const formulas = Array.from(channel.components ?? [])
+    .map(component => String(component?.formula ?? "").trim())
+    .filter(Boolean);
+  if (!formulas.length) return "";
+  const label = kind === "damage" ? "Урон" : kind === "healing" ? "Лечение" : "Временные HP";
+  return `<span><strong>${esc(label)}:</strong> ${esc(formulas.join(" + "))}</span>`;
+}
+
+async function enrichedAbilityCardData(item, linkedEffects = []) {
+  const profiles = [];
+  for (const [degree, label] of Object.entries(ABILITY_PROFILE_DEGREES)) {
+    const profile = abilityProfile(item, degree);
+    if (!profile.enabled) continue;
+    profiles.push({
+      degree,
+      label,
+      text: await enrichHTML(profile.text),
+      damage: profileFormulaSummary(profile, "damage"),
+      healing: profileFormulaSummary(profile, "healing"),
+      tempHp: profileFormulaSummary(profile, "tempHp")
+    });
+  }
+
+  const effectCards = [];
+  for (const effect of linkedEffects) {
+    effectCards.push(effectChatCardHTML(effect, {
+      compact: true,
+      descriptionHTML: await enrichHTML(effect.system?.description)
+    }));
+  }
+
+  return {
+    description: await enrichHTML(item.system?.description),
+    conditionText: await enrichHTML(item.system?.conditionText),
+    requirementText: await enrichHTML(item.system?.requirementText),
+    limitationText: await enrichHTML(item.system?.limitationText),
+    exceptionText: await enrichHTML(item.system?.exceptionText),
+    additionalCostText: await enrichHTML(item.system?.costs?.additionalText),
+    targetingText: await enrichHTML(item.system?.targeting?.text),
+    profiles,
+    effectCards
+  };
 }
 
 function abilityCardHTML({
@@ -105,34 +165,62 @@ function abilityCardHTML({
   spent,
   shortage,
   undone = false,
-  linkedEffects = []
+  linkedEffects = [],
+  richData = {}
 }) {
-  const categoryLabel = item.system?.category === "spell" ? "Заклинание" : "Способность";
+  const categoryLabel = abilityIsSpell(item) ? "Заклинание" : "Способность";
   const resourceLabel = actor.system?.classResource?.label || "Классовый ресурс";
-  const description = String(item.system?.description ?? "").trim();
+  const description = String(richData.description ?? item.system?.description ?? "").trim();
+  const traits = abilityTraitLabels(item);
+  const targetSummary = abilityTargetSummary(item);
+  const rangeSummary = abilityRangeSummary(item);
+  const areaSummary = abilityAreaSummary(item);
+  const check = abilityCheckConfig(item);
 
   return `
     <div class="fast-nri-ability-use-card ${undone ? "resource-undone" : ""}">
       <div class="fast-nri-chat-roll-title">
-        <i class="fa-solid ${item.system?.category === "spell" ? "fa-wand-magic-sparkles" : "fa-bolt"}"></i>
+        <i class="fa-solid ${abilityIsSpell(item) ? "fa-wand-magic-sparkles" : "fa-bolt"}"></i>
         <strong>${esc(item.name)}</strong>
       </div>
 
       <div class="fast-nri-ability-use-meta">
         <span>${esc(categoryLabel)}</span>
-        ${item.system?.timing ? `<span>${esc(item.system.timing)}</span>` : ""}
+        ${traits.map(label => `<span>${esc(label)}</span>`).join("")}
       </div>
 
-      ${description ? `
-        <div class="fast-nri-ability-description">
-          ${description}
+      <div class="fast-nri-ability-rule-summary">
+        ${metaRow("Требуется", esc(abilityCostLabel(item, actor)))}
+        ${richData.additionalCostText ? metaRow("Дополнительно", richData.additionalCostText) : ""}
+        ${richData.conditionText ? metaRow("Условие", richData.conditionText) : ""}
+        ${richData.requirementText ? metaRow("Требование", richData.requirementText) : ""}
+        ${targetSummary ? metaRow("Цель", esc(targetSummary)) : ""}
+        ${rangeSummary ? metaRow("Дистанция", esc(rangeSummary)) : ""}
+        ${areaSummary ? metaRow("Область", esc(areaSummary)) : ""}
+        ${richData.targetingText ? metaRow("Цель/область", richData.targetingText) : ""}
+        ${check.enabled ? metaRow("Проверка", `${esc(check.formula)} против ${esc(checkTargetCharacteristicLabel(check.targetCharacteristic))}`) : ""}
+        ${richData.limitationText ? metaRow("Ограничение", richData.limitationText) : ""}
+        ${richData.exceptionText ? metaRow("Исключение", richData.exceptionText) : ""}
+      </div>
+
+      ${description ? `<div class="fast-nri-ability-description">${description}</div>` : ""}
+
+      ${richData.profiles?.length ? `
+        <div class="fast-nri-ability-profile-summary">
+          ${richData.profiles.map(profile => `
+            <section class="fast-nri-chat-degree-profile">
+              <strong>${esc(profile.label)}</strong>
+              <div class="fast-nri-chat-profile-formulas">${profile.damage}${profile.healing}${profile.tempHp}</div>
+              ${profile.text ? `<div class="fast-nri-chat-profile-text">${profile.text}</div>` : ""}
+            </section>
+          `).join("")}
         </div>
       ` : ""}
 
-      ${linkedEffects.length ? `
+      ${richData.effectCards?.length ? `
         <div class="fast-nri-ability-linked-effects">
           <small>Эффекты — перетащите на токен:</small>
-          ${linkedEffects.map(effect => effectChatCardHTML(effect, { compact: true })).join("")}
+          ${richData.effectCards.join("")}
         </div>
       ` : ""}
 
@@ -167,10 +255,38 @@ function abilityCardHTML({
   `;
 }
 
+async function chooseClassResourceCost(actor, item) {
+  const costs = abilityCosts(item);
+  const min = costs.classResourceMin;
+  const max = costs.classResourceMax;
+  if (max <= min) return min;
+
+  const { DialogV2 } = foundry.applications.api;
+  const choices = [];
+  for (let amount = min; amount <= max; amount += 1) {
+    choices.push({
+      action: `cost-${amount}`,
+      label: `${amount}`,
+      callback: async () => amount
+    });
+  }
+  choices.push({ action: "cancel", label: "Отмена", callback: async () => null });
+
+  return DialogV2.wait({
+    window: { title: `${item.name}: расход ресурса` },
+    content: `<p>Выберите количество «${esc(actor.system?.classResource?.label || "Классового ресурса")}": <strong>${min}–${max}</strong>.</p>`,
+    modal: true,
+    rejectClose: false,
+    buttons: choices
+  });
+}
+
 export async function useAbility(actor, item) {
   if (!actor || !item || item.type !== "ability") return null;
 
-  const cost = Math.max(0, Number(item.system?.classResourceCost) || 0);
+  const selectedCost = await chooseClassResourceCost(actor, item);
+  if (selectedCost === null) return null;
+  const cost = Math.max(0, Number(selectedCost) || 0);
   const resource = actor.system?.classResource ?? {};
   const before = Math.max(0, Number(resource.value) || 0);
 
@@ -206,6 +322,7 @@ export async function useAbility(actor, item) {
     item.system?.effectUuids ?? []
   );
   const actionContext = actionContextFromAbility(actor, item);
+  const richData = await enrichedAbilityCardData(item, linkedEffects);
 
   const content = abilityCardHTML({
     actor,
@@ -216,7 +333,8 @@ export async function useAbility(actor, item) {
     spent,
     shortage,
     undone: false,
-    linkedEffects
+    linkedEffects,
+    richData
   });
 
   const message = await ChatMessage.create({
@@ -305,6 +423,7 @@ export async function undoAbilityResource(element) {
     item.system?.effectUuids ?? []
   );
 
+  const richData = await enrichedAbilityCardData(item, linkedEffects);
   const content = abilityCardHTML({
     actor,
     item,
@@ -314,7 +433,8 @@ export async function undoAbilityResource(element) {
     spent,
     shortage,
     undone: true,
-    linkedEffects
+    linkedEffects,
+    richData
   });
 
   await message.update({

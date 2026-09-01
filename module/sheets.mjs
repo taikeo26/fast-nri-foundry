@@ -6,6 +6,7 @@ import {
   setItemHeld
 } from "./equipment.mjs";
 import {
+  ABILITY_TRAITS,
   CREATURE_TRAITS,
   HP_GAIN_DEFENSE_TRAITS,
   HP_GAIN_SOURCE_TRAITS,
@@ -27,6 +28,16 @@ import {
   runtimeDurationLabel
 } from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
+import {
+  ABILITY_AREA_SHAPES,
+  ABILITY_PROFILE_DEGREES,
+  ABILITY_RANGE_MODES,
+  ABILITY_TARGET_MODES,
+  ABILITY_TARGET_RELATIONS,
+  abilityCostLabel,
+  abilityIsSpell,
+  abilityTraitLabels
+} from "./ability-authoring.mjs";
 import {
   DEFENSE_ACTION_PROCEDURES,
   DEFENSE_DAMAGE_SELECTION_MODES,
@@ -97,13 +108,23 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     const context = await super._prepareContext(options);
     const items = Array.from(this.actor.items).sort((a, b) => a.sort - b.sort);
 
-    const abilities = items.filter(
-      item => item.type === "ability" && item.system.category !== "spell"
-    );
+    const abilityRow = item => ({
+      item,
+      id: item.id,
+      name: item.name,
+      img: item.img,
+      system: item.system,
+      costLabel: abilityCostLabel(item, this.actor),
+      traitLabel: abilityTraitLabels(item).join(" · ")
+    });
 
-    const spells = items.filter(
-      item => item.type === "ability" && item.system.category === "spell"
-    );
+    const abilities = items
+      .filter(item => item.type === "ability" && !abilityIsSpell(item))
+      .map(abilityRow);
+
+    const spells = items
+      .filter(item => item.type === "ability" && abilityIsSpell(item))
+      .map(abilityRow);
 
     const effectItems = items
       .filter(item => item.type === "effect")
@@ -455,7 +476,10 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     };
 
     if (type === "ability" && category) {
-      data.system = { category };
+      data.system = {
+        category,
+        ...(category === "spell" ? { traitIds: ["spell"] } : {})
+      };
     }
 
     const [item] = await this.actor.createEmbeddedDocuments("Item", [data]);
@@ -503,8 +527,11 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeOutcome: FastNriItemSheet.#removeOutcome,
       addOutcomeComponent: FastNriItemSheet.#addOutcomeComponent,
       removeOutcomeComponent: FastNriItemSheet.#removeOutcomeComponent,
+      addProfileComponent: FastNriItemSheet.#addProfileComponent,
+      removeProfileComponent: FastNriItemSheet.#removeProfileComponent,
       sendEffectToChat: FastNriItemSheet.#sendEffectToChat,
-      removeLinkedEffect: FastNriItemSheet.#removeLinkedEffect
+      removeLinkedEffect: FastNriItemSheet.#removeLinkedEffect,
+      removeProfileEffect: FastNriItemSheet.#removeProfileEffect
     }
   };
 
@@ -515,8 +542,40 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     }
   };
 
+  constructor(options = {}) {
+    super(options);
+    this._activeAbilityTab = "card";
+  }
+
+  #activateAbilityTabs() {
+    const buttons = this.element.querySelectorAll("[data-fast-nri-ability-tab]");
+    const panes = this.element.querySelectorAll("[data-fast-nri-ability-pane]");
+    if (!buttons.length || !panes.length) return;
+
+    const show = tab => {
+      this._activeAbilityTab = tab;
+      for (const button of buttons) {
+        const active = button.dataset.fastNriAbilityTab === tab;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      }
+      for (const pane of panes) {
+        pane.classList.toggle("active", pane.dataset.fastNriAbilityPane === tab);
+      }
+    };
+
+    for (const button of buttons) {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        show(button.dataset.fastNriAbilityTab);
+      });
+    }
+    show(this._activeAbilityTab);
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#activateAbilityTabs();
 
     const equipped = this.element.querySelector("[data-fast-nri-item-equipped]");
     if (equipped) {
@@ -638,6 +697,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       });
     }
 
+    for (const input of this.element.querySelectorAll("[data-fast-nri-profile-component-field]")) {
+      input.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        await this.#updateProfileComponent(event.currentTarget);
+      });
+    }
+
     const effectDropZone = this.element.querySelector("[data-fast-nri-effect-link-dropzone]");
     if (effectDropZone) {
       effectDropZone.addEventListener("dragover", event => {
@@ -672,6 +739,38 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
           }
         } catch (error) {
           console.error("Быстрая НРИ | Ошибка привязки Effect", error);
+          ui.notifications.error(`Не удалось привязать эффект: ${error.message}`);
+        }
+      });
+    }
+
+
+    for (const dropZone of this.element.querySelectorAll("[data-fast-nri-profile-effect-dropzone]")) {
+      dropZone.addEventListener("dragover", event => {
+        event.preventDefault();
+        dropZone.classList.add("is-dragover");
+      });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
+      dropZone.addEventListener("drop", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropZone.classList.remove("is-dragover");
+        const degree = dropZone.dataset.degree;
+        if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return;
+        try {
+          const dragData = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+          const dropped = await Item.implementation.fromDropData(dragData);
+          if (!dropped || dropped.type !== "effect") {
+            ui.notifications.warn("Сюда можно привязать только Effect.");
+            return;
+          }
+          const uuids = Array.from(this.item.system?.profiles?.[degree]?.effectUuids ?? []);
+          if (!uuids.includes(dropped.uuid)) {
+            uuids.push(dropped.uuid);
+            await this.item.update({ [`system.profiles.${degree}.effectUuids`]: uuids });
+          }
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка привязки профильного Effect", error);
           ui.notifications.error(`Не удалось привязать эффект: ${error.message}`);
         }
       });
@@ -930,6 +1029,86 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     });
   }
 
+  #profileComponentArray(degree, kind) {
+    if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return [];
+    if (!["damage", "healing", "tempHp"].includes(kind)) return [];
+    return Array.from(this.item.system?.profiles?.[degree]?.[kind]?.components ?? []).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+  }
+
+  async #updateProfileComponent(element) {
+    const degree = element.dataset.degree;
+    const kind = element.dataset.outcomeKind;
+    const index = Number(element.dataset.index);
+    const field = element.dataset.fastNriProfileComponentField;
+    if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+    if (!Number.isInteger(index) || index < 0) return;
+    if (!["formula", "damageType", "traitIds"].includes(field)) return;
+
+    const components = this.#profileComponentArray(degree, kind);
+    if (!components[index]) return;
+    let value = element.value;
+    if (field === "traitIds") value = Array.from(value ?? []);
+    else value = String(value ?? "");
+    components[index][field] = value;
+    await this.item.update({ [`system.profiles.${degree}.${kind}.components`]: components });
+  }
+
+  static async #addProfileComponent(event, target) {
+    event.preventDefault();
+    const degree = target.dataset.degree;
+    const kind = target.dataset.outcomeKind;
+    if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+    const raw = Array.from(this.item.system?.profiles?.[degree]?.[kind]?.components ?? []);
+    const components = raw.map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+    components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
+    await this.item.update({
+      [`system.profiles.${degree}.enabled`]: true,
+      [`system.profiles.${degree}.${kind}.enabled`]: true,
+      [`system.profiles.${degree}.${kind}.components`]: components
+    });
+  }
+
+  static async #removeProfileComponent(event, target) {
+    event.preventDefault();
+    const degree = target.dataset.degree;
+    const kind = target.dataset.outcomeKind;
+    const index = Number(target.dataset.index);
+    if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return;
+    if (!["damage", "healing", "tempHp"].includes(kind)) return;
+    if (!Number.isInteger(index) || index < 0) return;
+    const components = Array.from(this.item.system?.profiles?.[degree]?.[kind]?.components ?? []).map(component => ({
+      formula: String(component?.formula ?? "1d6"),
+      damageType: String(component?.damageType ?? "physical"),
+      traitIds: Array.from(component?.traitIds ?? [])
+    }));
+    components.splice(index, 1);
+    await this.item.update({
+      [`system.profiles.${degree}.${kind}.components`]: components,
+      ...(components.length ? {} : { [`system.profiles.${degree}.${kind}.enabled`]: false })
+    });
+  }
+
+  static async #removeProfileEffect(event, target) {
+    event.preventDefault();
+    if (this.item.type !== "ability") return;
+    const degree = target.dataset.degree;
+    const uuid = target.dataset.effectUuid;
+    if (!Object.hasOwn(ABILITY_PROFILE_DEGREES, degree) || !uuid) return;
+    const next = Array.from(this.item.system?.profiles?.[degree]?.effectUuids ?? [])
+      .filter(value => value !== uuid);
+    await this.item.update({ [`system.profiles.${degree}.effectUuids`]: next });
+  }
+
   static async #sendEffectToChat(event) {
     event.preventDefault();
 
@@ -1026,6 +1205,45 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       };
     });
 
+    const abilityProfiles = [];
+    if (this.item.type === "ability") {
+      for (const [degree, label] of Object.entries(ABILITY_PROFILE_DEGREES)) {
+        const profile = this.item.system?.profiles?.[degree] ?? {};
+        const channels = ["damage", "healing", "tempHp"].map(kind => {
+          const raw = Array.from(profile?.[kind]?.components ?? []);
+          return {
+            kind,
+            label: kind === "damage" ? "Урон" : kind === "healing" ? "Лечение" : "Временные HP",
+            enabled: Boolean(profile?.[kind]?.enabled),
+            isDamage: kind === "damage",
+            removeHighest: kind === "damage" ? Math.max(0, Number(profile?.damage?.removeHighest) || 0) : 0,
+            removeLowest: kind === "damage" ? Math.max(0, Number(profile?.damage?.removeLowest) || 0) : 0,
+            removeAll: kind === "damage" ? Boolean(profile?.damage?.removeAll) : false,
+            components: raw.map((component, index) => ({
+              index,
+              formula: String(component?.formula ?? "1d6"),
+              damageType: String(component?.damageType ?? "physical"),
+              traitIds: Array.from(component?.traitIds ?? [])
+            }))
+          };
+        });
+        const effects = await resolveEffectDocuments(profile?.effectUuids ?? []);
+        abilityProfiles.push({
+          degree,
+          label,
+          enabled: Boolean(profile.enabled),
+          text: String(profile.text ?? ""),
+          channels,
+          effects: effects.map(effect => ({
+            uuid: effect.uuid,
+            name: effect.name,
+            img: effect.img,
+            durationLabel: durationDefinitionLabel(effect.system)
+          }))
+        });
+      }
+    }
+
     const linkedEffects = this.item.type === "ability"
       ? await resolveEffectDocuments(this.item.system?.effectUuids ?? [])
       : [];
@@ -1047,6 +1265,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       damageTraitChoices: CREATURE_TRAITS,
       damageComponentProfiles,
       outcomeChannels,
+      abilityProfiles,
       hpGainSourceTraitChoices: HP_GAIN_SOURCE_TRAITS,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",
@@ -1082,7 +1301,13 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       defenseDamageSelectionChoices: DEFENSE_DAMAGE_SELECTION_MODES,
       defenseModifierScopeChoices: DEFENSE_MODIFIER_SCOPES,
       abilityIsSpell:
-        this.item.type === "ability" && this.item.system.category === "spell"
+        this.item.type === "ability" && abilityIsSpell(this.item),
+      abilityTraitChoices: ABILITY_TRAITS,
+      abilityTargetModeChoices: ABILITY_TARGET_MODES,
+      abilityTargetRelationChoices: ABILITY_TARGET_RELATIONS,
+      abilityRangeModeChoices: ABILITY_RANGE_MODES,
+      abilityAreaShapeChoices: ABILITY_AREA_SHAPES,
+      abilityProfileDegreeChoices: ABILITY_PROFILE_DEGREES
     };
   }
 }

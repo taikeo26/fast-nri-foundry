@@ -30,6 +30,43 @@ export function propertyLabel(id) {
   return ITEM_PROPERTIES[id] ?? id;
 }
 
+
+// Свойства Ability/Spell из нормативных карточек Rulebook 6.4.
+// Не каждое свойство обязано иметь runtime-автоматизацию: этот реестр также
+// служит каноническим authoring-слоем и выводится в rich chat-card.
+export const ABILITY_TRAITS = Object.freeze({
+  action: "Воздействие",
+  movement: "Движение",
+  intervention: "Вмешательство",
+  attack: "Атака",
+  melee: "Ближняя атака",
+  ranged: "Дистанционная атака",
+  area: "Область действия",
+  defensive: "Защитное",
+  spell: "Заклинание",
+  healing: "Исцеление",
+  manipulation: "Манипуляция",
+  maneuver: "Манёвр",
+  itemUse: "Использование предмета",
+  potion: "Зелье",
+  skillAction: "Действие навыка",
+  fast: "Быстрое",
+  teleportation: "Телепортация",
+  destruction: "Разрушение",
+  creation: "Сотворение",
+  fire: "Огонь",
+  force: "Силовой",
+  guided: "Наводимое",
+  clericNature: "Природа клерика",
+  dragonNature: "Драконья природа"
+});
+
+export const ABILITY_TRAIT_IDS = Object.freeze(Object.keys(ABILITY_TRAITS));
+
+export function abilityTraitLabel(id) {
+  return ABILITY_TRAITS[id] ?? id;
+}
+
 // Общий нормативный реестр признаков, которыми могут обладать существа,
 // а также к которым могут относиться Уязвимости и Иммунитеты.
 //

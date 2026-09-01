@@ -3,7 +3,7 @@
   "id": "fast-nri",
   "title": "Быстрая НРИ 6.3",
   "description": "Базовая система «Быстрая НРИ 6.3» для Foundry VTT 14.",
-  "version": "0.5.53",
+  "version": "0.5.55",
   "compatibility": {
     "minimum": 14,
     "verified": 14
@@ -40,7 +40,17 @@
       },
       "ability": {
         "htmlFields": [
-          "description"
+          "description",
+          "costs.additionalText",
+          "targeting.text",
+          "conditionText",
+          "requirementText",
+          "limitationText",
+          "exceptionText",
+          "profiles.failure.text",
+          "profiles.partial.text",
+          "profiles.success.text",
+          "profiles.great.text"
         ]
       },
       "equipment": {
@@ -70,5 +80,5 @@
   "media": [],
   "url": "https://github.com/taikeo26/fast-nri-foundry",
   "manifest": "https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json",
-  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.53/fast-nri.zip"
+  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.55/fast-nri.zip"
 }
