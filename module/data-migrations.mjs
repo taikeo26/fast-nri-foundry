@@ -180,7 +180,7 @@ export async function migrateEquipmentStateOnce() {
 }
 
 const RULES_63_MIGRATION_SETTING = "rules63AttackTypesMigration";
-const RULES_63_MIGRATION_VERSION = 5;
+const RULES_63_MIGRATION_VERSION = 6;
 
 function normalizeRussianName(value) {
   return String(value ?? "")
@@ -217,6 +217,79 @@ function rules63ItemUpdate(item) {
 
   if (item.type === "ability") {
     const update = { _id: item.id };
+
+    // 0.5.55.2: Ability becomes a container of self-contained executable
+    // implementations. Existing structured data is copied deterministically;
+    // no prose is parsed. A legacy variable class-resource range becomes one
+    // implementation per stored price so the old choice remains explicit.
+    const rawImplementations = foundry.utils.getProperty(item._source, "system.implementations");
+    if (!Array.isArray(rawImplementations) || rawImplementations.length === 0) {
+      const source = item.system ?? {};
+      const rawCosts = source.costs ?? {};
+      const legacyCost = Math.max(0, Math.trunc(Number(source.classResourceCost) || 0));
+      const min = Math.max(0, Math.trunc(Number(rawCosts.classResourceMin) || legacyCost));
+      const max = Math.max(min, Math.trunc(Number(rawCosts.classResourceMax) || min));
+      const costs = [];
+      for (let amount = min; amount <= max; amount += 1) costs.push(amount);
+      if (!costs.length) costs.push(0);
+      const baseTraits = new Set(Array.from(source.traitIds ?? []));
+      if (source.category === "spell") baseTraits.add("spell");
+      if (source.actionTraits?.melee) baseTraits.add("melee");
+      if (source.actionTraits?.ranged) baseTraits.add("ranged");
+      if (source.actionTraits?.area) baseTraits.add("area");
+      if (source.actionTraits?.intervention) baseTraits.add("intervention");
+      if (source.defenseAction?.enabled) baseTraits.add("defensive");
+
+      // Worlds which jump directly from the legacy attackCheck model must not
+      // lose their executable Check merely because top-level 0.5.52 fields are
+      // materialized later in this same migration pass. Use only structured
+      // legacy fields here; runtime still never parses prose.
+      if (source.attackCheck?.enabled) {
+        const legacyAttackType = normalizeAttackType(source.attackCheck?.attackType);
+        if (legacyAttackType) baseTraits.add(legacyAttackType);
+        baseTraits.add("attack");
+      }
+      const implementationCheck = source.check?.enabled
+        ? foundry.utils.deepClone(source.check)
+        : source.attackCheck?.enabled
+          ? {
+              enabled: true,
+              formula: String(source.attackCheck?.formula ?? "1d20 + {combatDie}"),
+              targetCharacteristic: "armor"
+            }
+          : foundry.utils.deepClone(source.check ?? {});
+      const implementationDefenseProcedure = foundry.utils.deepClone(source.defenseProcedure ?? {});
+      if (source.attackCheck?.enabled && implementationDefenseProcedure.directedDefense == null) {
+        implementationDefenseProcedure.directedDefense = Boolean(source.attackCheck?.directedDefense);
+      }
+
+      update["system.implementations"] = costs.map((amount, index) => ({
+        id: globalThis.foundry?.utils?.randomID?.() ?? `legacy${item.id}${index}`.slice(0, 16),
+        name: costs.length > 1 ? `Реализация — ${amount} ресурса` : "Основная реализация",
+        description: "",
+        traitIds: Array.from(baseTraits),
+        costs: {
+          action: Math.max(0, Math.trunc(Number(rawCosts.action) || 0)),
+          movement: Math.max(0, Math.trunc(Number(rawCosts.movement) || 0)),
+          intervention: Math.max(0, Math.trunc(Number(rawCosts.intervention) || 0)),
+          freeAction: Boolean(rawCosts.freeAction),
+          classResource: amount,
+          additionalText: String(rawCosts.additionalText ?? "")
+        },
+        targeting: foundry.utils.deepClone(source.targeting ?? {}),
+        conditionText: String(source.conditionText ?? ""),
+        requirementText: String(source.requirementText ?? ""),
+        limitationText: String(source.limitationText ?? ""),
+        exceptionText: String(source.exceptionText ?? ""),
+        check: foundry.utils.deepClone(implementationCheck),
+        defenseProcedure: foundry.utils.deepClone(implementationDefenseProcedure),
+        profiles: foundry.utils.deepClone(source.profiles ?? {}),
+        outcomes: foundry.utils.deepClone(source.outcomes ?? {}),
+        defenseAction: foundry.utils.deepClone(source.defenseAction ?? {}),
+        effectUuids: Array.from(source.effectUuids ?? []),
+        repeat: { count: 1, label: "Результат" }
+      }));
+    }
 
     // 0.5.55: materialize the new authoring fields from existing structured
     // data. No prose is parsed here. category/actionTraits/defenseAction are

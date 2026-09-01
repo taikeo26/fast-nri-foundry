@@ -54,6 +54,9 @@ import { hardBlockDefenseCandidate } from "./hard-blocks.mjs";
 import {
   abilityConfiguredOutcomeKinds,
   abilityCosts,
+  abilityHasDegreeProfiles,
+  abilityImplementationRuntime,
+  abilityImplementationRepeat,
   abilityIsSpell,
   abilityOutcomeChannelForDegree,
   abilityProfile
@@ -1727,7 +1730,7 @@ function abilityCheckDefenseHTML(actionContext) {
   `;
 }
 
-function abilityFollowupButtonHTML(actor, item, kind) {
+function abilityFollowupButtonHTML(actor, item, kind, implementationId = null, repeatIndex = 0, profileDegree = null) {
   const labels = {
     damage: ["fa-burst", "Бросить урон"],
     healing: ["fa-heart-pulse", "Бросить лечение"],
@@ -1741,6 +1744,9 @@ function abilityFollowupButtonHTML(actor, item, kind) {
       data-source-attack="true"
       data-actor-uuid="${escAttr(actor.uuid)}"
       data-item-uuid="${escAttr(item.uuid)}"
+      data-implementation-id="${escAttr(implementationId ?? "")}"
+      data-repeat-index="${escAttr(repeatIndex)}"
+      data-profile-degree="${escAttr(profileDegree ?? "")}"
       data-outcome-kind="${escAttr(kind)}"
     >
       <i class="fa-solid ${icon}"></i>
@@ -1749,14 +1755,30 @@ function abilityFollowupButtonHTML(actor, item, kind) {
   `;
 }
 
-export function abilityAttackFollowupHTML(actor, item, degree = null) {
-  // Compatibility for pre-0.5.55 callers: an undifferentiated Attack follow-up
-  // historically exposed only Damage. New Check cards always pass a degree.
+export function abilityAttackFollowupHTML(actor, item, degree = null, implementationId = null, repeatIndex = 0) {
+  const runtime = abilityImplementationRuntime(item, implementationId);
+  if (abilityHasDegreeProfiles(runtime)) {
+    const rows = [];
+    for (const [profileDegree, label] of Object.entries(DEGREE_LABELS)) {
+      const profile = abilityProfile(runtime, profileDegree);
+      if (!profile.enabled) continue;
+      const kinds = abilityConfiguredOutcomeKinds(runtime, profileDegree);
+      if (!kinds.length && !profile.effectUuids?.length && !String(profile.text ?? "").trim()) continue;
+      const recommended = profileDegree === degree;
+      rows.push(`<section class="fast-nri-degree-choice ${recommended ? "recommended" : ""}">
+        <strong>${esc(label)}${recommended ? " · рассчитано" : ""}</strong>
+        <div class="fast-nri-ability-outcome-actions">${kinds.map(kind => abilityFollowupButtonHTML(actor, item, kind, runtime?.implementationId ?? implementationId, repeatIndex, profileDegree)).join("")}</div>
+      </section>`);
+    }
+    return rows.length ? `<div class="fast-nri-degree-choice-list">${rows.join("")}</div>` : "";
+  }
+
+  // Compatibility for outcomes without degree profiles.
   const kinds = degree
-    ? abilityConfiguredOutcomeKinds(item, degree)
-    : abilityOutcomeChannel(item, "damage").enabled ? ["damage"] : [];
+    ? abilityConfiguredOutcomeKinds(runtime, degree)
+    : abilityOutcomeChannel(runtime, "damage").enabled ? ["damage"] : [];
   if (!kinds.length) return "";
-  return `<div class="fast-nri-ability-outcome-actions">${kinds.map(kind => abilityFollowupButtonHTML(actor, item, kind)).join("")}</div>`;
+  return `<div class="fast-nri-ability-outcome-actions">${kinds.map(kind => abilityFollowupButtonHTML(actor, item, kind, runtime?.implementationId ?? implementationId, repeatIndex)).join("")}</div>`;
 }
 
 function applyAbilityProfileDamageTransform(state, channel = {}) {
@@ -2119,17 +2141,19 @@ function degreeForAbilityCheck(result, targetCharacteristic, resolvedTarget) {
   return degreeVsDC(result.roll.total, dc, result.naturalD20);
 }
 
-export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null } = {}) {
+export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null, implementationId = null, repeatIndex = 0 } = {}) {
   if (!actor || !item || item.type !== "ability") return null;
 
-  const config = abilityCheckConfig(item);
+  const runtime = abilityImplementationRuntime(item, implementationId);
+  const config = abilityCheckConfig(runtime);
   if (!config.enabled) return null;
 
   const targetCharacteristic = normalizeCheckTargetCharacteristic(config.targetCharacteristic) || "armor";
-  const actionTraits = abilityActionTraits(item);
+  const actionTraits = abilityActionTraits(runtime);
   const attackType = directedAttackTypeFromTraits(actionTraits);
   const baseActionContext = actionContextFromAbility(actor, item, {
-    originActionContext: inheritedActionContext
+    originActionContext: inheritedActionContext,
+    implementationId: runtime?.implementationId ?? implementationId
   });
   const structureWarnings = checkStructureWarnings({
     targetCharacteristic,
@@ -2166,7 +2190,7 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
   const targetLabel = checkTargetCharacteristicLabel(targetCharacteristic);
   const result = await prepareRoll({
     actor,
-    label: `Проверка: ${item.name}`,
+    label: `Проверка: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
     baseFormula: formula,
     baseSources: abilityCheckFormulaSources(actor, rawFormula, formula, targetCharacteristic),
     showDC: false,
@@ -2195,7 +2219,7 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     parentMessageId
   });
   const traitsLabel = actionTraitsLabel(actionTraits);
-  const profileHTML = await enrichAbilityProfileHTML(item, degree);
+  const profileHTML = await enrichAbilityProfileHTML(runtime, degree);
 
   const natural20HTML = result.naturalD20 === 20
     ? targetCharacteristic === "armor"
@@ -2215,7 +2239,7 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
 
   const flavor = `
     <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-check-card">
-      ${rollCardHeader(`Проверка: ${item.name}`, "fa-wand-magic-sparkles")}
+      ${rollCardHeader(`Проверка: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`, "fa-wand-magic-sparkles")}
       <div class="fast-nri-attack-summary">
         <span>Результат: <strong>${esc(result.roll.total)}</strong></span>
         <span>Против: <strong>${esc(targetLabel)}</strong></span>
@@ -2227,7 +2251,7 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
       ${degreeHTML(degree)}
       ${profileHTML}
       ${abilityCheckDefenseHTML(actionContext)}
-      ${abilityAttackFollowupHTML(actor, item, degree)}
+      ${abilityAttackFollowupHTML(actor, item, degree, runtime?.implementationId ?? implementationId, repeatIndex)}
       ${rollSourcesHTML(result)}
     </div>
   `;
@@ -2240,6 +2264,8 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
         kind: "ability-check",
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
+        implementationId: runtime?.implementationId ?? implementationId ?? null,
+        repeatIndex,
         targetUuid: target?.document?.uuid ?? null,
         degree,
         critical,
@@ -2273,6 +2299,8 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     targetCharacteristic,
     actionTraits,
     actionContext,
+    implementationId: runtime?.implementationId ?? implementationId ?? null,
+    repeatIndex,
     directedDefense,
     attackType
   };
@@ -2283,13 +2311,14 @@ export async function rollAbilityAttackCheck(actor, item) {
   return rollAbilityCheck(actor, item);
 }
 
-export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null, sourceActionContext = null) {
+export async function rollAbilityOutcome(actor, item, requestedKind = null, sourceAttack = null, sourceActionContext = null, implementationId = null, repeatIndex = 0, requestedDegree = null) {
   if (!actor || !item || item.type !== "ability") return null;
 
+  const runtime = abilityImplementationRuntime(item, implementationId ?? sourceAttack?.implementationId ?? sourceActionContext?.source?.implementationId ?? null);
   let actionContext = normalizeActionContext(
     sourceAttack?.actionContext
       ?? sourceActionContext
-      ?? actionContextFromAbility(actor, item)
+      ?? actionContextFromAbility(actor, item, { implementationId: runtime?.implementationId ?? implementationId })
   );
 
   if (sourceAttack && !sourceAttack?.actionContext) {
@@ -2306,7 +2335,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     });
   }
 
-  const fallbackKind = String(item.system?.outcome?.kind ?? "none");
+  const fallbackKind = String(runtime.system?.outcome?.kind ?? "none");
   const kind = String(requestedKind ?? fallbackKind);
 
   if (!["damage", "healing", "tempHp"].includes(kind)) {
@@ -2314,14 +2343,14 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     return null;
   }
 
-  const outcomeDegree = actionContext.check?.degree ?? sourceAttack?.degree ?? null;
-  const channel = abilityOutcomeChannel(item, kind, outcomeDegree);
+  const outcomeDegree = requestedDegree ?? sourceAttack?.degree ?? actionContext.check?.degree ?? null;
+  const channel = abilityOutcomeChannel(runtime, kind, outcomeDegree);
   if (!channel.enabled) {
     ui.notifications.info(`${item.name}: этот результат не включён.`);
     return null;
   }
 
-  const components = abilityOutcomeComponents(actor, item, kind, outcomeDegree);
+  const components = abilityOutcomeComponents(actor, runtime, kind, outcomeDegree);
   if (!components.length) {
     ui.notifications.warn(`${item.name}: добавь хотя бы один компонент результата.`);
     return null;
@@ -2332,12 +2361,12 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
     const displayFormula = plainDamageFormula(components);
     const result = await prepareRoll({
       actor,
-      label: `Урон: ${item.name}`,
+      label: `Урон: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
       baseFormula: formula,
       baseSources: [{
         formula: displayFormula,
-        label: item.name,
-        reason: abilityIsSpell(item) ? "Урон заклинания" : "Урон способности"
+        label: runtime?.implementationName ? `${item.name} — ${runtime.implementationName}` : item.name,
+        reason: abilityIsSpell(runtime) ? "Урон заклинания" : "Урон способности"
       }],
       showDC: false
     });
@@ -2368,7 +2397,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
 
     const flavor = damageCardHTML({
       sourceName: item.name,
-      profileLabel: abilityIsSpell(item) ? "Заклинание" : "Способность",
+      profileLabel: abilityIsSpell(runtime) ? "Заклинание" : "Способность",
       critical: Boolean(sourceAttack?.critical),
       state,
       modifiersHTML,
@@ -2384,13 +2413,15 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
           kind: "damage",
           actorUuid: actor.uuid,
           itemUuid: item.uuid,
+          implementationId: runtime?.implementationId ?? implementationId ?? null,
+          repeatIndex,
           abilityOutcome: true,
           outcomeKind: kind,
           critical: Boolean(sourceAttack?.critical),
           attackTotal: sourceAttack?.total ?? null,
           attackNaturalD20: sourceAttack?.naturalD20 ?? null,
           attackDegree: sourceAttack?.degree ?? null,
-          automaticAttackDegree: sourceAttack?.degree ?? null,
+          automaticAttackDegree: sourceAttack?.automaticDegree ?? actionContext.check?.degree ?? sourceAttack?.degree ?? null,
           targetCharacteristic: sourceTargetCharacteristic || null,
           actionTraits: sourceActionTraits,
           actionContext,
@@ -2413,11 +2444,11 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
   const title = kind === "healing" ? "Восстановление HP" : "Временные HP";
   const result = await prepareRoll({
     actor,
-    label: `${title}: ${item.name}`,
+    label: `${title}: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
     baseFormula: formula,
     baseSources: [{
       formula: displayFormula,
-      label: item.name,
+      label: runtime?.implementationName ? `${item.name} — ${runtime.implementationName}` : item.name,
       reason: "Получение HP"
     }],
     showDC: false
@@ -2436,6 +2467,8 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
         kind: kind === "healing" ? "healing" : "temp-hp",
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
+        implementationId: runtime?.implementationId ?? implementationId ?? null,
+        repeatIndex,
         outcomeKind: kind,
         actionContext,
         hpGainState: state,
@@ -3068,7 +3101,7 @@ function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, def
   const targetName = context.targets?.[0]?.name ?? "";
   const traitsLabel = actionTraitsLabel(context.traits);
   const followup = sourceActor && sourceItem?.type === "ability"
-    ? abilityAttackFollowupHTML(sourceActor, sourceItem, context.check.degree)
+    ? abilityAttackFollowupHTML(sourceActor, sourceItem, context.check.degree, context.source?.implementationId ?? null)
     : "";
 
   return `
@@ -3454,7 +3487,7 @@ export async function defenseFromChat(element) {
     const base = sourceItem?.type === "weapon"
       ? actionContextFromWeapon(sourceActor, sourceItem)
       : sourceItem?.type === "ability"
-        ? actionContextFromAbility(sourceActor, sourceItem)
+        ? actionContextFromAbility(sourceActor, sourceItem, { implementationId: message.getFlag("fast-nri", "implementationId") ?? null })
         : normalizeActionContext({});
 
     actionContext = deriveActionContext(base, {
@@ -3501,6 +3534,8 @@ export async function defenseFromChat(element) {
   if (!enforceDefenseMethodHardBlock(actionContext, method)) return null;
 
   const actionItem = method.item;
+  const actionRuntime = method.runtime ?? actionItem;
+  const actionImplementationId = method.implementationId ?? null;
   const actionConfig = method.config;
   const actionName = method.actionName;
 
@@ -3580,7 +3615,7 @@ export async function defenseFromChat(element) {
     return null;
   }
 
-  const combatSource = defenseCombatTerm(defender, actionItem, role);
+  const combatSource = defenseCombatTerm(defender, actionRuntime, role);
   const baseFormula = combatSource?.formula
     ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
     : `1d20 + ${characteristicValue}`;
@@ -3598,7 +3633,7 @@ export async function defenseFromChat(element) {
     );
   }
 
-  const selectedClassResourceCost = await chooseDefenseClassResourceCost(defender, actionItem);
+  const selectedClassResourceCost = await chooseDefenseClassResourceCost(defender, actionRuntime);
   if (selectedClassResourceCost === null) return null;
 
   const contextualModifiers = selfDefenseContextualModifiers(
@@ -3684,12 +3719,13 @@ export async function defenseFromChat(element) {
     damageState.effectDegree = effectDegreeAfter;
   }
 
-  const resource = await spendDefenseClassResource(defender, actionItem, selectedClassResourceCost);
+  const resource = await spendDefenseClassResource(defender, actionRuntime, selectedClassResourceCost);
 
   damageState.defense = {
     kind: role === "self" ? "self-defense" : "ally-defense",
     actionName,
     abilityUuid: actionItem?.uuid ?? null,
+    implementationId: actionImplementationId,
     tokenUuid: defenderToken.document?.uuid ?? null,
     actorUuid: defender.uuid,
     tokenName: defenderToken.name || defender.name || "Защитник",
@@ -3750,7 +3786,7 @@ export async function defenseFromChat(element) {
 
   const defenseActionContext = actionContextForDefenseAction(actionContext, {
     actor: defender,
-    item: actionItem,
+    item: actionRuntime,
     defenderToken,
     protectedToken,
     actionName,
@@ -3779,6 +3815,7 @@ export async function defenseFromChat(element) {
         actionName,
         role,
         abilityUuid: actionItem?.uuid ?? null,
+        implementationId: actionImplementationId,
         sourceDamageMessageId: message.id,
         defenderTokenUuid: defenderToken.document?.uuid ?? null,
         defenderActorUuid: defender.uuid,

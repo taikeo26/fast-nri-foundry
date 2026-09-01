@@ -4,7 +4,7 @@ import {
   normalizeActionContext
 } from "./action-context.mjs";
 import { hardBlockDefenseCandidate } from "./hard-blocks.mjs";
-import { abilityCosts } from "./ability-authoring.mjs";
+import { abilityCosts, abilityImplementationRuntime, abilityImplementations } from "./ability-authoring.mjs";
 
 const SYSTEM_ID = "fast-nri";
 const MIGRATION_SETTING = "defenseInfrastructureMigrated";
@@ -414,46 +414,52 @@ export function resolveDefenseOptions({
 
   for (const item of actorItems(actor)) {
     if (item?.type !== "ability") continue;
-    const config = defenseActionConfig(item);
-    if (!config.enabled) continue;
-    if (!activeProcedures.includes(config.procedure)) continue;
+    for (const implementation of abilityImplementations(item)) {
+      const runtime = abilityImplementationRuntime(item, implementation.id);
+      const config = defenseActionConfig(runtime);
+      if (!config.enabled) continue;
+      if (!activeProcedures.includes(config.procedure)) continue;
 
-    const availability = evaluateDefenseAbility({
-      actor,
-      defenderToken,
-      protectedToken,
-      item,
-      role
-    });
+      const availability = evaluateDefenseAbility({
+        actor,
+        defenderToken,
+        protectedToken,
+        item: runtime,
+        role
+      });
 
-    if (alreadyUsed) {
-      availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
+      if (alreadyUsed) availability.warnings.push("этот персонаж уже использовал защиту в этой цепочке");
+
+      const actionName = abilityImplementations(item).length > 1
+        ? `${item.name} — ${implementation.name}`
+        : item.name;
+      const hardBlock = hardBlockDefenseCandidate(context, {
+        interventionCost: config.interventionCost,
+        item: runtime,
+        actionName,
+        actionTraits: runtime.system?.actionTraits ?? {}
+      });
+      if (hardBlock.blocked) {
+        availability.disabled = true;
+        availability.reasons.push(hardBlock.message);
+      }
+
+      options.push({
+        id: implementation.legacy ? `ability-${item.id}` : `ability-${item.id}-${implementation.id}`,
+        kind: "ability",
+        procedure: config.procedure,
+        actionName,
+        item,
+        implementationId: implementation.id,
+        runtime,
+        config,
+        disabled: availability.disabled,
+        reasons: availability.reasons,
+        warnings: availability.warnings,
+        hardBlock,
+        costLabel: defenseCostLabel(runtime, actor)
+      });
     }
-
-    const hardBlock = hardBlockDefenseCandidate(context, {
-      interventionCost: config.interventionCost,
-      item,
-      actionName: item.name,
-      actionTraits: item?.system?.actionTraits ?? {}
-    });
-    if (hardBlock.blocked) {
-      availability.disabled = true;
-      availability.reasons.push(hardBlock.message);
-    }
-
-    options.push({
-      id: `ability-${item.id}`,
-      kind: "ability",
-      procedure: config.procedure,
-      actionName: item.name,
-      item,
-      config,
-      disabled: availability.disabled,
-      reasons: availability.reasons,
-      warnings: availability.warnings,
-      hardBlock,
-      costLabel: defenseCostLabel(item, actor)
-    });
   }
 
   return options;

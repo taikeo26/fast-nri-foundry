@@ -1,0 +1,186 @@
+{
+  "name": "QA — Вмешательство: источник HB-02",
+  "type": "ability",
+  "img": "icons/svg/lightning.svg",
+  "system": {
+    "level": 1,
+    "category": "ability",
+    "description": "<p>Исходное действие является Вмешательством. Новое Вмешательство-защита должно быть видно, но блокироваться HB-02.</p>",
+    "implementations": [
+      {
+        "id": "QaHB02Impl000001",
+        "name": "Ответная атака",
+        "description": "<p>Проверка происхождения ActionContext и HB-02.</p>",
+        "traitIds": [
+          "intervention",
+          "attack",
+          "ranged"
+        ],
+        "costs": {
+          "action": 0,
+          "movement": 0,
+          "intervention": 1,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "single",
+          "relation": "enemy",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "cells",
+          "rangeCells": 6,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "<p>Тестовый триггер Вмешательства.</p>",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": true,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": true
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>Промах.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d4",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d6",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d8",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        }
+      }
+    ]
+  },
+  "_id": "QaHB02Ability005",
+  "effects": [],
+  "folder": null,
+  "sort": 4000,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.3",
+      "qaPack": true
+    }
+  }
+}

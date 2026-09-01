@@ -35,6 +35,8 @@ import {
   ABILITY_TARGET_MODES,
   ABILITY_TARGET_RELATIONS,
   abilityCostLabel,
+  abilityImplementationRuntime,
+  abilityImplementations,
   abilityIsSpell,
   abilityTraitLabels
 } from "./ability-authoring.mjs";
@@ -108,15 +110,24 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     const context = await super._prepareContext(options);
     const items = Array.from(this.actor.items).sort((a, b) => a.sort - b.sort);
 
-    const abilityRow = item => ({
-      item,
-      id: item.id,
-      name: item.name,
-      img: item.img,
-      system: item.system,
-      costLabel: abilityCostLabel(item, this.actor),
-      traitLabel: abilityTraitLabels(item).join(" · ")
-    });
+    const abilityRow = item => {
+      const implementations = abilityImplementations(item);
+      const runtime = abilityImplementationRuntime(item, implementations[0]?.id ?? null);
+      return {
+        item,
+        id: item.id,
+        name: item.name,
+        img: item.img,
+        system: item.system,
+        implementationCount: implementations.length,
+        costLabel: implementations.length === 1
+          ? abilityCostLabel(runtime, this.actor)
+          : `${implementations.length} реализации`,
+        traitLabel: implementations.length === 1
+          ? abilityTraitLabels(runtime).join(" · ")
+          : `Выбор из ${implementations.length}`
+      };
+    };
 
     const abilities = items
       .filter(item => item.type === "ability" && !abilityIsSpell(item))
@@ -475,10 +486,15 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       type
     };
 
-    if (type === "ability" && category) {
+    if (type === "ability") {
+      const implementationId = globalThis.foundry?.utils?.randomID?.() ?? Math.random().toString(36).slice(2, 18);
       data.system = {
-        category,
-        ...(category === "spell" ? { traitIds: ["spell"] } : {})
+        category: category || "ability",
+        implementations: [{
+          id: implementationId,
+          name: "Основная реализация",
+          traitIds: category === "spell" ? ["spell"] : []
+        }]
       };
     }
 
@@ -531,7 +547,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeProfileComponent: FastNriItemSheet.#removeProfileComponent,
       sendEffectToChat: FastNriItemSheet.#sendEffectToChat,
       removeLinkedEffect: FastNriItemSheet.#removeLinkedEffect,
-      removeProfileEffect: FastNriItemSheet.#removeProfileEffect
+      removeProfileEffect: FastNriItemSheet.#removeProfileEffect,
+      addImplementation: FastNriItemSheet.#addImplementation,
+      duplicateImplementation: FastNriItemSheet.#duplicateImplementation,
+      removeImplementation: FastNriItemSheet.#removeImplementation,
+      addImplementationProfileComponent: FastNriItemSheet.#addImplementationProfileComponent,
+      removeImplementationProfileComponent: FastNriItemSheet.#removeImplementationProfileComponent,
+      removeImplementationEffect: FastNriItemSheet.#removeImplementationEffect,
+      removeImplementationProfileEffect: FastNriItemSheet.#removeImplementationProfileEffect
     }
   };
 
@@ -702,6 +725,51 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         event.preventDefault();
         event.stopPropagation();
         await this.#updateProfileComponent(event.currentTarget);
+      });
+    }
+
+    for (const dropZone of this.element.querySelectorAll("[data-fast-nri-implementation-effect-dropzone]")) {
+      dropZone.addEventListener("dragover", event => { event.preventDefault(); dropZone.classList.add("is-dragover"); });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
+      dropZone.addEventListener("drop", async event => {
+        event.preventDefault(); event.stopPropagation(); dropZone.classList.remove("is-dragover");
+        const implIndex = Number(dropZone.dataset.implementationIndex);
+        if (!Number.isInteger(implIndex)) return;
+        try {
+          const dragData = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+          const dropped = await Item.implementation.fromDropData(dragData);
+          if (!dropped || dropped.type !== "effect") return ui.notifications.warn("Сюда можно привязать только Effect.");
+          const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+          if (!current[implIndex]) return;
+          const uuids = Array.from(current[implIndex].effectUuids ?? []);
+          if (!uuids.includes(dropped.uuid)) uuids.push(dropped.uuid);
+          current[implIndex].effectUuids = uuids;
+          await this.item.update({ "system.implementations": current });
+        } catch (error) { console.error("Быстрая НРИ | Ошибка привязки Effect реализации", error); ui.notifications.error(`Не удалось привязать эффект: ${error.message}`); }
+      });
+    }
+
+    for (const dropZone of this.element.querySelectorAll("[data-fast-nri-implementation-profile-effect-dropzone]")) {
+      dropZone.addEventListener("dragover", event => { event.preventDefault(); dropZone.classList.add("is-dragover"); });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
+      dropZone.addEventListener("drop", async event => {
+        event.preventDefault(); event.stopPropagation(); dropZone.classList.remove("is-dragover");
+        const implIndex = Number(dropZone.dataset.implementationIndex);
+        const degree = dropZone.dataset.degree;
+        if (!Number.isInteger(implIndex) || !Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) return;
+        try {
+          const dragData = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+          const dropped = await Item.implementation.fromDropData(dragData);
+          if (!dropped || dropped.type !== "effect") return ui.notifications.warn("Сюда можно привязать только Effect.");
+          const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+          const profile = current[implIndex]?.profiles?.[degree];
+          if (!profile) return;
+          const uuids = Array.from(profile.effectUuids ?? []);
+          if (!uuids.includes(dropped.uuid)) uuids.push(dropped.uuid);
+          profile.effectUuids = uuids;
+          profile.enabled = true;
+          await this.item.update({ "system.implementations": current });
+        } catch (error) { console.error("Быстрая НРИ | Ошибка привязки профильного Effect реализации", error); ui.notifications.error(`Не удалось привязать эффект: ${error.message}`); }
       });
     }
 
@@ -1121,6 +1189,114 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     });
   }
 
+  static #blankImplementation(name = "Основная реализация") {
+    const id = globalThis.foundry?.utils?.randomID?.() ?? Math.random().toString(36).slice(2, 18);
+    const emptyChannel = () => ({ enabled: false, components: [] });
+    const emptyDamage = () => ({ enabled: false, components: [], removeHighest: 0, removeLowest: 0, removeAll: false });
+    const emptyProfile = () => ({ enabled: false, text: "", damage: emptyDamage(), healing: emptyChannel(), tempHp: emptyChannel(), effectUuids: [] });
+    return {
+      id, name, description: "", traitIds: [],
+      costs: { action: 0, movement: 0, intervention: 0, freeAction: false, classResource: 0, additionalText: "" },
+      targeting: { mode: "none", relation: "any", countMin: 0, countMax: 0, rangeMode: "none", rangeCells: 0, requiresVisibility: false, areaShape: "none", areaSize: "", text: "" },
+      conditionText: "", requirementText: "", limitationText: "", exceptionText: "",
+      check: { enabled: false, formula: "1d20 + {combatDie}", targetCharacteristic: "armor" },
+      defenseProcedure: { directedDefense: false },
+      profiles: { failure: emptyProfile(), partial: emptyProfile(), success: emptyProfile(), great: emptyProfile() },
+      outcomes: { damage: emptyChannel(), healing: emptyChannel(), tempHp: emptyChannel() },
+      defenseAction: { enabled: false, procedure: "directed", targetScope: "ally", interventionCost: 1, rangeMode: "adjacent", rangeCells: 0, requiresVisibility: false, movementMode: "none", damageSelectionMode: "standard", combatDiceFormula: "", selfDefenseCharacteristic: "", removeDamageParts: 1, effectDegreeReduction: 1, allowManeuver: false },
+      effectUuids: [], repeat: { count: 1, label: "Результат" }
+    };
+  }
+
+  static async #addImplementation(event) {
+    event.preventDefault();
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    current.push(FastNriItemSheet.#blankImplementation(`Реализация ${current.length + 1}`));
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #duplicateImplementation(event, target) {
+    event.preventDefault();
+    const index = Number(target.dataset.implementationIndex);
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    if (!Number.isInteger(index) || index < 0 || !current[index]) return;
+    const copy = foundry.utils.deepClone(current[index]);
+    copy.id = globalThis.foundry?.utils?.randomID?.() ?? Math.random().toString(36).slice(2, 18);
+    copy.name = `${copy.name || `Реализация ${index + 1}`} — копия`;
+    current.splice(index + 1, 0, copy);
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementation(event, target) {
+    event.preventDefault();
+    const index = Number(target.dataset.implementationIndex);
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    if (!Number.isInteger(index) || index < 0 || !current[index]) return;
+    if (current.length <= 1) {
+      ui.notifications.warn("У способности должна оставаться хотя бы одна реализация.");
+      return;
+    }
+    current.splice(index, 1);
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #addImplementationProfileComponent(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const degree = target.dataset.degree;
+    const kind = target.dataset.outcomeKind;
+    if (!Number.isInteger(implIndex) || !Object.hasOwn(ABILITY_PROFILE_DEGREES, degree) || !["damage", "healing", "tempHp"].includes(kind)) return;
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const impl = current[implIndex];
+    if (!impl) return;
+    const channel = impl.profiles?.[degree]?.[kind];
+    if (!channel) return;
+    channel.enabled = true;
+    impl.profiles[degree].enabled = true;
+    channel.components = Array.from(channel.components ?? []);
+    channel.components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementationProfileComponent(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const degree = target.dataset.degree;
+    const kind = target.dataset.outcomeKind;
+    const componentIndex = Number(target.dataset.index);
+    if (!Number.isInteger(implIndex) || !Number.isInteger(componentIndex) || !Object.hasOwn(ABILITY_PROFILE_DEGREES, degree) || !["damage", "healing", "tempHp"].includes(kind)) return;
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const channel = current[implIndex]?.profiles?.[degree]?.[kind];
+    if (!channel) return;
+    channel.components = Array.from(channel.components ?? []);
+    channel.components.splice(componentIndex, 1);
+    if (!channel.components.length) channel.enabled = false;
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementationEffect(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const uuid = target.dataset.effectUuid;
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    if (!Number.isInteger(implIndex) || !current[implIndex] || !uuid) return;
+    current[implIndex].effectUuids = Array.from(current[implIndex].effectUuids ?? []).filter(value => value !== uuid);
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementationProfileEffect(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const degree = target.dataset.degree;
+    const uuid = target.dataset.effectUuid;
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    if (!Number.isInteger(implIndex) || !current[implIndex] || !Object.hasOwn(ABILITY_PROFILE_DEGREES, degree) || !uuid) return;
+    const profile = current[implIndex].profiles?.[degree];
+    if (!profile) return;
+    profile.effectUuids = Array.from(profile.effectUuids ?? []).filter(value => value !== uuid);
+    await this.item.update({ "system.implementations": current });
+  }
+
   static async #removeLinkedEffect(event, target) {
     event.preventDefault();
 
@@ -1244,6 +1420,49 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       }
     }
 
+    const abilityImplementationsView = [];
+    if (this.item.type === "ability") {
+      const storedImplementations = Array.from(this.item.system?.implementations ?? []);
+      for (let implementationIndex = 0; implementationIndex < storedImplementations.length; implementationIndex += 1) {
+        const implementation = storedImplementations[implementationIndex];
+        const runtime = abilityImplementationRuntime(this.item, implementation?.id);
+        const profiles = [];
+        for (const [degree, label] of Object.entries(ABILITY_PROFILE_DEGREES)) {
+          const profile = implementation?.profiles?.[degree] ?? {};
+          const channels = ["damage", "healing", "tempHp"].map(kind => ({
+            kind,
+            label: kind === "damage" ? "Урон" : kind === "healing" ? "Лечение" : "Временные HP",
+            enabled: Boolean(profile?.[kind]?.enabled),
+            isDamage: kind === "damage",
+            removeHighest: Math.max(0, Number(profile?.damage?.removeHighest) || 0),
+            removeLowest: Math.max(0, Number(profile?.damage?.removeLowest) || 0),
+            removeAll: Boolean(profile?.damage?.removeAll),
+            components: Array.from(profile?.[kind]?.components ?? []).map((component, index) => ({
+              index,
+              formula: String(component?.formula ?? "1d6"),
+              damageType: String(component?.damageType ?? "physical"),
+              traitIds: Array.from(component?.traitIds ?? [])
+            }))
+          }));
+          const effects = await resolveEffectDocuments(profile?.effectUuids ?? []);
+          profiles.push({
+            degree, label, enabled: Boolean(profile?.enabled), text: String(profile?.text ?? ""), channels,
+            effects: effects.map(effect => ({ uuid: effect.uuid, name: effect.name, img: effect.img, durationLabel: durationDefinitionLabel(effect.system) }))
+          });
+        }
+        const effects = await resolveEffectDocuments(implementation?.effectUuids ?? []);
+        abilityImplementationsView.push({
+          index: implementationIndex,
+          id: implementation?.id,
+          name: implementation?.name || `Реализация ${implementationIndex + 1}`,
+          implementation, runtime, profiles,
+          costLabel: abilityCostLabel(runtime, this.item.parent?.documentName === "Actor" ? this.item.parent : null),
+          traitLabel: abilityTraitLabels(runtime).join(" · "),
+          effects: effects.map(effect => ({ uuid: effect.uuid, name: effect.name, img: effect.img, durationLabel: durationDefinitionLabel(effect.system) }))
+        });
+      }
+    }
+
     const linkedEffects = this.item.type === "ability"
       ? await resolveEffectDocuments(this.item.system?.effectUuids ?? [])
       : [];
@@ -1266,6 +1485,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       damageComponentProfiles,
       outcomeChannels,
       abilityProfiles,
+      abilityImplementations: abilityImplementationsView,
       hpGainSourceTraitChoices: HP_GAIN_SOURCE_TRAITS,
       isWeapon: this.item.type === "weapon",
       isAbility: this.item.type === "ability",

@@ -110,7 +110,8 @@ export function abilityCheckConfig(itemOrSystem) {
   const system = itemOrSystem?.system ?? itemOrSystem ?? {};
   const modern = system.check ?? {};
   const legacy = system.attackCheck ?? {};
-  const modernStored = sourceHasModernCheck(itemOrSystem)
+  const modernStored = Boolean(itemOrSystem?.implementationId)
+    || sourceHasModernCheck(itemOrSystem)
     || Object.hasOwn(system, "check") && !Object.hasOwn(system, "attackCheck");
 
   if (modernStored) {
@@ -148,7 +149,8 @@ export function abilityActionTraits(itemOrSystem) {
   }
 
   const modern = normalizeActionTraits(system.actionTraits);
-  const modernStored = sourceHasModernCheck(itemOrSystem)
+  const modernStored = Boolean(itemOrSystem?.implementationId)
+    || sourceHasModernCheck(itemOrSystem)
     || Object.hasOwn(system, "actionTraits") && !Object.hasOwn(system, "attackCheck");
 
   if (modernStored) return modern;

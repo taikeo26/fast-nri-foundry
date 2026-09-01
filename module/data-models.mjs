@@ -116,6 +116,79 @@ const abilityProfileSchema = () =>
 
 
 
+
+const abilityImplementationSchema = () =>
+  new SchemaField({
+    id: text(""),
+    name: text("Основная реализация"),
+    description: richText(""),
+    traitIds: stringArray(),
+    costs: new SchemaField({
+      action: integer(0),
+      movement: integer(0),
+      intervention: integer(0),
+      freeAction: flag(false),
+      classResource: integer(0),
+      additionalText: richText("")
+    }),
+    targeting: new SchemaField({
+      mode: text("none"),
+      relation: text("any"),
+      countMin: integer(0),
+      countMax: integer(0),
+      rangeMode: text("none"),
+      rangeCells: integer(0),
+      requiresVisibility: flag(false),
+      areaShape: text("none"),
+      areaSize: text(""),
+      text: richText("")
+    }),
+    conditionText: richText(""),
+    requirementText: richText(""),
+    limitationText: richText(""),
+    exceptionText: richText(""),
+    check: new SchemaField({
+      enabled: flag(false),
+      formula: text("1d20 + {combatDie}"),
+      targetCharacteristic: text("armor")
+    }),
+    defenseProcedure: new SchemaField({
+      directedDefense: flag(false)
+    }),
+    profiles: new SchemaField({
+      failure: abilityProfileSchema(),
+      partial: abilityProfileSchema(),
+      success: abilityProfileSchema(),
+      great: abilityProfileSchema()
+    }),
+    outcomes: new SchemaField({
+      damage: outcomeChannelSchema(),
+      healing: outcomeChannelSchema(),
+      tempHp: outcomeChannelSchema()
+    }),
+    defenseAction: new SchemaField({
+      enabled: flag(false),
+      procedure: text("directed"),
+      targetScope: text("ally"),
+      interventionCost: integer(1),
+      rangeMode: text("adjacent"),
+      rangeCells: integer(0),
+      requiresVisibility: flag(false),
+      movementMode: text("none"),
+      damageSelectionMode: text("standard"),
+      combatDiceFormula: text(""),
+      selfDefenseCharacteristic: text(""),
+      removeDamageParts: integer(1),
+      effectDegreeReduction: integer(1),
+      allowManeuver: flag(false)
+    }),
+    effectUuids: stringArray(),
+    repeat: new SchemaField({
+      count: integer(1),
+      label: text("Результат")
+    })
+  });
+
 const formationRulesSchema = () =>
   new SchemaField({
     // Положительный бонус к Строю самого владельца правила.
@@ -363,6 +436,16 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
       category: text("ability"),
       timing: text("Действие"),
       classResourceCost: integer(0),
+
+      // 0.5.55.2: Ability is a container. Every executable variant is a
+      // self-contained implementation with a fixed cost and its own Check,
+      // targeting, profiles and Defense Action. Legacy top-level fields remain
+      // only for migration/compatibility and are no longer the authoring source.
+      implementations: new ArrayField(abilityImplementationSchema(), {
+        required: true,
+        nullable: false,
+        initial: []
+      }),
 
       // 0.5.55 authoring model. category/timing/classResourceCost remain as
       // compatibility fields; new Items should use the structured fields below.

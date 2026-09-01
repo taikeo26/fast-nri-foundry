@@ -1,5 +1,5 @@
 import { inferWeaponAttackType } from "./attack-types.mjs";
-import { abilityTraitIds } from "./ability-authoring.mjs";
+import { abilityImplementationRuntime, abilityTraitIds } from "./ability-authoring.mjs";
 import {
   abilityActionTraits,
   abilityCheckConfig,
@@ -8,7 +8,7 @@ import {
   normalizeCheckTargetCharacteristic
 } from "./check-system.mjs";
 
-export const ACTION_CONTEXT_SCHEMA_VERSION = 2;
+export const ACTION_CONTEXT_SCHEMA_VERSION = 3;
 
 export const DEFENSE_PROCEDURE_IDS = Object.freeze({
   directed: "Направленная защита",
@@ -195,7 +195,9 @@ export function normalizeActionContext(value = {}) {
       actorUuid: text(source.actorUuid ?? value?.actorUuid) || null,
       itemUuid: text(source.itemUuid ?? value?.itemUuid) || null,
       itemType: text(source.itemType) || null,
-      name: text(source.name) || null
+      name: text(source.name) || null,
+      implementationId: text(source.implementationId) || null,
+      implementationName: text(source.implementationName) || null
     },
     initiator: {
       actorUuid: text(initiator.actorUuid ?? source.actorUuid ?? value?.actorUuid) || null,
@@ -245,7 +247,9 @@ export function createActionContext({
     actorUuid: actor?.uuid ?? inherited?.source?.actorUuid ?? null,
     itemUuid: item?.uuid ?? inherited?.source?.itemUuid ?? null,
     itemType: item?.type ?? inherited?.source?.itemType ?? null,
-    name: item?.name ?? inherited?.source?.name ?? null
+    name: item?.name ?? inherited?.source?.name ?? null,
+    implementationId: item?.implementationId ?? inherited?.source?.implementationId ?? null,
+    implementationName: item?.implementationName ?? inherited?.source?.implementationName ?? null
   };
 
   const inheritedTargets = inherited?.targets ?? [];
@@ -315,11 +319,11 @@ export function actionContextFromWeapon(actor, weapon, { target = null, originAc
   });
 }
 
-export function actionContextFromAbility(actor, item, { target = null, originActionContext = null } = {}) {
-  const config = abilityCheckConfig(item);
-  const traits = abilityActionTraits(item);
-
-  return createActionContext({
+export function actionContextFromAbility(actor, item, { target = null, originActionContext = null, implementationId = null } = {}) {
+  const runtime = abilityImplementationRuntime(item, implementationId);
+  const config = abilityCheckConfig(runtime);
+  const traits = abilityActionTraits(runtime);
+  const context = createActionContext({
     actor,
     item,
     target,
@@ -327,14 +331,15 @@ export function actionContextFromAbility(actor, item, { target = null, originAct
     check: {
       enabled: config.enabled,
       formula: config.formula,
-      targetCharacteristic: config.enabled
-        ? config.targetCharacteristic
-        : null
+      targetCharacteristic: config.enabled ? config.targetCharacteristic : null
     },
     traits,
-    traitIds: abilityTraitIds(item),
+    traitIds: abilityTraitIds(runtime),
     directedDefense: Boolean(config.directedDefense)
   });
+  context.source.implementationId = runtime?.implementationId ?? null;
+  context.source.implementationName = runtime?.implementationName ?? null;
+  return context;
 }
 
 export function deriveActionContext(context, patch = {}) {

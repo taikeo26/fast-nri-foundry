@@ -168,393 +168,183 @@
   {{/if}}
 
   {{#if isAbility}}
-    <section class="fast-nri-section fast-nri-ability-editor">
+    <section class="fast-nri-section fast-nri-ability-editor fast-nri-implementation-editor">
       <div class="fast-nri-section-heading">
         <div>
           <h2>{{#if abilityIsSpell}}Заклинание{{else}}Способность{{/if}}</h2>
-          <small class="fast-nri-help">Один Item-тип для способностей и заклинаний. Заклинание определяется свойством «Заклинание».</small>
+          <small class="fast-nri-help">Ability — контейнер. Исполняемая механика хранится в отдельных реализациях; каждая реализация имеет фиксированную цену.</small>
         </div>
+        <button type="button" data-action="addImplementation"><i class="fa-solid fa-plus"></i> Реализация</button>
       </div>
 
-      <nav class="fast-nri-ability-editor-tabs" aria-label="Разделы способности">
-        <button type="button" data-fast-nri-ability-tab="card">Карточка</button>
-        <button type="button" data-fast-nri-ability-tab="check">Проверка и цель</button>
-        <button type="button" data-fast-nri-ability-tab="profiles">Профили</button>
-        <button type="button" data-fast-nri-ability-tab="defense">Защита</button>
-        <button type="button" data-fast-nri-ability-tab="extra">Дополнительно</button>
-      </nav>
-
-      <div class="fast-nri-ability-editor-pane" data-fast-nri-ability-pane="card">
-        <h3>Свойства</h3>
-        <label class="fast-nri-property-field">
-          Свойства карточки
-          <multi-select name="system.traitIds">
-            {{selectOptions abilityTraitChoices selected=system.traitIds}}
-          </multi-select>
-        </label>
-        <small class="fast-nri-help">Свойства — структурированные ключевые слова Rulebook. Ближняя/Дистанционная, Область и Вмешательство автоматически попадают в ActionContext.</small>
-
-        <h3>Требуется</h3>
-        <div class="fast-nri-four fast-nri-cost-grid">
-          <label>Воздействия
-            <input type="number" min="0" name="system.costs.action" value="{{system.costs.action}}" />
-          </label>
-          <label>Движения
-            <input type="number" min="0" name="system.costs.movement" value="{{system.costs.movement}}" />
-          </label>
-          <label>Вмешательства
-            <input type="number" min="0" name="system.costs.intervention" value="{{system.costs.intervention}}" />
-          </label>
-          <label class="fast-nri-checkbox-label">
-            <input type="checkbox" name="system.costs.freeAction" {{#if system.costs.freeAction}}checked{{/if}} />
-            <span>Свободное действие</span>
-          </label>
-        </div>
-        <div class="fast-nri-two">
-          <label>Классовый ресурс · минимум
-            <input type="number" min="0" name="system.costs.classResourceMin" value="{{system.costs.classResourceMin}}" />
-          </label>
-          <label>Классовый ресурс · максимум
-            <input type="number" min="0" name="system.costs.classResourceMax" value="{{system.costs.classResourceMax}}" />
-          </label>
-        </div>
-        <small class="fast-nri-help">Базовые ресурсы показываются и предупреждают, но не списываются автоматически. Классовый ресурс списывается мягко с Undo; диапазон позволяет настроить стоимость вроде 1–3.</small>
-
-        <label class="fast-nri-rich-label">Дополнительная стоимость / особое «Требуется»
-          <prose-mirror name="system.costs.additionalText" value="{{system.costs.additionalText}}" toggled></prose-mirror>
-        </label>
-
-        <h3>Текст карточки</h3>
-        <label class="fast-nri-rich-label">Описание / основной эффект
-          <prose-mirror name="system.description" value="{{system.description}}" toggled></prose-mirror>
-        </label>
-        <div class="fast-nri-two fast-nri-rich-grid">
-          <label class="fast-nri-rich-label">Условие
-            <prose-mirror name="system.conditionText" value="{{system.conditionText}}" toggled></prose-mirror>
-          </label>
-          <label class="fast-nri-rich-label">Требование
-            <prose-mirror name="system.requirementText" value="{{system.requirementText}}" toggled></prose-mirror>
-          </label>
-          <label class="fast-nri-rich-label">Ограничение
-            <prose-mirror name="system.limitationText" value="{{system.limitationText}}" toggled></prose-mirror>
-          </label>
-          <label class="fast-nri-rich-label">Исключение
-            <prose-mirror name="system.exceptionText" value="{{system.exceptionText}}" toggled></prose-mirror>
-          </label>
-        </div>
+      <div class="fast-nri-form-grid two-columns">
+        <label>Уровень <input type="number" min="0" name="system.level" value="{{system.level}}" /></label>
       </div>
+      <label>Общее описание способности
+        <prose-mirror name="system.description" value="{{system.description}}" toggled></prose-mirror>
+      </label>
 
-      <div class="fast-nri-ability-editor-pane" data-fast-nri-ability-pane="check">
-        <h3>Цель и дистанция</h3>
-        <div class="fast-nri-two">
-          <label>Тип цели
-            <select name="system.targeting.mode">
-              {{selectOptions abilityTargetModeChoices selected=system.targeting.mode}}
-            </select>
-          </label>
-          <label>Отношение
-            <select name="system.targeting.relation">
-              {{selectOptions abilityTargetRelationChoices selected=system.targeting.relation}}
-            </select>
-          </label>
-          <label>Минимум целей
-            <input type="number" min="0" name="system.targeting.countMin" value="{{system.targeting.countMin}}" />
-          </label>
-          <label>Максимум целей
-            <input type="number" min="0" name="system.targeting.countMax" value="{{system.targeting.countMax}}" />
-          </label>
-        </div>
-        <div class="fast-nri-two">
-          <label>Дистанция
-            <select name="system.targeting.rangeMode">
-              {{selectOptions abilityRangeModeChoices selected=system.targeting.rangeMode}}
-            </select>
-          </label>
-          {{#if (eq system.targeting.rangeMode "cells")}}
-            <label>Клеток
-              <input type="number" min="0" name="system.targeting.rangeCells" value="{{system.targeting.rangeCells}}" />
-            </label>
-          {{/if}}
-          <label class="fast-nri-checkbox-label">
-            <input type="checkbox" name="system.targeting.requiresVisibility" {{#if system.targeting.requiresVisibility}}checked{{/if}} />
-            <span>Требует видимость</span>
-          </label>
-        </div>
-        <div class="fast-nri-two">
-          <label>Форма области
-            <select name="system.targeting.areaShape">
-              {{selectOptions abilityAreaShapeChoices selected=system.targeting.areaShape}}
-            </select>
-          </label>
-          <label>Размер / запись области
-            <input type="text" name="system.targeting.areaSize" value="{{system.targeting.areaSize}}" placeholder="например 3×3 или линия 8" />
-          </label>
-        </div>
-        <label class="fast-nri-rich-label">Частное правило цели / области
-          <prose-mirror name="system.targeting.text" value="{{system.targeting.text}}" toggled></prose-mirror>
-        </label>
+      {{#if abilityImplementations.length}}
+        <div class="fast-nri-implementation-list">
+          {{#each abilityImplementations as |impl|}}
+            <details class="fast-nri-implementation-card" open>
+              <summary>
+                <div><strong>{{impl.name}}</strong><small>{{impl.costLabel}}{{#if impl.traitLabel}} · {{impl.traitLabel}}{{/if}}</small></div>
+                <div class="fast-nri-inline-actions">
+                  <button type="button" data-action="duplicateImplementation" data-implementation-index="{{impl.index}}" title="Дублировать"><i class="fa-solid fa-copy"></i></button>
+                  <button type="button" data-action="removeImplementation" data-implementation-index="{{impl.index}}" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </summary>
 
-        <div class="fast-nri-ability-attack-config">
-          <h3>Проверка</h3>
-          <label class="fast-nri-checkbox-label">
-            <input type="checkbox" name="system.check.enabled" {{#if system.check.enabled}}checked{{/if}} />
-            <span>Есть проверка</span>
-          </label>
-          {{#if system.check.enabled}}
-            <label>Формула проверки
-              <input type="text" name="system.check.formula" value="{{system.check.formula}}" placeholder="1d20 + {combatDie}" />
-            </label>
-            <label>Целевая характеристика
-              <select name="system.check.targetCharacteristic">
-                <option value="armor" {{#if (eq system.check.targetCharacteristic "armor")}}selected{{/if}}>КЗ</option>
-                <option value="awareness" {{#if (eq system.check.targetCharacteristic "awareness")}}selected{{/if}}>Внимательность</option>
-                <option value="reflex" {{#if (eq system.check.targetCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
-                <option value="fortitude" {{#if (eq system.check.targetCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
-                <option value="will" {{#if (eq system.check.targetCharacteristic "will")}}selected{{/if}}>Воля</option>
-              </select>
-            </label>
-            <label class="fast-nri-checkbox-label">
-              <input type="checkbox" name="system.defenseProcedure.directedDefense" {{#if system.defenseProcedure.directedDefense}}checked{{/if}} />
-              <span>Для направленной атаки против КЗ доступна Направленная защита</span>
-            </label>
-            <small class="fast-nri-help">Противодействие и Уворот выводятся общим конструктором из Check + свойств. Специальные защитные Ability выбранного токена добавляются тем же обработчиком кнопки «Защита».</small>
-          {{/if}}
-        </div>
-      </div>
-
-      <div class="fast-nri-ability-editor-pane" data-fast-nri-ability-pane="profiles">
-        <h3>Профили результата по степени</h3>
-        <small class="fast-nri-help">Профиль может одновременно содержать урон, Лечение, временные HP, rich-text эффект и связанные Effect Item. При Check используется профиль итоговой степени.</small>
-
-        <div class="fast-nri-profile-list">
-          {{#each abilityProfiles as |profile|}}
-            <section class="fast-nri-result-profile {{#if profile.enabled}}enabled{{/if}}">
-              <div class="fast-nri-result-profile-heading">
-                <label class="fast-nri-checkbox-label">
-                  <input type="checkbox" name="system.profiles.{{profile.degree}}.enabled" {{#if profile.enabled}}checked{{/if}} />
-                  <strong>{{profile.label}}</strong>
+              <input type="hidden" name="system.implementations.{{impl.index}}.id" value="{{impl.id}}" />
+              <div class="fast-nri-form-grid two-columns">
+                <label>Название кнопки / реализации
+                  <input type="text" name="system.implementations.{{impl.index}}.name" value="{{impl.implementation.name}}" />
+                </label>
+                <label>Свойства
+                  <multi-select name="system.implementations.{{impl.index}}.traitIds">
+                    {{selectOptions @root.abilityTraitChoices selected=impl.implementation.traitIds}}
+                  </multi-select>
                 </label>
               </div>
 
-              {{#if profile.enabled}}
-                <label class="fast-nri-rich-label">Эффект степени
-                  <prose-mirror name="system.profiles.{{profile.degree}}.text" value="{{profile.text}}" toggled></prose-mirror>
+              <label>Описание реализации
+                <prose-mirror name="system.implementations.{{impl.index}}.description" value="{{impl.implementation.description}}" toggled></prose-mirror>
+              </label>
+
+              <h3>Требуется</h3>
+              <div class="fast-nri-form-grid four-columns">
+                <label>Воздействия <input type="number" min="0" name="system.implementations.{{impl.index}}.costs.action" value="{{impl.implementation.costs.action}}" /></label>
+                <label>Движения <input type="number" min="0" name="system.implementations.{{impl.index}}.costs.movement" value="{{impl.implementation.costs.movement}}" /></label>
+                <label>Вмешательства <input type="number" min="0" name="system.implementations.{{impl.index}}.costs.intervention" value="{{impl.implementation.costs.intervention}}" /></label>
+                <label>Классовый ресурс <input type="number" min="0" name="system.implementations.{{impl.index}}.costs.classResource" value="{{impl.implementation.costs.classResource}}" /></label>
+              </div>
+              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.costs.freeAction" {{#if impl.implementation.costs.freeAction}}checked{{/if}} /><span>Свободное действие</span></label>
+              <label>Дополнительная цена / требование
+                <prose-mirror name="system.implementations.{{impl.index}}.costs.additionalText" value="{{impl.implementation.costs.additionalText}}" toggled></prose-mirror>
+              </label>
+
+              <h3>Независимые разрешения</h3>
+              <div class="fast-nri-form-grid two-columns">
+                <label>Количество
+                  <input type="number" min="1" name="system.implementations.{{impl.index}}.repeat.count" value="{{impl.implementation.repeat.count}}" />
                 </label>
+                <label>Название одного результата
+                  <input type="text" name="system.implementations.{{impl.index}}.repeat.label" value="{{impl.implementation.repeat.label}}" placeholder="Стрела / Заряд / Атака" />
+                </label>
+              </div>
+              <small class="fast-nri-help">Например: реализация «3 стрелы» имеет фиксированную цену и 3 независимых разрешения с отдельными бросками.</small>
 
-                {{#each profile.channels as |channel|}}
-                  <div class="fast-nri-profile-channel">
-                    <div class="fast-nri-profile-channel-heading">
-                      <label class="fast-nri-checkbox-label">
-                        <input type="checkbox" name="system.profiles.{{profile.degree}}.{{channel.kind}}.enabled" {{#if channel.enabled}}checked{{/if}} />
-                        <span>{{channel.label}}</span>
-                      </label>
-                      {{#if channel.enabled}}
-                        <button type="button" data-action="addProfileComponent" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}">
-                          <i class="fa-solid fa-plus"></i> Компонент
-                        </button>
-                      {{/if}}
-                    </div>
+              <h3>Условия и требования</h3>
+              <label>Условие <prose-mirror name="system.implementations.{{impl.index}}.conditionText" value="{{impl.implementation.conditionText}}" toggled></prose-mirror></label>
+              <label>Требование <prose-mirror name="system.implementations.{{impl.index}}.requirementText" value="{{impl.implementation.requirementText}}" toggled></prose-mirror></label>
+              <label>Ограничение <prose-mirror name="system.implementations.{{impl.index}}.limitationText" value="{{impl.implementation.limitationText}}" toggled></prose-mirror></label>
+              <label>Исключение <prose-mirror name="system.implementations.{{impl.index}}.exceptionText" value="{{impl.implementation.exceptionText}}" toggled></prose-mirror></label>
 
-                    {{#if channel.enabled}}
-                      {{#if channel.isDamage}}
-                        <div class="fast-nri-three fast-nri-profile-damage-transform">
-                          <label>Удалить наибольших
-                            <input type="number" min="0" name="system.profiles.{{profile.degree}}.damage.removeHighest" value="{{channel.removeHighest}}" />
-                          </label>
-                          <label>Удалить наименьших
-                            <input type="number" min="0" name="system.profiles.{{profile.degree}}.damage.removeLowest" value="{{channel.removeLowest}}" />
-                          </label>
-                          <label class="fast-nri-checkbox-label">
-                            <input type="checkbox" name="system.profiles.{{profile.degree}}.damage.removeAll" {{#if channel.removeAll}}checked{{/if}} />
-                            <span>Удалить весь урон</span>
-                          </label>
-                        </div>
-                        <small class="fast-nri-help">Удаление применяется к уже выпавшим частям урона. Так настраиваются профили областей вроде «убрать самый маленький / самый большой».</small>
-                      {{/if}}
-                      <div class="fast-nri-outcome-component-list">
-                        {{#each channel.components as |component|}}
-                          <div class="fast-nri-outcome-component-row {{#if channel.isDamage}}is-damage{{else}}is-hp-gain{{/if}}">
-                            <input type="text" value="{{component.formula}}" data-fast-nri-profile-component-field="formula" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}" title="Формула" />
-                            {{#if channel.isDamage}}
-                              <select data-fast-nri-profile-component-field="damageType" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}">
-                                <option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option>
-                                <option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option>
-                              </select>
-                              <multi-select data-fast-nri-profile-component-field="traitIds" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}">
-                                {{selectOptions @root.damageTraitChoices selected=component.traitIds}}
-                              </multi-select>
-                            {{else}}
-                              <multi-select data-fast-nri-profile-component-field="traitIds" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}">
-                                {{selectOptions @root.hpGainSourceTraitChoices selected=component.traitIds}}
-                              </multi-select>
-                            {{/if}}
-                            <button type="button" class="fast-nri-damage-component-remove" data-action="removeProfileComponent" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}" title="Удалить компонент">
-                              <i class="fa-solid fa-trash"></i>
-                            </button>
-                          </div>
-                        {{else}}
-                          <small class="fast-nri-help">Компонентов нет. Добавьте компонент.</small>
-                        {{/each}}
-                      </div>
-                    {{/if}}
-                  </div>
-                {{/each}}
+              <h3>Цель, дистанция и область</h3>
+              <div class="fast-nri-form-grid two-columns">
+                <label>Режим цели <select name="system.implementations.{{impl.index}}.targeting.mode">{{selectOptions @root.abilityTargetModeChoices selected=impl.implementation.targeting.mode}}</select></label>
+                <label>Отношение <select name="system.implementations.{{impl.index}}.targeting.relation">{{selectOptions @root.abilityTargetRelationChoices selected=impl.implementation.targeting.relation}}</select></label>
+                <label>Мин. целей <input type="number" min="0" name="system.implementations.{{impl.index}}.targeting.countMin" value="{{impl.implementation.targeting.countMin}}" /></label>
+                <label>Макс. целей <input type="number" min="0" name="system.implementations.{{impl.index}}.targeting.countMax" value="{{impl.implementation.targeting.countMax}}" /></label>
+                <label>Дистанция <select name="system.implementations.{{impl.index}}.targeting.rangeMode">{{selectOptions @root.abilityRangeModeChoices selected=impl.implementation.targeting.rangeMode}}</select></label>
+                <label>Клеток <input type="number" min="0" name="system.implementations.{{impl.index}}.targeting.rangeCells" value="{{impl.implementation.targeting.rangeCells}}" /></label>
+                <label>Форма области <select name="system.implementations.{{impl.index}}.targeting.areaShape">{{selectOptions @root.abilityAreaShapeChoices selected=impl.implementation.targeting.areaShape}}</select></label>
+                <label>Размер области <input type="text" name="system.implementations.{{impl.index}}.targeting.areaSize" value="{{impl.implementation.targeting.areaSize}}" /></label>
+              </div>
+              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.targeting.requiresVisibility" {{#if impl.implementation.targeting.requiresVisibility}}checked{{/if}} /><span>Требует видимость</span></label>
+              <label>Частное правило цели / области <prose-mirror name="system.implementations.{{impl.index}}.targeting.text" value="{{impl.implementation.targeting.text}}" toggled></prose-mirror></label>
 
-                <div class="fast-nri-profile-effect-zone">
-                  <strong>Effect Item этой степени</strong>
-                  <div class="fast-nri-effect-link-dropzone" data-fast-nri-profile-effect-dropzone data-degree="{{profile.degree}}">Перетащите Effect сюда</div>
-                  <div class="fast-nri-linked-effect-list">
-                    {{#each profile.effects as |effect|}}
-                      <div class="fast-nri-linked-effect-row">
-                        <img src="{{effect.img}}" alt="" />
-                        <div><strong>{{effect.name}}</strong><small>{{effect.durationLabel}}</small></div>
-                        <button type="button" data-action="removeProfileEffect" data-degree="{{profile.degree}}" data-effect-uuid="{{effect.uuid}}"><i class="fa-solid fa-xmark"></i></button>
-                      </div>
-                    {{/each}}
-                  </div>
+              <h3>Проверка</h3>
+              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.check.enabled" {{#if impl.implementation.check.enabled}}checked{{/if}} /><span>Есть Check</span></label>
+              {{#if impl.implementation.check.enabled}}
+                <div class="fast-nri-form-grid two-columns">
+                  <label>Формула <input type="text" name="system.implementations.{{impl.index}}.check.formula" value="{{impl.implementation.check.formula}}" /></label>
+                  <label>Против характеристики
+                    <select name="system.implementations.{{impl.index}}.check.targetCharacteristic">
+                      <option value="armor" {{#if (eq impl.implementation.check.targetCharacteristic "armor")}}selected{{/if}}>КЗ</option>
+                      <option value="awareness" {{#if (eq impl.implementation.check.targetCharacteristic "awareness")}}selected{{/if}}>Внимательность</option>
+                      <option value="reflex" {{#if (eq impl.implementation.check.targetCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
+                      <option value="fortitude" {{#if (eq impl.implementation.check.targetCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
+                      <option value="will" {{#if (eq impl.implementation.check.targetCharacteristic "will")}}selected{{/if}}>Воля</option>
+                    </select>
+                  </label>
                 </div>
+                <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.defenseProcedure.directedDefense" {{#if impl.implementation.defenseProcedure.directedDefense}}checked{{/if}} /><span>Направленная защита</span></label>
               {{/if}}
-            </section>
+
+              <h3>Профили по степени</h3>
+              {{#each impl.profiles as |profile|}}
+                <section class="fast-nri-result-profile {{#if profile.enabled}}enabled{{/if}}">
+                  <header><label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.enabled" {{#if profile.enabled}}checked{{/if}} /><span><strong>{{profile.label}}</strong></span></label></header>
+                  <label>Rich text результата <prose-mirror name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.text" value="{{profile.text}}" toggled></prose-mirror></label>
+                  {{#each profile.channels as |channel|}}
+                    <div class="fast-nri-outcome-channel {{#if channel.enabled}}enabled{{/if}}">
+                      <div class="fast-nri-outcome-channel-heading">
+                        <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.enabled" {{#if channel.enabled}}checked{{/if}} /><span>{{channel.label}}</span></label>
+                        <button type="button" data-action="addImplementationProfileComponent" data-implementation-index="{{impl.index}}" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}"><i class="fa-solid fa-plus"></i> Компонент</button>
+                      </div>
+                      {{#if channel.isDamage}}
+                        <div class="fast-nri-form-grid three-columns">
+                          <label>Убрать больших <input type="number" min="0" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.damage.removeHighest" value="{{channel.removeHighest}}" /></label>
+                          <label>Убрать малых <input type="number" min="0" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.damage.removeLowest" value="{{channel.removeLowest}}" /></label>
+                          <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.damage.removeAll" {{#if channel.removeAll}}checked{{/if}} /><span>Убрать все</span></label>
+                        </div>
+                      {{/if}}
+                      {{#each channel.components as |component|}}
+                        <div class="fast-nri-outcome-component-row">
+                          <input type="text" name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.formula" value="{{component.formula}}" />
+                          {{#if channel.isDamage}}
+                            <select name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.damageType"><option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option><option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option></select>
+                            <multi-select name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.traitIds">{{selectOptions @root.damageTraitChoices selected=component.traitIds}}</multi-select>
+                          {{/if}}
+                          <button type="button" data-action="removeImplementationProfileComponent" data-implementation-index="{{impl.index}}" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                      {{/each}}
+                    </div>
+                  {{/each}}
+                  <div class="fast-nri-profile-effect-dropzone" data-fast-nri-implementation-profile-effect-dropzone data-implementation-index="{{impl.index}}" data-degree="{{profile.degree}}"><i class="fa-solid fa-link"></i> Перетащите Effect для этой степени</div>
+                  {{#each profile.effects as |effect|}}<div class="fast-nri-linked-effect-row"><img src="{{effect.img}}" /><span>{{effect.name}}</span><small>{{effect.durationLabel}}</small><button type="button" data-action="removeImplementationProfileEffect" data-implementation-index="{{impl.index}}" data-degree="{{profile.degree}}" data-effect-uuid="{{effect.uuid}}"><i class="fa-solid fa-xmark"></i></button></div>{{/each}}
+                </section>
+              {{/each}}
+
+              <h3>Защитная реализация</h3>
+              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.defenseAction.enabled" {{#if impl.implementation.defenseAction.enabled}}checked{{/if}} /><span>Предлагать обработчиком кнопки «Защита» выбранного токена</span></label>
+              {{#if impl.implementation.defenseAction.enabled}}
+                <div class="fast-nri-form-grid two-columns">
+                  <label>Процедура <select name="system.implementations.{{impl.index}}.defenseAction.procedure">{{selectOptions @root.defenseProcedureChoices selected=impl.implementation.defenseAction.procedure}}</select></label>
+                  <label>Кого защищает <select name="system.implementations.{{impl.index}}.defenseAction.targetScope">{{selectOptions @root.defenseTargetScopeChoices selected=impl.implementation.defenseAction.targetScope}}</select></label>
+                  <label>Цена Вмешательства <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.interventionCost" value="{{impl.implementation.defenseAction.interventionCost}}" /></label>
+                  <label>Дистанция <select name="system.implementations.{{impl.index}}.defenseAction.rangeMode">{{selectOptions @root.defenseRangeModeChoices selected=impl.implementation.defenseAction.rangeMode}}</select></label>
+                  <label>Клеток <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.rangeCells" value="{{impl.implementation.defenseAction.rangeCells}}" /></label>
+                  <label>Формула боевых кубов <input type="text" name="system.implementations.{{impl.index}}.defenseAction.combatDiceFormula" value="{{impl.implementation.defenseAction.combatDiceFormula}}" /></label>
+                  <label>Удалить частей урона <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.removeDamageParts" value="{{impl.implementation.defenseAction.removeDamageParts}}" /></label>
+                  <label>Снижение степени Эффекта <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.effectDegreeReduction" value="{{impl.implementation.defenseAction.effectDegreeReduction}}" /></label>
+                  <label>Выбор частей <select name="system.implementations.{{impl.index}}.defenseAction.damageSelectionMode">{{selectOptions @root.defenseDamageSelectionChoices selected=impl.implementation.defenseAction.damageSelectionMode}}</select></label>
+                  <label>Перемещение <select name="system.implementations.{{impl.index}}.defenseAction.movementMode">{{selectOptions @root.defenseMovementModeChoices selected=impl.implementation.defenseAction.movementMode}}</select></label>
+                </div>
+                <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.defenseAction.requiresVisibility" {{#if impl.implementation.defenseAction.requiresVisibility}}checked{{/if}} /><span>Требует видимость</span></label>
+                <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.defenseAction.allowManeuver" {{#if impl.implementation.defenseAction.allowManeuver}}checked{{/if}} /><span>Можно против Манёвра</span></label>
+              {{/if}}
+
+              <h3>Эффекты реализации</h3>
+              <div class="fast-nri-effect-link-dropzone" data-fast-nri-implementation-effect-dropzone data-implementation-index="{{impl.index}}"><i class="fa-solid fa-link"></i> Перетащите Effect</div>
+              {{#each impl.effects as |effect|}}<div class="fast-nri-linked-effect-row"><img src="{{effect.img}}" /><span>{{effect.name}}</span><small>{{effect.durationLabel}}</small><button type="button" data-action="removeImplementationEffect" data-implementation-index="{{impl.index}}" data-effect-uuid="{{effect.uuid}}"><i class="fa-solid fa-xmark"></i></button></div>{{/each}}
+            </details>
           {{/each}}
         </div>
-      </div>
+      {{else}}
+        <div class="fast-nri-empty-state"><p>У способности ещё нет реализации.</p><button type="button" data-action="addImplementation"><i class="fa-solid fa-plus"></i> Создать основную реализацию</button></div>
+      {{/if}}
 
-      <div class="fast-nri-ability-editor-pane" data-fast-nri-ability-pane="defense">
-        <div class="fast-nri-ability-defense-config">
-          <h3>Защитное действие</h3>
-          <label class="fast-nri-checkbox-label">
-            <input type="checkbox" name="system.defenseAction.enabled" {{#if system.defenseAction.enabled}}checked{{/if}} />
-            <span>Предлагать эту Ability обработчиком кнопки «Защита»</span>
-          </label>
-          <small class="fast-nri-help">Источник вариантов — Ability Item выбранного токена-защитника. Стандартные и специальные Защиты показываются вместе.</small>
-
-          {{#if system.defenseAction.enabled}}
-            <div class="fast-nri-two">
-              <label>Процедура защиты
-                <select name="system.defenseAction.procedure">{{selectOptions defenseProcedureChoices selected=system.defenseAction.procedure}}</select>
-              </label>
-              <label>Кого можно защищать
-                <select name="system.defenseAction.targetScope">{{selectOptions defenseTargetScopeChoices selected=system.defenseAction.targetScope}}</select>
-              </label>
-              <label>Вмешательств
-                <input type="number" min="0" name="system.defenseAction.interventionCost" value="{{system.defenseAction.interventionCost}}" />
-              </label>
-              <label>Дистанция
-                <select name="system.defenseAction.rangeMode">{{selectOptions defenseRangeModeChoices selected=system.defenseAction.rangeMode}}</select>
-              </label>
-            </div>
-            {{#if (eq system.defenseAction.rangeMode "cells")}}
-              <label>Клеток
-                <input type="number" min="0" name="system.defenseAction.rangeCells" value="{{system.defenseAction.rangeCells}}" />
-              </label>
-            {{/if}}
-            <div class="fast-nri-two">
-              <label>Перемещение
-                <select name="system.defenseAction.movementMode">{{selectOptions defenseMovementModeChoices selected=system.defenseAction.movementMode}}</select>
-              </label>
-              <label>Какие части удалять
-                <select name="system.defenseAction.damageSelectionMode">{{selectOptions defenseDamageSelectionChoices selected=system.defenseAction.damageSelectionMode}}</select>
-              </label>
-              <label>Кубы Боевой подготовки
-                <input type="text" name="system.defenseAction.combatDiceFormula" value="{{system.defenseAction.combatDiceFormula}}" placeholder="пусто = обычная формула Actor" />
-              </label>
-              <label>Удалить частей урона
-                <input type="number" min="0" name="system.defenseAction.removeDamageParts" value="{{system.defenseAction.removeDamageParts}}" />
-              </label>
-              <label>Снижение степени Эффекта
-                <input type="number" min="0" name="system.defenseAction.effectDegreeReduction" value="{{system.defenseAction.effectDegreeReduction}}" />
-              </label>
-              <label>Характеристика Самозащиты
-                <select name="system.defenseAction.selfDefenseCharacteristic">
-                  <option value="" {{#unless system.defenseAction.selfDefenseCharacteristic}}selected{{/unless}}>По общему правилу</option>
-                  <option value="fortitude" {{#if (eq system.defenseAction.selfDefenseCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
-                  <option value="reflex" {{#if (eq system.defenseAction.selfDefenseCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
-                  <option value="will" {{#if (eq system.defenseAction.selfDefenseCharacteristic "will")}}selected{{/if}}>Воля</option>
-                  <option value="awareness" {{#if (eq system.defenseAction.selfDefenseCharacteristic "awareness")}}selected{{/if}}>Внимательность</option>
-                </select>
-              </label>
-            </div>
-            <div class="fast-nri-two">
-              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.defenseAction.requiresVisibility" {{#if system.defenseAction.requiresVisibility}}checked{{/if}} /><span>Требует видимость</span></label>
-              <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.defenseAction.allowManeuver" {{#if system.defenseAction.allowManeuver}}checked{{/if}} /><span>Разрешает защиту от Манёвра</span></label>
-            </div>
-          {{/if}}
-        </div>
-
-        <div class="fast-nri-ability-defense-config">
-          <h3>Модификатор Защитных действий</h3>
-          <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.defenseModifier.enabled" {{#if system.defenseModifier.enabled}}checked{{/if}} /><span>Эта способность меняет формулу Защитных действий</span></label>
-          {{#if system.defenseModifier.enabled}}
-            <div class="fast-nri-two">
-              <label>Область действия
-                <select name="system.defenseModifier.scope">{{selectOptions defenseModifierScopeChoices selected=system.defenseModifier.scope}}</select>
-              </label>
-              <label>Кубы Боевой подготовки
-                <input type="text" name="system.defenseModifier.combatDiceFormula" value="{{system.defenseModifier.combatDiceFormula}}" />
-              </label>
-            </div>
-          {{/if}}
-        </div>
-      </div>
-
-      <div class="fast-nri-ability-editor-pane" data-fast-nri-ability-pane="extra">
-        <div class="fast-nri-ability-outcome-config">
-          <h3>Результаты без профиля степени</h3>
-          <small class="fast-nri-help">Совместимый канал для действий без Check и старых Item. Для Check-способностей предпочтительны профили по степени.</small>
-          <div class="fast-nri-outcome-channel-list">
-            {{#each outcomeChannels as |outcome|}}
-              <section class="fast-nri-outcome-channel {{#if outcome.enabled}}enabled{{/if}}">
-                <div class="fast-nri-outcome-channel-heading">
-                  <label class="fast-nri-checkbox-label">
-                    <input type="checkbox" data-fast-nri-outcome-enabled data-outcome-kind="{{outcome.kind}}" {{#if outcome.enabled}}checked{{/if}} />
-                    <i class="fa-solid {{outcome.icon}}"></i><strong>{{outcome.label}}</strong>
-                  </label>
-                  {{#if outcome.enabled}}<button type="button" data-action="addOutcomeComponent" data-outcome-kind="{{outcome.kind}}"><i class="fa-solid fa-plus"></i> Компонент</button>{{/if}}
-                </div>
-                {{#if outcome.enabled}}
-                  <div class="fast-nri-outcome-component-list">
-                    {{#each outcome.components as |component|}}
-                      <div class="fast-nri-outcome-component-row {{#if outcome.isDamage}}is-damage{{else}}is-hp-gain{{/if}}">
-                        <input type="text" value="{{component.formula}}" data-fast-nri-outcome-component-field="formula" data-outcome-kind="{{outcome.kind}}" data-index="{{component.index}}" />
-                        {{#if outcome.isDamage}}
-                          <select data-fast-nri-outcome-component-field="damageType" data-outcome-kind="{{outcome.kind}}" data-index="{{component.index}}"><option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option><option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option></select>
-                          <multi-select data-fast-nri-outcome-component-field="traitIds" data-outcome-kind="{{outcome.kind}}" data-index="{{component.index}}">{{selectOptions @root.damageTraitChoices selected=component.traitIds}}</multi-select>
-                        {{else}}
-                          <multi-select data-fast-nri-outcome-component-field="traitIds" data-outcome-kind="{{outcome.kind}}" data-index="{{component.index}}">{{selectOptions @root.hpGainSourceTraitChoices selected=component.traitIds}}</multi-select>
-                        {{/if}}
-                        <button type="button" class="fast-nri-damage-component-remove" data-action="removeOutcomeComponent" data-outcome-kind="{{outcome.kind}}" data-index="{{component.index}}"><i class="fa-solid fa-trash"></i></button>
-                      </div>
-                    {{/each}}
-                  </div>
-                {{/if}}
-              </section>
-            {{/each}}
-          </div>
-        </div>
-
-        <div class="fast-nri-formation-rules">
-          <h3>Модификаторы Строя</h3>
-          <div class="fast-nri-three">
-            <label>Бонус себе<input type="number" min="0" name="system.rules.formation.selfBonus" value="{{system.rules.formation.selfBonus}}" /></label>
-            <label>Бонус соседним союзникам<input type="number" min="0" name="system.rules.formation.adjacentAllyBonus" value="{{system.rules.formation.adjacentAllyBonus}}" /></label>
-            <label>Штраф Строю цели<input type="number" min="0" name="system.rules.formation.targetPenalty" value="{{system.rules.formation.targetPenalty}}" /></label>
-          </div>
-        </div>
-
-        <div class="fast-nri-ability-effect-links">
-          <h3>Эффекты без привязки к степени</h3>
-          <small class="fast-nri-help">Такие Effect Item всегда показываются в исходной chat-card способности. Для условного эффекта привяжите Effect к конкретной степени в «Профилях».</small>
-          <div class="fast-nri-effect-link-dropzone" data-fast-nri-effect-link-dropzone>Перетащите Effect сюда</div>
-          <div class="fast-nri-linked-effect-list">
-            {{#each linkedEffectRows as |effect|}}
-              <div class="fast-nri-linked-effect-row">
-                <img src="{{effect.img}}" alt="" /><div><strong>{{effect.name}}</strong><small>{{effect.durationLabel}}</small></div>
-                <button type="button" data-action="removeLinkedEffect" data-effect-uuid="{{effect.uuid}}"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-            {{else}}<small class="fast-nri-help">Связанных эффектов нет.</small>{{/each}}
-          </div>
-        </div>
-      </div>
+      <details class="fast-nri-implementation-card">
+        <summary><strong>Общие пассивные правила</strong><small>Не относятся к отдельной реализации</small></summary>
+        <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.defenseModifier.enabled" {{#if system.defenseModifier.enabled}}checked{{/if}} /><span>Модификатор Защитных действий</span></label>
+        {{#if system.defenseModifier.enabled}}
+          <div class="fast-nri-form-grid two-columns"><label>Область <select name="system.defenseModifier.scope">{{selectOptions defenseModifierScopeChoices selected=system.defenseModifier.scope}}</select></label><label>Формула <input type="text" name="system.defenseModifier.combatDiceFormula" value="{{system.defenseModifier.combatDiceFormula}}" /></label></div>
+        {{/if}}
+        <div class="fast-nri-form-grid three-columns"><label>Строй себе <input type="number" name="system.rules.formation.selfBonus" value="{{system.rules.formation.selfBonus}}" /></label><label>Строй соседям <input type="number" name="system.rules.formation.adjacentAllyBonus" value="{{system.rules.formation.adjacentAllyBonus}}" /></label><label>Штраф Строя цели <input type="number" name="system.rules.formation.targetPenalty" value="{{system.rules.formation.targetPenalty}}" /></label></div>
+      </details>
     </section>
   {{/if}}
 

@@ -2963,3 +2963,52 @@ body.theme-dark .fast-nri-hp-line label {
   opacity: 0.56;
   text-decoration: line-through;
 }
+
+/* 0.5.55.2 — Ability/Spell implementations */
+.fast-nri-implementation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fast-nri-implementation-card {
+  border: 1px solid var(--color-border-light-2, currentColor);
+  border-radius: 6px;
+  padding: 0 10px 10px;
+}
+
+.fast-nri-implementation-card > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  cursor: pointer;
+}
+
+.fast-nri-implementation-card > summary > strong { flex: 1; }
+.fast-nri-implementation-editor { padding-top: 8px; }
+
+.fast-nri-implementation-choice-actions,
+.fast-nri-degree-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fast-nri-implementation-choice-actions button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+}
+
+.fast-nri-degree-choice {
+  border-left: 3px solid transparent;
+  padding: 5px 7px;
+}
+
+.fast-nri-degree-choice.recommended {
+  border-left-color: currentColor;
+}

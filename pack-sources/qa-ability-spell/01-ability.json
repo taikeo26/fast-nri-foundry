@@ -1,0 +1,191 @@
+{
+  "name": "QA — Одна реализация: степени и эффекты",
+  "type": "ability",
+  "img": "icons/svg/sword.svg",
+  "system": {
+    "level": 1,
+    "category": "ability",
+    "description": "<p>Проверяет прямой запуск одной реализации, Check, четыре степени, кнопки урона и draggable Effect-карточки.</p>",
+    "implementations": [
+      {
+        "id": "QaMeleeImpl00001",
+        "name": "Основная реализация",
+        "description": "<p>Одна реализация: сразу запускается без карточки выбора реализации.</p>",
+        "traitIds": [
+          "action",
+          "attack",
+          "melee"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "single",
+          "relation": "enemy",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": true,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": true
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>Эффекта нет.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>Проверка кнопки <strong>Частичный успех</strong>.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d6",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>Успех: урон и один связанный Effect.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "2d6",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": [
+              "Compendium.fast-nri.qa-ability-spell.Item.QaProneEffect001"
+            ]
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p><strong>Большой успех:</strong> урон и два независимых Effect-блока.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d6",
+                  "damageType": "physical",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": [
+              "Compendium.fast-nri.qa-ability-spell.Item.QaProneEffect001",
+              "Compendium.fast-nri.qa-ability-spell.Item.QaSparkEffect002"
+            ]
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        }
+      }
+    ]
+  },
+  "_id": "QaMeleeAbility01",
+  "effects": [],
+  "folder": null,
+  "sort": 0,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.3",
+      "qaPack": true
+    }
+  }
+}

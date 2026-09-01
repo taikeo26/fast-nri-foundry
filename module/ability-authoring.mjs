@@ -63,15 +63,133 @@ function uniqueStrings(values = []) {
   return result;
 }
 
+function rawSystem(itemOrSystem) {
+  return itemOrSystem?.system ?? itemOrSystem ?? {};
+}
+
+function legacyImplementation(system) {
+  const stored = system.costs ?? {};
+  const legacyClassCost = positiveInt(system.classResourceCost, 0);
+  const storedMin = positiveInt(stored.classResourceMin, 0);
+  const storedMax = positiveInt(stored.classResourceMax, 0);
+  const classResource = storedMin || legacyClassCost || storedMax || 0;
+  return {
+    id: "legacy",
+    name: "Основная реализация",
+    description: "",
+    traitIds: uniqueStrings(system.traitIds),
+    costs: {
+      action: positiveInt(stored.action, 0),
+      movement: positiveInt(stored.movement, 0),
+      intervention: positiveInt(stored.intervention, 0),
+      freeAction: Boolean(stored.freeAction),
+      classResource,
+      additionalText: String(stored.additionalText ?? "")
+    },
+    targeting: system.targeting ?? {},
+    conditionText: String(system.conditionText ?? ""),
+    requirementText: String(system.requirementText ?? ""),
+    limitationText: String(system.limitationText ?? ""),
+    exceptionText: String(system.exceptionText ?? ""),
+    check: system.check ?? {},
+    actionTraits: system.actionTraits ?? {},
+    defenseProcedure: system.defenseProcedure ?? {},
+    attackCheck: system.attackCheck ?? {},
+    profiles: system.profiles ?? {},
+    outcomes: system.outcomes ?? {},
+    outcome: system.outcome ?? {},
+    defenseAction: system.defenseAction ?? {},
+    effectUuids: uniqueStrings(system.effectUuids),
+    repeat: { count: 1, label: "Результат" },
+    legacy: true
+  };
+}
+
+export function abilityImplementations(itemOrSystem) {
+  const system = rawSystem(itemOrSystem);
+  const stored = Array.from(system.implementations ?? []);
+  if (!stored.length) return [legacyImplementation(system)];
+  return stored.map((entry, index) => ({
+    ...entry,
+    id: text(entry?.id) || `implementation-${index + 1}`,
+    name: text(entry?.name) || `Реализация ${index + 1}`,
+    repeat: {
+      count: Math.max(1, positiveInt(entry?.repeat?.count, 1)),
+      label: text(entry?.repeat?.label) || "Результат"
+    },
+    legacy: false
+  }));
+}
+
+export function abilityImplementation(itemOrSystem, implementationId = null) {
+  const implementations = abilityImplementations(itemOrSystem);
+  if (!implementationId) return implementations[0] ?? null;
+  const id = text(implementationId);
+  return implementations.find(entry => text(entry.id) === id) ?? implementations[0] ?? null;
+}
+
 /**
- * Canonical authoring traits for Ability/Spell.
- *
- * Legacy structured fields are deliberately folded in here so old Items keep
- * working without any runtime prose inference. New authoring should write
- * system.traitIds.
+ * Build a lightweight runtime view which preserves the parent Item identity but
+ * exposes one implementation as the executable system. Existing resolvers can
+ * therefore stay generic and never parse prose or mutate the Item document.
  */
+export function abilityImplementationRuntime(item, implementationId = null) {
+  const implementation = abilityImplementation(item, implementationId);
+  if (!implementation) return item;
+  const base = rawSystem(item);
+  return {
+    uuid: item?.uuid ?? null,
+    id: item?.id ?? null,
+    type: item?.type ?? "ability",
+    name: item?.name ?? "",
+    parent: item?.parent ?? null,
+    implementationId: implementation.id,
+    implementationName: implementation.name,
+    system: {
+      ...base,
+      ...implementation,
+      // Container identity remains common to all realizations.
+      description: implementation.description || base.description || "",
+      category: base.category,
+      level: base.level,
+      defenseModifier: base.defenseModifier,
+      rules: base.rules,
+      // A realization has one exact special-resource cost.
+      classResourceCost: positiveInt(implementation.costs?.classResource, 0),
+      costs: {
+        ...(implementation.costs ?? {}),
+        classResourceMin: positiveInt(implementation.costs?.classResource, 0),
+        classResourceMax: positiveInt(implementation.costs?.classResource, 0)
+      }
+    }
+  };
+}
+
+export function abilityImplementationLabel(itemOrSystem, implementationId = null) {
+  return abilityImplementation(itemOrSystem, implementationId)?.name ?? "Основная реализация";
+}
+
+export function abilityImplementationRepeat(itemOrSystem, implementationId = null) {
+  // Runtime views already expose the selected realization as their system. Do
+  // not re-enter the parent implementations[] array, otherwise repeat/count
+  // would silently fall back to the first realization.
+  if (itemOrSystem?.implementationId && (!implementationId || implementationId === itemOrSystem.implementationId)) {
+    const runtimeSystem = rawSystem(itemOrSystem);
+    return {
+      count: Math.max(1, positiveInt(runtimeSystem?.repeat?.count, 1)),
+      label: text(runtimeSystem?.repeat?.label) || "Результат"
+    };
+  }
+  const implementation = abilityImplementation(itemOrSystem, implementationId);
+  return {
+    count: Math.max(1, positiveInt(implementation?.repeat?.count, 1)),
+    label: text(implementation?.repeat?.label) || "Результат"
+  };
+}
+
+/** Canonical structured traits for one executable realization. */
 export function abilityTraitIds(itemOrSystem) {
-  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const system = rawSystem(itemOrSystem);
   const result = new Set(uniqueStrings(system.traitIds));
   const legacy = system.actionTraits ?? {};
 
@@ -82,16 +200,20 @@ export function abilityTraitIds(itemOrSystem) {
 
   if (String(system.category ?? "") === "spell") result.add("spell");
   if (system.defenseAction?.enabled) result.add("defensive");
-
-  // A structured Intervention cost is sufficient to preserve origin context
-  // even if an old Item omitted the trait. This is structured data, not prose
-  // inference, and is required for HB-02 to remain reliable.
   if (positiveInt(system.costs?.intervention, 0) > 0) result.add("intervention");
 
   return Array.from(result);
 }
 
 export function abilityIsSpell(itemOrSystem) {
+  const system = rawSystem(itemOrSystem);
+  if (String(system.category ?? "") === "spell") return true;
+  const implementations = Array.from(system.implementations ?? []);
+  if (implementations.length) {
+    return implementations.some(implementation =>
+      abilityTraitIds({ system: { ...implementation, category: system.category } }).includes("spell")
+    );
+  }
   return abilityTraitIds(itemOrSystem).includes("spell");
 }
 
@@ -100,22 +222,26 @@ export function abilityTraitLabels(itemOrSystem) {
 }
 
 export function abilityCosts(itemOrSystem) {
-  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const system = rawSystem(itemOrSystem);
   const stored = system.costs ?? {};
+  const exact = positiveInt(stored.classResource, -1);
   const legacyClassCost = positiveInt(system.classResourceCost, 0);
   const storedMin = positiveInt(stored.classResourceMin, 0);
   const storedMax = positiveInt(stored.classResourceMax, 0);
   const useLegacyClassCost = storedMin === 0 && storedMax === 0 && legacyClassCost > 0;
-  const classMin = useLegacyClassCost ? legacyClassCost : storedMin;
-  const classMax = useLegacyClassCost
-    ? legacyClassCost
-    : Math.max(classMin, storedMax);
+  const classMin = exact >= 0
+    ? exact
+    : useLegacyClassCost ? legacyClassCost : storedMin;
+  const classMax = exact >= 0
+    ? exact
+    : useLegacyClassCost ? legacyClassCost : Math.max(classMin, storedMax);
 
   return {
     action: positiveInt(stored.action, 0),
     movement: positiveInt(stored.movement, 0),
     intervention: positiveInt(stored.intervention, 0),
     freeAction: Boolean(stored.freeAction),
+    classResource: classMin,
     classResourceMin: classMin,
     classResourceMax: classMax,
     additionalText: String(stored.additionalText ?? "")
@@ -143,7 +269,7 @@ export function abilityCostLabel(itemOrSystem, actor = null) {
 }
 
 export function abilityTargeting(itemOrSystem) {
-  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const system = rawSystem(itemOrSystem);
   const source = system.targeting ?? {};
   const mode = Object.hasOwn(ABILITY_TARGET_MODES, source.mode) ? source.mode : "none";
   const relation = Object.hasOwn(ABILITY_TARGET_RELATIONS, source.relation) ? source.relation : "any";
@@ -169,23 +295,14 @@ export function abilityTargeting(itemOrSystem) {
 export function abilityTargetSummary(itemOrSystem) {
   const target = abilityTargeting(itemOrSystem);
   if (target.mode === "none") return "";
-
-  const chunks = [];
-  const modeLabel = ABILITY_TARGET_MODES[target.mode] ?? target.mode;
-  chunks.push(modeLabel);
-
+  const chunks = [ABILITY_TARGET_MODES[target.mode] ?? target.mode];
   if (["single", "multiple"].includes(target.mode)) {
     const relation = ABILITY_TARGET_RELATIONS[target.relation] ?? target.relation;
     if (target.mode === "multiple") {
-      const count = target.countMax > target.countMin
-        ? `${target.countMin}–${target.countMax}`
-        : `${target.countMax}`;
+      const count = target.countMax > target.countMin ? `${target.countMin}–${target.countMax}` : `${target.countMax}`;
       chunks.push(`${count} · ${relation}`);
-    } else if (target.relation !== "any") {
-      chunks.push(relation);
-    }
+    } else if (target.relation !== "any") chunks.push(relation);
   }
-
   if (target.requiresVisibility) chunks.push("видимая");
   return chunks.join(" · ");
 }
@@ -205,7 +322,7 @@ export function abilityAreaSummary(itemOrSystem) {
 }
 
 export function abilityProfile(itemOrSystem, degree) {
-  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const system = rawSystem(itemOrSystem);
   const key = Object.hasOwn(ABILITY_PROFILE_DEGREES, degree) ? degree : "success";
   const profile = system.profiles?.[key] ?? {};
   return {
@@ -219,60 +336,35 @@ export function abilityProfile(itemOrSystem, degree) {
       removeLowest: positiveInt(profile.damage?.removeLowest, 0),
       removeAll: Boolean(profile.damage?.removeAll)
     },
-    healing: {
-      enabled: Boolean(profile.healing?.enabled),
-      components: Array.from(profile.healing?.components ?? [])
-    },
-    tempHp: {
-      enabled: Boolean(profile.tempHp?.enabled),
-      components: Array.from(profile.tempHp?.components ?? [])
-    },
+    healing: { enabled: Boolean(profile.healing?.enabled), components: Array.from(profile.healing?.components ?? []) },
+    tempHp: { enabled: Boolean(profile.tempHp?.enabled), components: Array.from(profile.tempHp?.components ?? []) },
     effectUuids: uniqueStrings(profile.effectUuids)
   };
 }
 
 export function abilityHasDegreeProfiles(itemOrSystem) {
-  return Object.keys(ABILITY_PROFILE_DEGREES).some(degree =>
-    abilityProfile(itemOrSystem, degree).enabled
-  );
+  return Object.keys(ABILITY_PROFILE_DEGREES).some(degree => abilityProfile(itemOrSystem, degree).enabled);
 }
 
 export function abilityOutcomeChannelForDegree(itemOrSystem, kind, degree = null) {
-  if (!["damage", "healing", "tempHp"].includes(kind)) {
-    return { enabled: false, components: [], fromProfile: false };
-  }
+  if (!["damage", "healing", "tempHp"].includes(kind)) return { enabled: false, components: [], fromProfile: false };
 
   if (degree && Object.hasOwn(ABILITY_PROFILE_DEGREES, degree)) {
     const profile = abilityProfile(itemOrSystem, degree);
     const anyProfiles = abilityHasDegreeProfiles(itemOrSystem);
     const channel = profile[kind];
     if (profile.enabled && channel?.enabled) {
-      return {
-        ...channel,
-        enabled: true,
-        components: Array.from(channel.components ?? []),
-        fromProfile: true,
-        degree
-      };
+      return { ...channel, enabled: true, components: Array.from(channel.components ?? []), fromProfile: true, degree };
     }
-    if (anyProfiles) {
-      return {
-        ...channel,
-        enabled: false,
-        components: [],
-        fromProfile: true,
-        degree
-      };
-    }
+    if (anyProfiles) return { ...channel, enabled: false, components: [], fromProfile: true, degree };
   }
 
-  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const system = rawSystem(itemOrSystem);
   const modern = system.outcomes?.[kind] ?? null;
   const legacy = system.outcome ?? null;
   const legacyMatches = String(legacy?.kind ?? "none") === kind;
   const modernComponents = Array.from(modern?.components ?? []);
   const legacyComponents = legacyMatches ? Array.from(legacy?.components ?? []) : [];
-
   return {
     enabled: Boolean(modern?.enabled) || legacyMatches,
     components: modernComponents.length ? modernComponents : legacyComponents,
@@ -282,7 +374,5 @@ export function abilityOutcomeChannelForDegree(itemOrSystem, kind, degree = null
 }
 
 export function abilityConfiguredOutcomeKinds(itemOrSystem, degree = null) {
-  return ["damage", "healing", "tempHp"].filter(kind =>
-    abilityOutcomeChannelForDegree(itemOrSystem, kind, degree).enabled
-  );
+  return ["damage", "healing", "tempHp"].filter(kind => abilityOutcomeChannelForDegree(itemOrSystem, kind, degree).enabled);
 }
