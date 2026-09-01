@@ -1612,6 +1612,26 @@ function abilityOutcomeChannel(item, kind) {
   };
 }
 
+export function abilityAttackFollowupHTML(actor, item) {
+  if (!abilityOutcomeChannel(item, "damage").enabled) return "";
+
+  return `
+    <div class="fast-nri-ability-outcome-actions">
+      <button
+        type="button"
+        data-fast-nri-roll-ability-outcome
+        data-source-attack="true"
+        data-actor-uuid="${escAttr(actor.uuid)}"
+        data-item-uuid="${escAttr(item.uuid)}"
+        data-outcome-kind="damage"
+      >
+        <i class="fa-solid fa-burst"></i>
+        <span>Бросить урон</span>
+      </button>
+    </div>
+  `;
+}
+
 function abilityOutcomeComponents(actor, item, kind) {
   const channel = abilityOutcomeChannel(item, kind);
   const raw = Array.from(channel.components ?? []);
@@ -1943,6 +1963,7 @@ export async function rollAbilityAttackCheck(actor, item) {
       ` : ""}
       <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
       ${degreeHTML(degree)}
+      ${abilityAttackFollowupHTML(actor, item)}
       ${rollSourcesHTML(result)}
     </div>
   `;
@@ -2545,9 +2566,7 @@ export async function undoDefenseResource(element) {
   }
 
   const current = Math.max(0, Number(actor.system?.classResource?.value) || 0);
-  const max = Math.max(0, Number(actor.system?.classResource?.max) || 0);
-  let restored = current + spent;
-  if (max > 0) restored = Math.min(max, restored);
+  const restored = current + spent;
 
   await actor.update({ "system.classResource.value": restored });
 

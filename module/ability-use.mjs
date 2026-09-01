@@ -16,7 +16,7 @@ function messageIdFromElement(element) {
 }
 
 
-function configuredOutcomeKinds(item) {
+export function configuredOutcomeKinds(item) {
   const config = item.system?.outcomes ?? {};
   const result = [];
 
@@ -36,39 +36,60 @@ function configuredOutcomeKinds(item) {
   return result;
 }
 
-function resourceLineHTML({
-  label,
-  cost,
-  before,
-  after,
-  spent,
-  shortage,
-  undone = false,
-  linkedEffects = []
-}) {
-  if (!(cost > 0)) return "";
+function outcomeActionButtonHTML(actor, item, kind) {
+  const labels = {
+    damage: ["fa-burst", "Бросить урон"],
+    healing: ["fa-heart-pulse", "Бросить лечение"],
+    tempHp: ["fa-shield-heart", "Бросить временные HP"]
+  };
+  const [icon, label] = labels[kind] ?? ["fa-dice", "Выполнить результат"];
 
   return `
-    <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
-      <div class="fast-nri-resource-use-text">
-        <span class="fast-nri-resource-label">${esc(label || "Классовый ресурс")}</span>
-        <strong>−${esc(cost)}</strong>
-        <small>${esc(before)} → ${esc(after)}</small>
-        ${shortage > 0 ? `<small class="fast-nri-resource-shortage">не хватает ${esc(shortage)}</small>` : ""}
-      </div>
+    <button
+      type="button"
+      data-fast-nri-roll-ability-outcome
+      data-actor-uuid="${escAttr(actor.uuid)}"
+      data-item-uuid="${escAttr(item.uuid)}"
+      data-outcome-kind="${escAttr(kind)}"
+    >
+      <i class="fa-solid ${icon}"></i>
+      <span>${label}</span>
+    </button>
+  `;
+}
 
-      ${undone || spent <= 0 ? "" : `
-        <button
-          type="button"
-          class="fast-nri-undo-resource-button"
-          data-fast-nri-undo-resource
-          data-actor-uuid="${escAttr("")}"
-          title="Вернуть списанный ресурс"
-        >
-          <i class="fa-solid fa-rotate-left"></i>
-          <span>Вернуть</span>
-        </button>
-      `}
+function abilityActionsHTML(actor, item) {
+  const outcomeKinds = configuredOutcomeKinds(item);
+  const attackEnabled = Boolean(item.system?.attackCheck?.enabled);
+  const actions = [];
+
+  if (attackEnabled) {
+    actions.push(`
+      <button
+        type="button"
+        data-fast-nri-roll-ability-attack
+        data-actor-uuid="${escAttr(actor.uuid)}"
+        data-item-uuid="${escAttr(item.uuid)}"
+      >
+        <i class="fa-solid fa-dice-d20"></i>
+        <span>Выполнить атаку</span>
+      </button>
+    `);
+  }
+
+  for (const kind of outcomeKinds) {
+    // Урон атакующей Ability становится явным следующим шагом на карточке
+    // уже выполненной Атаки. Остальные независимые результаты остаются
+    // доступны прямо из исходной карточки Ability.
+    if (kind === "damage" && attackEnabled) continue;
+    actions.push(outcomeActionButtonHTML(actor, item, kind));
+  }
+
+  if (!actions.length) return "";
+
+  return `
+    <div class="fast-nri-ability-outcome-actions">
+      ${actions.join("")}
     </div>
   `;
 }
@@ -81,7 +102,8 @@ function abilityCardHTML({
   after,
   spent,
   shortage,
-  undone = false
+  undone = false,
+  linkedEffects = []
 }) {
   const categoryLabel = item.system?.category === "spell" ? "Заклинание" : "Способность";
   const resourceLabel = actor.system?.classResource?.label || "Классовый ресурс";
@@ -111,6 +133,8 @@ function abilityCardHTML({
           ${linkedEffects.map(effect => effectChatCardHTML(effect, { compact: true })).join("")}
         </div>
       ` : ""}
+
+      ${abilityActionsHTML(actor, item)}
 
       ${cost > 0 ? `
         <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
@@ -147,7 +171,6 @@ export async function useAbility(actor, item) {
   const cost = Math.max(0, Number(item.system?.classResourceCost) || 0);
   const resource = actor.system?.classResource ?? {};
   const before = Math.max(0, Number(resource.value) || 0);
-  const max = Math.max(0, Number(resource.max) || 0);
 
   let after = before;
   let spent = 0;
@@ -211,73 +234,6 @@ export async function useAbility(actor, item) {
     }
   });
 
-  // Одно использование способности/заклинания создаёт отдельную
-  // результатную карту для каждого включённого автоматического результата.
-  //
-  // Порядок configuredOutcomeKinds фиксирован:
-  // Урон → Лечение → Временные HP.
-  //
-  // Каждый результат получает собственный universal pre-roll. Отмена
-  // одного pre-roll не отменяет другие результаты этой же способности.
-  const outcomeResults = [];
-  const outcomeKinds = configuredOutcomeKinds(item);
-
-  // Исходная Атака выполняется один раз и относится только к каналу Урона.
-  // Если игрок отменил её pre-roll, Урон пропускается, но Лечение и
-  // Временные HP этой же способности продолжают выполняться.
-  let sourceAttack = null;
-  let sourceAttackCancelled = false;
-
-  if (
-    outcomeKinds.includes("damage")
-    && item.system?.attackCheck?.enabled
-  ) {
-    sourceAttack = await rollAbilityAttackCheck(actor, item);
-    sourceAttackCancelled = !sourceAttack;
-  }
-
-  for (const kind of outcomeKinds) {
-    if (kind === "damage" && sourceAttackCancelled) continue;
-    try {
-      const outcomeMessage = await rollAbilityOutcome(
-        actor,
-        item,
-        kind,
-        kind === "damage" ? sourceAttack : null
-      );
-      if (outcomeMessage) {
-        outcomeResults.push({
-          kind,
-          messageId: outcomeMessage.id ?? outcomeMessage._id ?? null
-        });
-      }
-    } catch (error) {
-      console.error(
-        `Быстрая НРИ | Ошибка автоматического результата ${kind} для ${item.name}`,
-        error
-      );
-      ui.notifications.error(
-        `${item.name}: не удалось создать один из автоматических результатов. Остальные результаты продолжают выполняться.`
-      );
-    }
-  }
-
-  // История использования хранит, какие результатные сообщения были созданы.
-  // Это не связывает их жёстко: каждая карта остаётся самостоятельной.
-  if (outcomeResults.length) {
-    try {
-      await message.update({
-        "flags.fast-nri.outcomeMessages": outcomeResults,
-        "flags.fast-nri.sourceAttackMessageId": sourceAttack?.message?.id ?? null
-      });
-    } catch (error) {
-      console.warn(
-        "Быстрая НРИ | Не удалось сохранить ссылки на результатные карты",
-        error
-      );
-    }
-  }
-
   return {
     message,
     actor,
@@ -287,7 +243,7 @@ export async function useAbility(actor, item) {
     after,
     spent,
     shortage,
-    outcomeResults
+    outcomeKinds: configuredOutcomeKinds(item)
   };
 }
 
@@ -323,10 +279,7 @@ export async function undoAbilityResource(element) {
   }
 
   const current = Math.max(0, Number(actor.system?.classResource?.value) || 0);
-  const max = Math.max(0, Number(actor.system?.classResource?.max) || 0);
-
-  let restored = current + spent;
-  if (max > 0) restored = Math.min(max, restored);
+  const restored = current + spent;
 
   try {
     await actor.update({
@@ -375,6 +328,28 @@ export async function undoAbilityResource(element) {
 
 export function activateAbilityChatInteractions(root = document) {
   root.addEventListener("click", async event => {
+    const attackButton = event.target.closest("[data-fast-nri-roll-ability-attack]");
+    if (attackButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (attackButton.dataset.fastNriBusy === "true") return;
+      attackButton.dataset.fastNriBusy = "true";
+
+      try {
+        const actor = await fromUuid(attackButton.dataset.actorUuid);
+        const item = await fromUuid(attackButton.dataset.itemUuid);
+        if (!actor || !item || item.type !== "ability") {
+          ui.notifications.error("Не удалось найти способность или заклинание.");
+          return;
+        }
+        await rollAbilityAttackCheck(actor, item);
+      } finally {
+        delete attackButton.dataset.fastNriBusy;
+      }
+      return;
+    }
+
     const outcomeButton = event.target.closest("[data-fast-nri-roll-ability-outcome]");
     if (outcomeButton) {
       event.preventDefault();
@@ -390,7 +365,36 @@ export function activateAbilityChatInteractions(root = document) {
           ui.notifications.error("Не удалось найти способность или заклинание.");
           return;
         }
-        await rollAbilityOutcome(actor, item, outcomeButton.dataset.outcomeKind);
+        let sourceAttack = null;
+        if (outcomeButton.dataset.sourceAttack === "true") {
+          const sourceMessageId = messageIdFromElement(outcomeButton);
+          const sourceMessage = sourceMessageId
+            ? game.messages?.get(sourceMessageId) ?? null
+            : null;
+
+          if (!sourceMessage || sourceMessage.getFlag("fast-nri", "kind") !== "ability-attack") {
+            ui.notifications.error("Не удалось найти исходную Атаку способности.");
+            return;
+          }
+
+          sourceAttack = {
+            message: sourceMessage,
+            total: sourceMessage.getFlag("fast-nri", "rollTotal"),
+            naturalD20: sourceMessage.getFlag("fast-nri", "naturalD20"),
+            degree: sourceMessage.getFlag("fast-nri", "degree"),
+            critical: Boolean(sourceMessage.getFlag("fast-nri", "critical")),
+            targetUuid: sourceMessage.getFlag("fast-nri", "targetUuid"),
+            directedDefense: Boolean(sourceMessage.getFlag("fast-nri", "directedDefense")),
+            attackType: sourceMessage.getFlag("fast-nri", "attackType")
+          };
+        }
+
+        await rollAbilityOutcome(
+          actor,
+          item,
+          outcomeButton.dataset.outcomeKind,
+          sourceAttack
+        );
       } finally {
         delete outcomeButton.dataset.fastNriBusy;
       }

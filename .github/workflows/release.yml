@@ -26,6 +26,20 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          while IFS= read -r source_file; do
+            node --check "$source_file"
+          done < <(find . -type f \( -name '*.js' -o -name '*.mjs' \) | sort)
+
+      - name: Run regression tests
+        shell: bash
+        run: |
+          for test_file in tests/*.mjs; do
+            node "$test_file"
+          done
+
       - name: Validate manifest URLs
         shell: bash
         run: |
@@ -74,7 +88,6 @@ jobs:
           zip -r fast-nri.zip \
             system.json \
             fast-nri.mjs \
-            README.md \
             lang \
             module \
             styles \
