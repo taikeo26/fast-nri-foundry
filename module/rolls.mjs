@@ -61,7 +61,7 @@ import {
   abilityOutcomeChannelForDegree,
   abilityProfile
 } from "./ability-authoring.mjs";
-import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
+import { applyEffectToActor, effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
 import { formulaWithActorCombatTerm, resolveActorCombatTerm, resolveWeaponAttackTerm } from "./attack-term.mjs";
 import { weaponCategoryLabel, weaponTypeLabel } from "./weapon-taxonomy.mjs";
 
@@ -1221,6 +1221,19 @@ function buildDamageState(roll, {
   return recalculateDamageState(state);
 }
 
+function damagePartExcludedFromTotal(part) {
+  return Boolean(
+    part?.immuneRemoved
+    || part?.manualRemoved
+    || part?.profileZeroed
+    || part?.defenseZeroed
+  );
+}
+
+function damagePartCanBeEdited(part) {
+  return Boolean(part?.kind === "die" && !damagePartExcludedFromTotal(part));
+}
+
 function recalculateDamageState(state) {
   const next = foundry.utils.deepClone(state);
 
@@ -1231,7 +1244,7 @@ function recalculateDamageState(state) {
   }
 
   const positive = (next.parts ?? [])
-    .filter(part => !part.immuneRemoved)
+    .filter(part => !damagePartExcludedFromTotal(part))
     .reduce((sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0), 0);
 
   const penalty = (next.penalties ?? [])
@@ -1245,7 +1258,10 @@ function recalculateDamageState(state) {
 function damagePartLabel(part) {
   const current = Number(part?.currentValue ?? part?.value) || 0;
   const original = Number(part?.rolledValue ?? part?.value) || 0;
-  const valueText = current === original ? `${original}` : `${original} → ${current}`;
+  const excluded = damagePartExcludedFromTotal(part);
+  const valueText = excluded
+    ? `${current} (исключён)`
+    : current === original ? `${original}` : `${original} → ${current}`;
   if (part?.kind === "die") return `d${part.faces}: ${valueText}`;
   return `фикс. +${valueText}`;
 }
@@ -1296,7 +1312,8 @@ function damagePartsHTML(state, { editable = true, title = "Кубы урона"
   const parts = (state.parts ?? []).map(part => {
     const current = Math.max(0, Number(part.currentValue ?? part.value) || 0);
     const original = Math.max(0, Number(part.rolledValue ?? part.value) || 0);
-    const changed = current !== original;
+    const excluded = damagePartExcludedFromTotal(part);
+    const changed = !excluded && current !== original;
     const statusClass = part.immuneRemoved
       ? "immune-removed"
       : part.manualRemoved
@@ -1351,8 +1368,14 @@ function damagePartsHTML(state, { editable = true, title = "Кубы урона"
   const total = Math.max(0, Number(state.currentTotal) || 0);
 
   const removableDice = (state.parts ?? []).some(part =>
-    part?.kind === "die"
-    && !part?.immuneRemoved
+    damagePartCanBeEdited(part)
+    && (Number(part?.currentValue ?? part?.value) || 0) > 0
+  );
+  const restorableDice = (state.parts ?? []).some(part =>
+    part?.kind === "die" && part?.manualRemoved && !part?.immuneRemoved
+  );
+  const rerollableDice = (state.parts ?? []).some(part =>
+    damagePartCanBeEdited(part)
     && (Number(part?.currentValue ?? part?.value) || 0) > 0
   );
 
@@ -1369,6 +1392,22 @@ function damagePartsHTML(state, { editable = true, title = "Кубы урона"
             title="Убрать выбранный выпавший куб урона"
             aria-label="Убрать куб урона"
           ><i class="fa-solid fa-minus"></i></button>
+          <button
+            type="button"
+            class="fast-nri-damage-edit-button"
+            data-fast-nri-damage-restore-die
+            ${restorableDice ? "" : "disabled"}
+            title="Вернуть ранее исключённый вручную куб с тем же результатом"
+            aria-label="Вернуть куб урона"
+          ><i class="fa-solid fa-rotate-left"></i></button>
+          ${state?.allowTargetedReroll ? `<button
+            type="button"
+            class="fast-nri-damage-edit-button"
+            data-fast-nri-damage-reroll-die
+            ${rerollableDice ? "" : "disabled"}
+            title="Перебросить выбранный активный куб"
+            aria-label="Перебросить куб урона"
+          ><i class="fa-solid fa-dice"></i></button>` : ""}
           <button
             type="button"
             class="fast-nri-damage-edit-button"
@@ -1401,6 +1440,24 @@ function manualDamageSummaryHTML(state) {
       <section class="fast-nri-manual-damage-summary">
         <i class="fa-solid fa-pen-to-square"></i>
         <span>Последняя ручная коррекция: убран <strong>d${esc(latest.faces)}: ${esc(latest.value)}</strong>.</span>
+      </section>
+    `;
+  }
+
+  if (latest.kind === "restoreDie") {
+    return `
+      <section class="fast-nri-manual-damage-summary">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>Последняя ручная коррекция: возвращён <strong>d${esc(latest.faces)}: ${esc(latest.value)}</strong> без переброса.</span>
+      </section>
+    `;
+  }
+
+  if (latest.kind === "rerollDie") {
+    return `
+      <section class="fast-nri-manual-damage-summary">
+        <i class="fa-solid fa-dice"></i>
+        <span>Таргетный переброс: <strong>d${esc(latest.faces)}: ${esc(latest.previousValue)} → ${esc(latest.value)}</strong>.</span>
       </section>
     `;
   }
@@ -1494,11 +1551,15 @@ function damageCardHTML({
   critical = false,
   state,
   modifiersHTML = "",
+  applicationEffectsHTML = "",
+  hasApplicationEffects = false,
   allowDefense = true,
   allowDouble = true
 }) {
   const baseDamage = Math.max(0, Number(state?.currentTotal) || 0);
   const doubledDamage = baseDamage * 2;
+  const applicationHasEffects = Boolean(applicationEffectsHTML || hasApplicationEffects);
+  const applyDisabled = Boolean(state?.fullCancel && !applicationHasEffects);
 
   return `
     <div class="fast-nri-chat-roll fast-nri-damage-card">
@@ -1512,6 +1573,7 @@ function damageCardHTML({
       ${damagePartsHTML(state)}
       ${manualDamageSummaryHTML(state)}
       ${defenseSummaryHTML(state)}
+      ${applicationEffectsHTML}
 
       ${critical ? `
         <div class="fast-nri-critical-roll">
@@ -1542,14 +1604,14 @@ function damageCardHTML({
           data-fast-nri-apply-damage
           data-damage="${escAttr(baseDamage)}"
           data-multiplier="1"
-          ${state.fullCancel ? "disabled" : ""}
-          title="${state.fullCancel
+          ${applyDisabled ? "disabled" : ""}
+          title="${applyDisabled
             ? "Действие полностью отменено"
             : `Применить этот пул к текущим Targets / выделенным токенам`
           }"
         >
           <i class="fa-solid fa-heart-crack"></i>
-          <span>${state.fullCancel ? "Урон отменён" : "Нанести"}</span>
+          <span>${applyDisabled ? "Результат отменён" : applicationHasEffects ? "Применить" : "Нанести"}</span>
         </button>
 
         ${allowDouble ? `
@@ -1559,14 +1621,14 @@ function damageCardHTML({
             data-fast-nri-apply-damage
             data-damage="${escAttr(doubledDamage)}"
             data-multiplier="2"
-            ${state.fullCancel ? "disabled" : ""}
-            title="${state.fullCancel
+            ${applyDisabled ? "disabled" : ""}
+            title="${applyDisabled
               ? "Действие полностью отменено"
               : `Применить этот пул ×2 к текущим Targets / выделенным токенам`
             }"
           >
             <i class="fa-solid fa-xmark"></i>
-            <span>${state.fullCancel ? "×2 отменён" : "Нанести ×2"}</span>
+            <span>${applyDisabled ? "×2 отменён" : applicationHasEffects ? "Применить ×2" : "Нанести ×2"}</span>
           </button>
         ` : ""}
       </div>
@@ -1577,9 +1639,41 @@ function damageCardHTML({
 }
 
 
+async function applicationEffectsFromUuids(uuids = []) {
+  const normalized = Array.from(new Set(uuids ?? [])).filter(Boolean);
+  const documents = await resolveEffectDocuments(normalized);
+  const html = documents.length
+    ? `<section class="fast-nri-application-effects"><div class="fast-nri-damage-parts-title">Эффекты результата</div><div class="fast-nri-ability-linked-effects">${documents.map(effect => effectChatCardHTML(effect, { compact: true })).join("")}</div></section>`
+    : "";
+  return { uuids: normalized, documents, html };
+}
+
+async function abilityApplicationEffects(runtime, degree = null) {
+  if (!degree) return { uuids: [], documents: [], html: "" };
+  const profile = abilityProfile(runtime, degree);
+  return applicationEffectsFromUuids(profile?.effectUuids ?? []);
+}
+
+function effectOnlyApplicationCardHTML({ sourceName, profileLabel = "", targetName = "", profileHTML = "", effectsHTML = "" }) {
+  return `
+    <div class="fast-nri-chat-roll fast-nri-result-application-card">
+      ${rollCardHeader(`Результат: ${sourceName}`, "fa-wand-magic-sparkles")}
+      ${profileLabel ? `<div class="fast-nri-chat-damage-profile-name">${esc(profileLabel)}</div>` : ""}
+      ${targetName ? `<div class="fast-nri-chat-damage-target">Исходная цель: <strong>${esc(targetName)}</strong></div>` : ""}
+      ${profileHTML}
+      ${effectsHTML}
+      <div class="fast-nri-damage-actions">
+        <button type="button" class="fast-nri-apply-damage-button" data-fast-nri-apply-result>
+          <i class="fa-solid fa-check"></i><span>Применить</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function activeManualDamageParts(state) {
   return (state?.parts ?? []).filter(part =>
-    !part?.immuneRemoved
+    !damagePartExcludedFromTotal(part)
     && (Number(part?.currentValue ?? part?.value) || 0) > 0
   );
 }
@@ -1615,7 +1709,8 @@ export function removeManualDamageDieFromState(state, partId) {
   if ((Number(part.currentValue ?? part.value) || 0) <= 0) return null;
 
   const before = Number(part.currentValue ?? part.value) || 0;
-  part.currentValue = 0;
+  // Исключение не превращает выпавший результат в 0. Значение сохраняется
+  // для возврата, истории и Undo; из суммы его исключает флаг manualRemoved.
   part.manualRemoved = true;
   part.removed = true;
 
@@ -1630,6 +1725,51 @@ export function removeManualDamageDieFromState(state, partId) {
     })
   ];
 
+  return recalculateDamageState(next);
+}
+
+export function restoreManualDamageDieInState(state, partId) {
+  const next = foundry.utils.deepClone(state ?? {});
+  const part = (next.parts ?? []).find(candidate => candidate?.id === partId);
+  if (!part || part.kind !== "die" || !part.manualRemoved || part.immuneRemoved) return null;
+
+  part.manualRemoved = false;
+  part.removed = false;
+  next.manualDamageHistory = [
+    ...(next.manualDamageHistory ?? []),
+    manualDamageHistoryEntry("restoreDie", {
+      partId: part.id,
+      faces: part.faces,
+      value: Number(part.currentValue ?? part.value) || 0,
+      damageType: part.damageType,
+      traitIds: Array.from(part.traitIds ?? [])
+    })
+  ];
+  return recalculateDamageState(next);
+}
+
+export function rerollDamageDieInState(state, partId, nextValue, { phase = "application" } = {}) {
+  const next = foundry.utils.deepClone(state ?? {});
+  const part = (next.parts ?? []).find(candidate => candidate?.id === partId);
+  const value = Math.max(0, Math.trunc(Number(nextValue) || 0));
+  if (!part || part.kind !== "die" || !damagePartCanBeEdited(part) || value <= 0) return null;
+
+  const previousValue = Number(part.currentValue ?? part.value) || 0;
+  part.value = value;
+  part.rolledValue = value;
+  part.currentValue = value;
+  part.nativeLabel = value;
+  part.rerolled = true;
+  next.manualDamageHistory = [
+    ...(next.manualDamageHistory ?? []),
+    manualDamageHistoryEntry("rerollDie", {
+      partId: part.id,
+      faces: part.faces,
+      previousValue,
+      value,
+      phase
+    })
+  ];
   return recalculateDamageState(next);
 }
 
@@ -1761,6 +1901,56 @@ function attachManualDamageAddDialog(dialog) {
       formulaInput.focus();
       formulaInput.select?.();
     });
+  });
+}
+
+async function chooseRestorableManualDamageDie(state) {
+  const dice = (state?.parts ?? []).filter(part => part?.kind === "die" && part?.manualRemoved && !part?.immuneRemoved);
+  if (!dice.length) {
+    ui.notifications.info("В этой карточке нет вручную исключённых кубов, которые можно вернуть.");
+    return null;
+  }
+  const { DialogV2 } = foundry.applications.api;
+  return DialogV2.wait({
+    classes: ["fast-nri-manual-damage-dialog"],
+    window: { title: "Вернуть куб урона" },
+    content: `<div class="fast-nri-manual-damage-choice"><p>Куб вернётся с тем же сохранённым результатом, без нового броска.</p></div>`,
+    modal: true,
+    rejectClose: false,
+    buttons: [
+      ...dice.map((part, index) => ({
+        action: `restore-die-${index}`,
+        label: manualDamageDieChoiceLabel(part),
+        icon: "fa-solid fa-rotate-left",
+        callback: async () => part.id
+      })),
+      { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", callback: async () => null }
+    ]
+  });
+}
+
+async function chooseRerollableDamageDie(state) {
+  const dice = activeManualDamageParts(state).filter(part => part.kind === "die");
+  if (!dice.length) {
+    ui.notifications.info("Нет активных кубов, доступных для таргетного переброса.");
+    return null;
+  }
+  const { DialogV2 } = foundry.applications.api;
+  return DialogV2.wait({
+    classes: ["fast-nri-manual-damage-dialog"],
+    window: { title: "Таргетный переброс" },
+    content: `<div class="fast-nri-manual-damage-choice"><p>Перебрасывается только выбранный активный куб. Выбывшие кубы сначала нужно вернуть.</p></div>`,
+    modal: true,
+    rejectClose: false,
+    buttons: [
+      ...dice.map((part, index) => ({
+        action: `reroll-die-${index}`,
+        label: manualDamageDieChoiceLabel(part),
+        icon: "fa-solid fa-dice",
+        callback: async () => part.id
+      })),
+      { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", callback: async () => null }
+    ]
   });
 }
 
@@ -1896,6 +2086,7 @@ async function derivedDamageMessageData(message, state, operation) {
     allowDouble: presentation.allowDouble
   };
 
+  const applicationEffects = await applicationEffectsFromUuids(baseFlags.applicationEffectUuids ?? []);
   const flavor = damageCardHTML({
     sourceName: presentation.sourceName,
     profileLabel: presentation.profileLabel,
@@ -1903,6 +2094,7 @@ async function derivedDamageMessageData(message, state, operation) {
     critical: presentation.critical,
     state,
     modifiersHTML: presentation.modifiersHTML,
+    applicationEffectsHTML: applicationEffects.html,
     allowDefense: presentation.allowDefense,
     allowDouble: presentation.allowDouble
   });
@@ -1967,6 +2159,65 @@ export async function removeDamageDieFromChat(element) {
   return { message: derivedMessage, sourceMessage: message, damageState: next };
 }
 
+export async function restoreDamageDieFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState"));
+  if (!state?.supported) return null;
+  const partId = await chooseRestorableManualDamageDie(state);
+  if (!partId) return null;
+  const next = restoreManualDamageDieInState(state, partId);
+  if (!next) return null;
+  const restoredPart = (next.parts ?? []).find(part => part.id === partId) ?? null;
+  const data = await derivedDamageMessageData(message, next, {
+    kind: "restoreDie",
+    partId,
+    faces: restoredPart?.faces ?? null,
+    value: restoredPart?.currentValue ?? restoredPart?.value ?? null
+  });
+  const derivedMessage = await ChatMessage.create({
+    speaker: message.speaker,
+    content: data.flavor,
+    flags: { "fast-nri": data.flags }
+  });
+  await markDamageMessageSuperseded(message, derivedMessage);
+  return { message: derivedMessage, sourceMessage: message, damageState: next };
+}
+
+export async function rerollDamageDieFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState"));
+  if (!state?.supported || !state.allowTargetedReroll) {
+    ui.notifications.warn("Таргетный переброс для этой карточки не разрешён текущим правилом.");
+    return null;
+  }
+  const partId = await chooseRerollableDamageDie(state);
+  if (!partId) return null;
+  const part = (state.parts ?? []).find(candidate => candidate.id === partId);
+  if (!part || !damagePartCanBeEdited(part)) return null;
+  const roll = await new Roll(`1d${Number(part.faces) || 6}`).evaluate();
+  const value = Number(roll.total) || 0;
+  const phase = message.getFlag("fast-nri", "applicationPhase") === "final" ? "application" : "resolution";
+  const next = rerollDamageDieInState(state, partId, value, { phase });
+  if (!next) return null;
+  const data = await derivedDamageMessageData(message, next, {
+    kind: "rerollDie",
+    partId,
+    faces: part.faces,
+    previousValue: part.currentValue ?? part.value,
+    value,
+    phase
+  });
+  const derivedMessage = await roll.toMessage({
+    speaker: message.speaker,
+    flavor: data.flavor,
+    flags: { "fast-nri": data.flags }
+  });
+  await markDamageMessageSuperseded(message, derivedMessage);
+  return { message: derivedMessage, sourceMessage: message, roll, damageState: next };
+}
+
 export async function addDamageFromChat(element) {
   const message = chatMessageFromElement(element);
   if (!message) return null;
@@ -2018,7 +2269,7 @@ export async function addDamageFromChat(element) {
 }
 
 async function chooseDamagePart(parts, mode = "largest", actionName = "Защита") {
-  const active = (parts ?? []).filter(part => !part.immuneRemoved && (Number(part.currentValue ?? part.value) || 0) > 0);
+  const active = (parts ?? []).filter(part => !damagePartExcludedFromTotal(part) && (Number(part.currentValue ?? part.value) || 0) > 0);
   if (!active.length) return null;
 
   const values = active.map(part => Number(part.currentValue ?? part.value) || 0);
@@ -2086,7 +2337,7 @@ async function chooseDamageParts(parts, count = 1, mode = "largest", actionName 
     const part = await chooseDamagePart(working, mode, actionName);
     if (!part) {
       const stillAvailable = working.some(candidate =>
-        !candidate.immuneRemoved
+        !damagePartExcludedFromTotal(candidate)
         && (Number(candidate.currentValue ?? candidate.value) || 0) > 0
       );
       if (stillAvailable) return null;
@@ -2096,7 +2347,6 @@ async function chooseDamageParts(parts, count = 1, mode = "largest", actionName 
     selected.push(part);
     const found = working.find(candidate => candidate.id === part.id);
     if (found) {
-      found.currentValue = 0;
       found.defenseZeroed = true;
     }
   }
@@ -2255,7 +2505,8 @@ function abilityFollowupButtonHTML(actor, item, kind, implementationId = null, r
   const labels = {
     damage: ["fa-burst", "Бросить урон"],
     healing: ["fa-heart-pulse", "Бросить лечение"],
-    tempHp: ["fa-shield-heart", "Бросить временные HP"]
+    tempHp: ["fa-shield-heart", "Бросить временные HP"],
+    application: ["fa-check", "Подготовить результат"]
   };
   const [icon, label] = labels[kind] ?? ["fa-dice", "Выполнить результат"];
   return `
@@ -2285,10 +2536,11 @@ export function abilityAttackFollowupHTML(actor, item, degree = null, implementa
       if (!profile.enabled) continue;
       const kinds = abilityConfiguredOutcomeKinds(runtime, profileDegree);
       if (!kinds.length && !profile.effectUuids?.length && !String(profile.text ?? "").trim()) continue;
+      const actionKinds = kinds.length ? kinds : (profile.effectUuids?.length ? ["application"] : []);
       const recommended = profileDegree === degree;
       rows.push(`<section class="fast-nri-degree-choice ${recommended ? "recommended" : ""}">
         <strong>${esc(label)}${recommended ? " · рассчитано" : ""}</strong>
-        <div class="fast-nri-ability-outcome-actions">${kinds.map(kind => abilityFollowupButtonHTML(actor, item, kind, runtime?.implementationId ?? implementationId, repeatIndex, profileDegree)).join("")}</div>
+        <div class="fast-nri-ability-outcome-actions">${actionKinds.map(kind => abilityFollowupButtonHTML(actor, item, kind, runtime?.implementationId ?? implementationId, repeatIndex, profileDegree)).join("")}</div>
       </section>`);
     }
     return rows.length ? `<div class="fast-nri-degree-choice-list">${rows.join("")}</div>` : "";
@@ -2326,7 +2578,7 @@ function applyAbilityProfileDamageTransform(state, channel = {}) {
   }
 
   state.parts = Array.from(state.parts ?? []).map(part => selected.has(part.id)
-    ? { ...part, currentValue: 0, profileZeroed: true }
+    ? { ...part, profileZeroed: true }
     : part
   );
   state.profileDamageTransform = {
@@ -3148,7 +3400,7 @@ export async function multiTargetDefenseFromChat(element) {
   return { message, defenseMessage, defense: defenseEntry };
 }
 
-async function multiTargetResultContent({ item, runtime, target, degree, damageState = null, critical = false, profileHTML = "" }) {
+async function multiTargetResultContent({ item, runtime, target, degree, damageState = null, critical = false, profileHTML = "", hasApplicationEffects = false }) {
   const targetHeader = `<section class="fast-nri-multitarget-result-target"><strong>${esc(target.name)}</strong><span>Итоговая степень: <strong>${esc(DEGREE_LABELS[degree] ?? degree)}</strong></span></section>`;
   if (damageState?.supported) {
     const damageHTML = damageCardHTML({
@@ -3158,12 +3410,13 @@ async function multiTargetResultContent({ item, runtime, target, degree, damageS
       critical,
       state: damageState,
       modifiersHTML: "",
+      hasApplicationEffects,
       allowDefense: false,
       allowDouble: Boolean(critical)
     });
     return `<div class="fast-nri-multitarget-result-card">${damageHTML}${profileHTML}</div>`;
   }
-  return `<div class="fast-nri-chat-roll fast-nri-multitarget-result-card">${rollCardHeader(`Результат: ${item.name}`, "fa-wand-magic-sparkles")}${targetHeader}${profileHTML || `<div class="fast-nri-roll-empty">Для этой степени нет автоматического урона или Effect.</div>`}</div>`;
+  return `<div class="fast-nri-chat-roll fast-nri-multitarget-result-card fast-nri-result-application-card">${rollCardHeader(`Результат: ${item.name}`, "fa-wand-magic-sparkles")}${targetHeader}${profileHTML || `<div class="fast-nri-roll-empty">Для этой степени нет автоматического урона или Effect.</div>`}<div class="fast-nri-damage-actions"><button type="button" class="fast-nri-apply-damage-button" data-fast-nri-apply-result><i class="fa-solid fa-check"></i><span>Применить</span></button></div></div>`;
 }
 
 export async function multiTargetApplyResultsFromChat(element) {
@@ -3209,6 +3462,7 @@ export async function multiTargetApplyResultsFromChat(element) {
       damageState = recalculateDamageState(damageState);
     }
     const profileHTML = await enrichAbilityProfileHTML(runtime, degree);
+    const applicationEffects = await abilityApplicationEffects(runtime, degree);
     const content = await multiTargetResultContent({
       item,
       runtime,
@@ -3216,7 +3470,8 @@ export async function multiTargetApplyResultsFromChat(element) {
       degree,
       damageState,
       critical: Boolean(state.critical),
-      profileHTML
+      profileHTML,
+      hasApplicationEffects: applicationEffects.uuids.length > 0
     });
     const flags = {
       kind: damageState?.supported ? "damage" : "ability-result",
@@ -3235,6 +3490,8 @@ export async function multiTargetApplyResultsFromChat(element) {
       targetCharacteristic: state.targetCharacteristic,
       actionTraits: targetContext.traits,
       actionContext: targetContext,
+      applicationPhase: "final",
+      applicationEffectUuids: applicationEffects.uuids,
       sourceAttackMessageId: message.id,
       area: true,
       directedDefense: false,
@@ -3560,12 +3817,46 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
   const fallbackKind = String(runtime.system?.outcome?.kind ?? "none");
   const kind = String(requestedKind ?? fallbackKind);
 
-  if (!["damage", "healing", "tempHp"].includes(kind)) {
+  if (!["damage", "healing", "tempHp", "application"].includes(kind)) {
     ui.notifications.info(`${item.name}: автоматический результат не настроен.`);
     return null;
   }
 
   const outcomeDegree = requestedDegree ?? sourceAttack?.degree ?? actionContext.check?.degree ?? null;
+  const applicationEffects = await abilityApplicationEffects(runtime, outcomeDegree);
+  if (kind === "application") {
+    if (!applicationEffects.uuids.length) {
+      ui.notifications.info(`${item.name}: для этой степени нет структурированных Effect.`);
+      return null;
+    }
+    const profileHTML = await enrichAbilityProfileHTML(runtime, outcomeDegree);
+    const flavor = effectOnlyApplicationCardHTML({
+      sourceName: item.name,
+      profileLabel: DEGREE_LABELS[outcomeDegree] ?? outcomeDegree ?? "",
+      targetName: actionContext.targets?.[0]?.name ?? "",
+      profileHTML,
+      effectsHTML: applicationEffects.html
+    });
+    return ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: flavor,
+      flags: {
+        "fast-nri": {
+          kind: "application-result",
+          actorUuid: actor.uuid,
+          itemUuid: item.uuid,
+          implementationId: runtime?.implementationId ?? implementationId ?? null,
+          repeatIndex,
+          degree: outcomeDegree,
+          actionContext,
+          applicationPhase: "final",
+          applicationEffectUuids: applicationEffects.uuids,
+          damageState: null
+        }
+      }
+    });
+  }
+
   const channel = abilityOutcomeChannel(runtime, kind, outcomeDegree);
   if (!channel.enabled) {
     ui.notifications.info(`${item.name}: этот результат не включён.`);
@@ -3623,6 +3914,7 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
       critical: Boolean(sourceAttack?.critical),
       state,
       modifiersHTML,
+      applicationEffectsHTML: applicationEffects.html,
       allowDefense: directedDefense,
       allowDouble
     });
@@ -3659,6 +3951,8 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
             allowDouble
           },
           damageRevision: 0,
+          applicationPhase: "final",
+          applicationEffectUuids: applicationEffects.uuids,
           rolledTotal: result.roll.total,
           finalTotal: state.currentTotal,
           modifierNotesHTML: modifiersHTML,
@@ -4978,7 +5272,6 @@ export async function defenseFromChat(element) {
       damageState.parts = damageState.parts.map(part => removedIds.has(part.id)
         ? {
             ...part,
-            currentValue: 0,
             defenseZeroed: true,
             removed: false
           }
@@ -5112,12 +5405,20 @@ export async function defenseFromChat(element) {
     }
   });
 
+  const sourceRuntime = sourceItem?.type === "ability"
+    ? abilityImplementationRuntime(sourceItem, message.getFlag("fast-nri", "implementationId") ?? null)
+    : null;
+  const applicationEffects = sourceRuntime
+    ? await abilityApplicationEffects(sourceRuntime, damageState.effectDegree)
+    : { uuids: [], html: "" };
+
   const flavor = damageCardHTML({
     weaponName: sourceItem?.name ?? "Урон",
     profileLabel: labels[profile] ?? profile ?? "",
     critical,
     state: damageState,
-    modifiersHTML
+    modifiersHTML,
+    applicationEffectsHTML: applicationEffects.html
   });
 
   const derivedMessage = await ChatMessage.create({
@@ -5144,6 +5445,8 @@ export async function defenseFromChat(element) {
         actionTraits: actionContext.traits,
         targetCharacteristic: actionContext.check.targetCharacteristic,
         attackType,
+        applicationPhase: "final",
+        applicationEffectUuids: applicationEffects.uuids,
         damageState
       }
     }
@@ -5189,7 +5492,7 @@ function currentDamageApplicationTargets() {
   });
 
   if (!tokens.length) {
-    ui.notifications.warn("Выбери одну или несколько целей (Target) либо выдели токены, которым нужно нанести урон.");
+    ui.notifications.warn("Выбери одну или несколько целей (Target) либо выдели токены, к которым нужно применить результат.");
   }
 
   return tokens;
@@ -5261,13 +5564,17 @@ export function resolveDamageAgainstActor(state, actor, multiplier = 1) {
   const immuneParts = [];
 
   for (const part of sourceParts) {
+    // Ручное исключение и профильное удаление означают, что части уже нет
+    // в Application-пуле. Защитой исключённая часть численно не наносит
+    // урон, но её свойства сохраняются по действующему правилу урона.
+    if (part.manualRemoved || part.profileZeroed) continue;
+
     const matches = partMatchIds(part);
     const immunityId = Array.from(immunityIds).find(id => matches.has(id)) ?? null;
 
     if (immunityId) {
       part.immuneRemoved = true;
       part.immunityId = immunityId;
-      part.currentValue = 0;
       immuneParts.push(part);
     } else {
       part.immuneRemoved = false;
@@ -5282,9 +5589,9 @@ export function resolveDamageAgainstActor(state, actor, multiplier = 1) {
   // 3) на ВСЁ нанесение выбирается ровно одна максимальная Устойчивость
   //    и ровно одна максимальная Уязвимость.
   //
-  // Часть с currentValue = 0 после Самозащиты остаётся здесь и сохраняет
-  // свои тип/свойства. Поэтому она может активировать Устойчивость или
-  // Уязвимость. Только Иммунитет удаляет часть и её свойства окончательно.
+  // Часть, исключённая Самозащитой, остаётся здесь и сохраняет свои
+  // тип/свойства, но не участвует в числовой сумме. Поэтому она может
+  // активировать Устойчивость или Уязвимость. Иммунитет удаляет её свойства.
   const activeMatchIds = new Set();
   for (const part of survivingParts) {
     for (const id of partMatchIds(part)) activeMatchIds.add(id);
@@ -5303,10 +5610,12 @@ export function resolveDamageAgainstActor(state, actor, multiplier = 1) {
   const resistance = matchingResistances[0] ?? null;
   const vulnerability = matchingVulnerabilities[0] ?? null;
 
-  const partsTotal = survivingParts.reduce(
-    (sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0),
-    0
-  );
+  const partsTotal = survivingParts
+    .filter(part => !part.defenseZeroed)
+    .reduce(
+      (sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0),
+      0
+    );
 
   const penalty = (state?.penalties ?? []).reduce(
     (sum, part) => sum + Math.max(0, Number(part.currentValue ?? part.value) || 0),
@@ -5365,6 +5674,88 @@ function damageResolutionHTML(resolution, { tempAbsorbed = 0, hpLost = 0 } = {})
   `;
 }
 
+function applicationEffectOperationHTML(operations = []) {
+  if (!operations.length) return "";
+  const rows = operations.map(operation => {
+    const status = operation.applied
+      ? operation.created ? "наложен" : "обновлён"
+      : `не применён${operation.reason ? `: ${operation.reason}` : ""}`;
+    return `<div><strong>${esc(operation.name || "Effect")}</strong> — ${esc(status)}</div>`;
+  }).join("");
+  return `<section class="fast-nri-application-effect-result"><div class="fast-nri-damage-parts-title">Эффекты</div>${rows}</section>`;
+}
+
+async function applyApplicationEffectsToActor(effectUuids, actor, actionContext) {
+  const operations = [];
+  for (const uuid of Array.from(new Set(effectUuids ?? [])).filter(Boolean)) {
+    let sourceEffect = null;
+    try { sourceEffect = await fromUuid(uuid); }
+    catch (error) { console.warn(`Быстрая НРИ | Не удалось найти Effect ${uuid}`, error); }
+    if (!sourceEffect || sourceEffect.type !== "effect") {
+      operations.push({ sourceEffectUuid: uuid, name: uuid, applied: false, reason: "источник не найден" });
+      continue;
+    }
+
+    const before = new Map(
+      Array.from(actor?.items ?? [])
+        .filter(item => item?.type === "effect")
+        .map(item => [item.id, foundry.utils.deepClone(item.toObject())])
+    );
+
+    let embedded = null;
+    try {
+      embedded = await applyEffectToActor(sourceEffect, actor, { actionContext });
+    } catch (error) {
+      console.error("Быстрая НРИ | Ошибка применения Effect в Application transaction", error);
+    }
+
+    if (!embedded) {
+      operations.push({ sourceEffectUuid: uuid, name: sourceEffect.name, applied: false, reason: "условия применения не выполнены" });
+      continue;
+    }
+
+    const beforeSnapshot = before.get(embedded.id) ?? null;
+    operations.push({
+      sourceEffectUuid: uuid,
+      name: sourceEffect.name,
+      applied: true,
+      embeddedEffectId: embedded.id,
+      created: !beforeSnapshot,
+      beforeSnapshot,
+      afterSnapshot: foundry.utils.deepClone(embedded.toObject())
+    });
+  }
+  return operations;
+}
+
+async function undoApplicationEffects(actor, operations = []) {
+  const results = [];
+  for (const operation of [...operations].reverse()) {
+    if (!operation?.applied || !operation.embeddedEffectId) continue;
+    const embedded = actor?.items?.get?.(operation.embeddedEffectId)
+      ?? Array.from(actor?.items ?? []).find(item => item.id === operation.embeddedEffectId)
+      ?? null;
+    try {
+      if (operation.created) {
+        if (embedded) await embedded.delete();
+        results.push({ ...operation, undone: true });
+      } else if (embedded && operation.beforeSnapshot) {
+        await embedded.update({
+          name: operation.beforeSnapshot.name,
+          img: operation.beforeSnapshot.img,
+          system: foundry.utils.deepClone(operation.beforeSnapshot.system ?? {}),
+          flags: foundry.utils.deepClone(operation.beforeSnapshot.flags ?? {})
+        });
+        results.push({ ...operation, undone: true });
+      }
+    } catch (error) {
+      console.error("Быстрая НРИ | Ошибка Undo Effect Application", error);
+      results.push({ ...operation, undone: false });
+    }
+  }
+  return results;
+}
+
 function appliedDamageMessageContent({
   tokenName,
   damage,
@@ -5377,19 +5768,22 @@ function appliedDamageMessageContent({
   appliedToHp = 0,
   appliedToTemp = 0,
   resolutionHTML = "",
+  effectOperations = [],
+  hasDamage = true,
   undone = false
 }) {
   return `
     <div class="fast-nri-applied-damage-message ${undone ? "undone" : ""}">
       <div class="fast-nri-applied-damage-text">
-        <i class="fa-solid fa-heart-crack"></i>
+        <i class="fa-solid ${hasDamage ? "fa-heart-crack" : "fa-wand-magic-sparkles"}"></i>
         <span>
           <strong>${esc(tokenName)}</strong>
-          получает <strong>${esc(damage)}</strong> урона
+          ${hasDamage ? `получает <strong>${esc(damage)}</strong> урона` : "получает результат действия"}
         </span>
       </div>
 
       ${resolutionHTML}
+      ${applicationEffectOperationHTML(effectOperations)}
 
       ${undone ? "" : `
         <button
@@ -5425,14 +5819,22 @@ export async function applyDamageFromChat(element) {
   const supersededBy = sourceMessage?.getFlag("fast-nri", "supersededByDamageMessageId") ?? null;
   if (supersededBy) {
     ui.notifications.warn(
-      "У этой Damage-card есть более новая ревизия. Применение не блокируется; проверьте, что выбрана нужная карточка."
+      "У этой Result/Application Card есть более новая ревизия. Применение не блокируется; проверьте, что выбрана нужная карточка."
     );
   }
 
   const damageState = sourceMessage?.getFlag("fast-nri", "damageState") ?? null;
+  const applicationEffectUuids = Array.from(
+    sourceMessage?.getFlag("fast-nri", "applicationEffectUuids") ?? []
+  );
   const sourceActionContext = actionContextFromMessage(sourceMessage);
-  if (!damageState?.supported && (!Number.isFinite(fallbackDamage) || fallbackDamage < 0)) {
-    ui.notifications.error("Не удалось определить величину урона.");
+  const hasDamage = Boolean(
+    damageState?.supported
+    || (Number.isFinite(fallbackDamage) && fallbackDamage >= 0)
+  );
+
+  if (!hasDamage && !applicationEffectUuids.length) {
+    ui.notifications.error("В карточке нет структурированного результата для применения.");
     return null;
   }
 
@@ -5445,41 +5847,29 @@ export async function applyDamageFromChat(element) {
       continue;
     }
 
-    let resolution;
+    let resolution = null;
     if (damageState?.supported) {
-      // Один и тот же сохранённый пул разрешается отдельно против каждого Actor.
-      // resolveDamageAgainstActor клонирует части, поэтому Иммунитеты / Устойчивости /
-      // Уязвимости одной цели не изменяют состояние карточки и расчёт другой цели.
       resolution = resolveDamageAgainstActor(damageState, actor, multiplier);
-    } else {
+    } else if (hasDamage) {
       resolution = {
         multiplier,
-        sourceParts: [],
-        survivingParts: [],
-        immuneParts: [],
-        activeMatchIds: [],
-        partsTotal: fallbackDamage / multiplier,
-        penalty: 0,
-        afterPenalty: fallbackDamage / multiplier,
-        afterMultiplier: fallbackDamage,
-        matchingResistances: [],
-        matchingVulnerabilities: [],
-        resistance: null,
-        vulnerability: null,
-        finalDamage: fallbackDamage,
-        fullCancel: false
+        sourceParts: [], survivingParts: [], immuneParts: [], activeMatchIds: [],
+        partsTotal: fallbackDamage / multiplier, penalty: 0,
+        afterPenalty: fallbackDamage / multiplier, afterMultiplier: fallbackDamage,
+        matchingResistances: [], matchingVulnerabilities: [],
+        resistance: null, vulnerability: null,
+        finalDamage: fallbackDamage, fullCancel: false
       };
     }
 
     const previousHp = Number(actor.system?.hp?.value);
     const previousTemp = Math.max(0, Number(actor.system?.hp?.temp) || 0);
-
     if (!Number.isFinite(previousHp)) {
       ui.notifications.warn(`${token?.name ?? actor.name ?? "Выбранная цель"}: нет корректного значения HP; цель пропущена.`);
       continue;
     }
 
-    const finalDamage = Math.max(0, Number(resolution.finalDamage) || 0);
+    const finalDamage = hasDamage ? Math.max(0, Number(resolution?.finalDamage) || 0) : 0;
     const appliedToTemp = Math.min(previousTemp, finalDamage);
     const remainingAfterTemp = Math.max(0, finalDamage - appliedToTemp);
     const afterTemp = Math.max(0, previousTemp - appliedToTemp);
@@ -5487,24 +5877,37 @@ export async function applyDamageFromChat(element) {
     const appliedToHp = previousHp - afterHp;
     const appliedDamage = appliedToTemp + appliedToHp;
 
-    try {
-      await actor.update({
-        "system.hp.temp": afterTemp,
-        "system.hp.value": afterHp
-      }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
-    } catch (error) {
-      console.error("Быстрая НРИ | Ошибка нанесения урона", error);
-      ui.notifications.warn(`${token?.name ?? actor.name ?? "Выбранная цель"}: не удалось изменить HP; цель пропущена.`);
-      continue;
+    if (hasDamage) {
+      try {
+        await actor.update({
+          "system.hp.temp": afterTemp,
+          "system.hp.value": afterHp
+        }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
+      } catch (error) {
+        console.error("Быстрая НРИ | Ошибка нанесения урона", error);
+        ui.notifications.warn(`${token?.name ?? actor.name ?? "Выбранная цель"}: не удалось изменить HP; цель пропущена.`);
+        continue;
+      }
     }
+
+    const targetActionContext = sourceActionContext
+      ? deriveActionContext(sourceActionContext, {
+          targets: [token],
+          parentMessageId: sourceMessage?.id ?? null
+        })
+      : null;
+    const effectOperations = await applyApplicationEffectsToActor(
+      applicationEffectUuids,
+      actor,
+      targetActionContext
+    );
 
     const tokenUuid = tokenDocumentUuid(token) ?? "";
     const actorUuid = actor.uuid;
     const tokenName = token.name || actor.name || "Цель";
-    const resolutionHTML = damageResolutionHTML(resolution, {
-      tempAbsorbed: appliedToTemp,
-      hpLost: appliedToHp
-    });
+    const resolutionHTML = hasDamage
+      ? damageResolutionHTML(resolution, { tempAbsorbed: appliedToTemp, hpLost: appliedToHp })
+      : "";
 
     const content = appliedDamageMessageContent({
       tokenName,
@@ -5517,7 +5920,9 @@ export async function applyDamageFromChat(element) {
       afterTemp,
       appliedToHp,
       appliedToTemp,
-      resolutionHTML
+      resolutionHTML,
+      effectOperations,
+      hasDamage
     });
 
     const message = await ChatMessage.create({
@@ -5525,44 +5930,27 @@ export async function applyDamageFromChat(element) {
       content,
       flags: {
         "fast-nri": {
-          kind: "damage-applied",
-          tokenUuid,
-          actorUuid,
-          tokenName,
+          kind: applicationEffectUuids.length ? "application-applied" : "damage-applied",
+          tokenUuid, actorUuid, tokenName,
           requestedDamage: finalDamage,
-          appliedDamage,
-          appliedToHp,
-          appliedToTemp,
-          previousHp,
-          afterHp,
-          previousTemp,
-          afterTemp,
+          appliedDamage, appliedToHp, appliedToTemp,
+          previousHp, afterHp, previousTemp, afterTemp,
           multiplier,
           resolution,
-          actionContext: sourceActionContext
-            ? deriveActionContext(sourceActionContext, {
-                targets: [token],
-                parentMessageId: sourceMessage?.id ?? null
-              })
-            : null,
+          applicationEffectUuids,
+          applicationEffectOperations: effectOperations,
+          actionContext: targetActionContext,
           undone: false
         }
       }
     });
 
     applied.push({
-      message,
-      token,
-      actor,
+      message, token, actor,
       requestedDamage: finalDamage,
-      appliedDamage,
-      appliedToHp,
-      appliedToTemp,
-      previousHp,
-      afterHp,
-      previousTemp,
-      afterTemp,
-      resolution
+      appliedDamage, appliedToHp, appliedToTemp,
+      previousHp, afterHp, previousTemp, afterTemp,
+      resolution, effectOperations
     });
   }
 
@@ -5603,7 +5991,7 @@ export async function undoAppliedDamage(element) {
   const messageId = messageIdFromElement(element);
   const message = messageId ? game.messages?.get(messageId) : null;
 
-  const stored = message?.getFlag("fast-nri", "kind") === "damage-applied"
+  const stored = ["damage-applied", "application-applied"].includes(message?.getFlag("fast-nri", "kind"))
     ? {
         tokenUuid: message.getFlag("fast-nri", "tokenUuid"),
         actorUuid: message.getFlag("fast-nri", "actorUuid"),
@@ -5626,6 +6014,7 @@ export async function undoAppliedDamage(element) {
         appliedToHp: Number(message.getFlag("fast-nri", "appliedToHp")) || Number(message.getFlag("fast-nri", "appliedDamage")) || 0,
         appliedToTemp: Number(message.getFlag("fast-nri", "appliedToTemp")) || 0,
         resolution: message.getFlag("fast-nri", "resolution") ?? null,
+        effectOperations: Array.from(message.getFlag("fast-nri", "applicationEffectOperations") ?? []),
         undone: Boolean(message.getFlag("fast-nri", "undone"))
       }
     : {
@@ -5641,6 +6030,7 @@ export async function undoAppliedDamage(element) {
         appliedToHp: Number(element?.dataset?.appliedToHp) || Number(element?.dataset?.damage) || 0,
         appliedToTemp: Number(element?.dataset?.appliedToTemp) || 0,
         resolution: null,
+        effectOperations: [],
         undone: false
       };
 
@@ -5703,6 +6093,8 @@ export async function undoAppliedDamage(element) {
     return null;
   }
 
+  const effectUndoResults = await undoApplicationEffects(actor, stored.effectOperations ?? []);
+
   if (message) {
     const displayDamage = Number.isFinite(stored.requestedDamage)
       ? stored.requestedDamage
@@ -5723,6 +6115,8 @@ export async function undoAppliedDamage(element) {
         tempAbsorbed: stored.appliedToTemp,
         hpLost: stored.appliedToHp
       }) : "",
+      effectOperations: (stored.effectOperations ?? []).map(operation => ({ ...operation, applied: false, reason: "отменено" })),
+      hasDamage: Boolean(stored.resolution) || stored.requestedDamage > 0 || stored.appliedDamage > 0,
       undone: true
     });
 
@@ -5730,6 +6124,7 @@ export async function undoAppliedDamage(element) {
       await message.update({
         content,
         "flags.fast-nri.undone": true,
+        "flags.fast-nri.applicationEffectUndoResults": effectUndoResults,
         "flags.fast-nri.restoredHp": restoredHp,
         "flags.fast-nri.restoredAmount": restoredAmount,
         "flags.fast-nri.restoredHpAmount": restoredHpAmount,
@@ -5903,6 +6298,28 @@ export function activateChatInteractions(root = document) {
       return;
     }
 
+    const restoreDamageDieButton = event.target.closest("[data-fast-nri-damage-restore-die]");
+    if (restoreDamageDieButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (restoreDamageDieButton.dataset.fastNriBusy === "true") return;
+      restoreDamageDieButton.dataset.fastNriBusy = "true";
+      try { await restoreDamageDieFromChat(restoreDamageDieButton); }
+      finally { delete restoreDamageDieButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const rerollDamageDieButton = event.target.closest("[data-fast-nri-damage-reroll-die]");
+    if (rerollDamageDieButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (rerollDamageDieButton.dataset.fastNriBusy === "true") return;
+      rerollDamageDieButton.dataset.fastNriBusy = "true";
+      try { await rerollDamageDieFromChat(rerollDamageDieButton); }
+      finally { delete rerollDamageDieButton.dataset.fastNriBusy; }
+      return;
+    }
+
     const addDamageButton = event.target.closest("[data-fast-nri-damage-add]");
     if (addDamageButton) {
       event.preventDefault();
@@ -5917,6 +6334,17 @@ export function activateChatInteractions(root = document) {
         delete addDamageButton.dataset.fastNriBusy;
       }
 
+      return;
+    }
+
+    const applyResultButton = event.target.closest("[data-fast-nri-apply-result]");
+    if (applyResultButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (applyResultButton.dataset.fastNriBusy === "true") return;
+      applyResultButton.dataset.fastNriBusy = "true";
+      try { await applyDamageFromChat(applyResultButton); }
+      finally { delete applyResultButton.dataset.fastNriBusy; }
       return;
     }
 

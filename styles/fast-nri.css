@@ -2426,6 +2426,8 @@ body.theme-dark .fast-nri-hp-line label {
 
 .fast-nri-damage-part-stack.defense-zeroed {
   background: rgba(75, 105, 145, 0.08);
+  opacity: 0.56;
+  text-decoration: line-through;
 }
 
 .fast-nri-damage-part-stack.immune-removed {
