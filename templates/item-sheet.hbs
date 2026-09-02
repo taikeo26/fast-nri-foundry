@@ -525,11 +525,15 @@
   {{/if}}
 
   {{#if isWeaponProperty}}
-    <section class="fast-nri-section">
+    <section class="fast-nri-section fast-nri-weapon-property-sheet">
       <h2>Свойство оружия</h2>
       <div class="fast-nri-property-reference-card">
         <span>Системный ID</span>
         <code>{{system.propertyId}}</code>
+      </div>
+      <div class="fast-nri-weapon-property-description">
+        <h3>Описание</h3>
+        <div class="fast-nri-rich-text">{{{system.description}}}</div>
       </div>
       <small class="fast-nri-help">Справочная карточка из системного Compendium. Механика оружия использует стабильный propertyId.</small>
     </section>
@@ -652,9 +656,11 @@
   {{/if}}
 
   {{#unless isAbility}}
-    <section class="fast-nri-section">
-      <h2>Описание</h2>
-      <prose-mirror name="system.description" value="{{system.description}}" toggled></prose-mirror>
-    </section>
+    {{#unless isWeaponProperty}}
+      <section class="fast-nri-section">
+        <h2>Описание</h2>
+        <prose-mirror name="system.description" value="{{system.description}}" toggled></prose-mirror>
+      </section>
+    {{/unless}}
   {{/unless}}
 </div>

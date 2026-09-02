@@ -3518,3 +3518,18 @@ button.fast-nri-property-reference:hover {
   align-items: center;
   gap: 8px;
 }
+
+
+/* v0.5.56.3 - weapon property reference card description */
+.fast-nri-weapon-property-description {
+  margin-top: 0.75rem;
+}
+.fast-nri-weapon-property-description > h3 {
+  margin: 0 0 0.4rem;
+}
+.fast-nri-weapon-property-description .fast-nri-rich-text > :first-child {
+  margin-top: 0;
+}
+.fast-nri-weapon-property-description .fast-nri-rich-text > :last-child {
+  margin-bottom: 0;
+}
