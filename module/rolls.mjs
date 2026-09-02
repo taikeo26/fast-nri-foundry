@@ -3469,35 +3469,62 @@ export async function undoDefenseResource(element) {
 }
 
 
-async function actionContextTargetToken(actionContext) {
-  const context = normalizeActionContext(actionContext);
-  const target = context.targets?.[0] ?? null;
-  if (!target) return null;
+export function checkDefenseParticipants(defenderToken, userTargets = []) {
+  if (!defenderToken) return { error: "no-defender", protectedToken: null, role: null };
 
-  if (target.tokenUuid) {
-    try {
-      const document = await fromUuid(target.tokenUuid);
-      if (document?.object) return document.object;
-      const placeable = Array.from(canvas?.tokens?.placeables ?? []).find(token =>
-        token?.document?.uuid === target.tokenUuid
-      );
-      if (placeable) return placeable;
-    } catch (error) {
-      console.warn("Быстрая НРИ | Не удалось найти target Token из ActionContext", error);
+  const targets = Array.from(userTargets ?? []);
+  if (targets.length > 1) {
+    return { error: "too-many-targets", protectedToken: null, role: null };
+  }
+
+  const requestedTarget = targets[0] ?? defenderToken;
+  const role = sameTokenOrActor(defenderToken, requestedTarget) ? "self" : "ally";
+  return {
+    error: null,
+    protectedToken: role === "self" ? defenderToken : requestedTarget,
+    role
+  };
+}
+
+export function resolveCheckDefenseResult({
+  degreeBefore = null,
+  defenseTotal = null,
+  attackTotal = null,
+  naturalD20 = null,
+  degreeReduction = 1
+} = {}) {
+  const hasDegree = Object.prototype.hasOwnProperty.call(DEGREE_LABELS, degreeBefore);
+  let result = "failure";
+  let degreeAfter = hasDegree ? degreeBefore : null;
+  let appliedDegreeReduction = 0;
+
+  if (naturalD20 === 1) {
+    return { result, degreeBefore: hasDegree ? degreeBefore : null, degreeAfter, degreeReduction: 0 };
+  }
+
+  if (naturalD20 === 20) {
+    result = "success";
+    degreeAfter = hasDegree ? "failure" : null;
+    appliedDegreeReduction = hasDegree ? 99 : 0;
+    return { result, degreeBefore: hasDegree ? degreeBefore : null, degreeAfter, degreeReduction: appliedDegreeReduction };
+  }
+
+  const defense = finiteNumberOrNull(defenseTotal);
+  const attack = finiteNumberOrNull(attackTotal);
+  if (defense !== null && attack !== null && defense >= attack) {
+    result = "success";
+    if (hasDegree) {
+      appliedDegreeReduction = Math.max(1, Number(degreeReduction) || 1);
+      degreeAfter = lowerDegree(degreeBefore, appliedDegreeReduction);
     }
   }
 
-  if (target.actorUuid) {
-    try {
-      const actor = await fromUuid(target.actorUuid);
-      const tokens = actor?.getActiveTokens?.(false, false) ?? [];
-      if (tokens.length === 1) return tokens[0];
-    } catch (error) {
-      console.warn("Быстрая НРИ | Не удалось найти target Actor из ActionContext", error);
-    }
-  }
-
-  return null;
+  return {
+    result,
+    degreeBefore: hasDegree ? degreeBefore : null,
+    degreeAfter,
+    degreeReduction: appliedDegreeReduction
+  };
 }
 
 async function chooseDodgeMovement(actionName = "Уворот") {
@@ -3619,7 +3646,7 @@ function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, def
   const targetLabel = checkTargetCharacteristicLabel(context.check.targetCharacteristic);
   const targetName = context.targets?.[0]?.name ?? "";
   const traitsLabel = actionTraitsLabel(context.traits);
-  const followup = sourceActor && sourceItem?.type === "ability"
+  const followup = sourceActor && sourceItem?.type === "ability" && context.check.degree
     ? abilityAttackFollowupHTML(sourceActor, sourceItem, context.check.degree, context.source?.implementationId ?? null)
     : "";
 
@@ -3634,7 +3661,12 @@ function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, def
       <div class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)}">
         <strong>${esc(defense.actionName)} — ${esc(defenseResultLabel(defense.result))}</strong>
         <small>${esc(defense.defenderTokenName)}: ${esc(defense.total)} против ${esc(defense.attackTotal)}</small>
-        <div>Степень: <strong>${esc(DEGREE_LABELS[defense.degreeBefore] ?? defense.degreeBefore)}</strong> → <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
+        ${defense.degreeBefore ? `
+          <div>Степень: <strong>${esc(DEGREE_LABELS[defense.degreeBefore] ?? defense.degreeBefore)}</strong> → <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
+          <div>Итоговая степень для цели: <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
+        ` : `
+          <div>Итог Защиты для цели: <strong>${esc(defenseResultLabel(defense.result))}</strong></div>
+        `}
       </div>
       <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(context.check.degree)}
@@ -3671,13 +3703,16 @@ export async function checkDefenseFromChat(element) {
   const defender = defenderToken.actor;
   if (!defender) return null;
 
-  const protectedToken = await actionContextTargetToken(actionContext);
-  if (!protectedToken) {
-    ui.notifications.error("Не удалось найти исходную цель проверки из ActionContext.");
+  const participants = checkDefenseParticipants(
+    defenderToken,
+    Array.from(game.user?.targets ?? [])
+  );
+  if (participants.error === "too-many-targets") {
+    ui.notifications.warn("Для одной Защиты выбери не больше одной защищаемой цели.");
     return null;
   }
-
-  const role = sameTokenOrActor(defenderToken, protectedToken) ? "self" : "ally";
+  const protectedToken = participants.protectedToken;
+  const role = participants.role;
   const defenseHistory = Array.from(message.getFlag("fast-nri", "defenseHistory") ?? []);
   const method = await chooseDefenseMethod({
     actor: defender,
@@ -3784,25 +3819,24 @@ export async function checkDefenseFromChat(element) {
   }
 
   const degreeBefore = actionContext.check.degree;
-  let defenseResult = "failure";
-  let degreeAfter = degreeBefore;
-  let degreeReduction = 0;
-
-  if (result.naturalD20 === 1) {
-    defenseResult = "failure";
-  } else if (result.naturalD20 === 20) {
-    defenseResult = "success";
-    degreeAfter = "failure";
-    degreeReduction = 99;
-  } else if (result.roll.total >= attackTotal) {
-    defenseResult = "success";
-    if (procedure === "dodge") {
-      degreeReduction = Number(await chooseDodgeDegreeReduction(method.actionName)) || 1;
-    } else {
-      degreeReduction = Math.max(1, Number(method.config.effectDegreeReduction) || 1);
-    }
-    degreeAfter = lowerDegree(degreeBefore, degreeReduction);
+  const hasDegree = Object.prototype.hasOwnProperty.call(DEGREE_LABELS, degreeBefore);
+  let requestedDegreeReduction = Math.max(1, Number(method.config.effectDegreeReduction) || 1);
+  const preliminarySuccess = result.naturalD20 === 20
+    || (result.naturalD20 !== 1 && result.roll.total >= attackTotal);
+  if (procedure === "dodge" && preliminarySuccess && hasDegree && result.naturalD20 !== 20) {
+    requestedDegreeReduction = Number(await chooseDodgeDegreeReduction(method.actionName)) || 1;
   }
+
+  const resolvedDefense = resolveCheckDefenseResult({
+    degreeBefore,
+    defenseTotal: result.roll.total,
+    attackTotal,
+    naturalD20: result.naturalD20,
+    degreeReduction: requestedDegreeReduction
+  });
+  const defenseResult = resolvedDefense.result;
+  const degreeAfter = resolvedDefense.degreeAfter;
+  const degreeReduction = resolvedDefense.degreeReduction;
 
   const resource = await spendDefenseClassResource(defender, method.item, selectedClassResourceCost);
   const defenseEntry = {
@@ -3829,6 +3863,7 @@ export async function checkDefenseFromChat(element) {
   };
   const nextHistory = [...defenseHistory, defenseEntry];
   const nextContext = deriveActionContext(actionContext, {
+    targets: [protectedToken],
     check: {
       ...actionContext.check,
       degree: degreeAfter
@@ -3905,7 +3940,7 @@ export async function checkDefenseFromChat(element) {
     }
   });
 
-  const derivedProfileHTML = sourceItem?.type === "ability"
+  const derivedProfileHTML = sourceItem?.type === "ability" && nextContext.check.degree
     ? await enrichAbilityProfileHTML(sourceItem, nextContext.check.degree)
     : "";
 

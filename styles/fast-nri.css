@@ -3251,10 +3251,13 @@ body.theme-dark .fast-nri-hp-line label {
   padding: 6px 8px;
   border: 1px solid var(--color-border-light-2, rgba(255,255,255,0.2));
   border-radius: 5px;
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
+  width: 100%;
+  min-height: 0;
+  text-align: left;
 }
-.fast-nri-area-preset:active { cursor: grabbing; }
+.fast-nri-area-preset:hover { border-color: var(--color-border-highlight, rgba(255,255,255,0.45)); }
 .fast-nri-area-preset.special {
   cursor: default;
   grid-template-columns: auto minmax(0, 1fr);

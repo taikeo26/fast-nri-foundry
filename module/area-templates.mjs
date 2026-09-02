@@ -1,33 +1,25 @@
 import { abilityAreaPresetLabel } from "./ability-authoring.mjs";
 
 const SYSTEM_ID = "fast-nri";
-export const ABILITY_AREA_DRAG_TYPE = "FastNriArea";
 
 function positive(value, fallback = 1) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(1, number) : fallback;
 }
 
-function snap(value, size) {
-  if (!(size > 0)) return Number(value) || 0;
-  return Math.round((Number(value) || 0) / size) * size;
-}
-
-function areaShapeData(area, { x, y }) {
+function areaShapeData(area) {
   const gridSize = Number(canvas?.dimensions?.size) || 100;
   const type = String(area?.type ?? "special");
 
   if (type === "square" || type === "rectangle") {
     const widthCells = positive(area?.width, 1);
     const heightCells = type === "square" ? widthCells : positive(area?.height, 1);
-    const width = widthCells * gridSize;
-    const height = heightCells * gridSize;
     return {
       type: "rectangle",
-      x: snap((Number(x) || 0) - (width / 2), gridSize),
-      y: snap((Number(y) || 0) - (height / 2), gridSize),
-      width,
-      height,
+      x: 0,
+      y: 0,
+      width: widthCells * gridSize,
+      height: heightCells * gridSize,
       rotation: 0,
       gridBased: true
     };
@@ -36,39 +28,56 @@ function areaShapeData(area, { x, y }) {
   if (type === "line") {
     return {
       type: "line",
-      x: snap(x, gridSize),
-      y: snap(y, gridSize),
+      x: 0,
+      y: 0,
       length: positive(area?.length, 1) * gridSize,
-      width: positive(area?.lineWidth, 1) * gridSize
+      width: positive(area?.lineWidth, 1) * gridSize,
+      rotation: 0,
+      gridBased: true
     };
   }
 
   return null;
 }
 
-export function abilityAreaDragData({ item, implementationId, area, actionContext = null } = {}) {
+function areaRegionData({ item, implementationId, area, actionContext = null } = {}) {
+  const shape = areaShapeData(area);
+  if (!shape) return null;
+  const label = abilityAreaPresetLabel(area) || "Область";
+  const visibility = globalThis.CONST?.REGION_VISIBILITY?.ALWAYS;
+  const ownershipLevel = globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER;
+  const userId = game?.user?.id ?? null;
+
   return {
-    type: ABILITY_AREA_DRAG_TYPE,
-    itemUuid: item?.uuid ?? null,
-    sourceName: item?.name ?? "Область способности",
-    implementationId: implementationId ?? null,
-    area: {
-      id: area?.id ?? null,
-      type: area?.type ?? "special",
-      label: abilityAreaPresetLabel(area),
-      width: Number(area?.width) || 0,
-      height: Number(area?.height) || 0,
-      length: Number(area?.length) || 0,
-      lineWidth: Number(area?.lineWidth) || 1
-    },
-    ...(actionContext ? { actionContext } : {})
+    name: `${item?.name || "Способность"} — ${label}`,
+    shapes: [shape],
+    color: game?.user?.color ?? undefined,
+    locked: false,
+    highlightMode: "coverage",
+    displayMeasurements: true,
+    ...(visibility == null ? {} : { visibility }),
+    ...(canvas?.level?.id ? { levels: [canvas.level.id] } : {}),
+    ...(userId && ownershipLevel != null ? { ownership: { [userId]: ownershipLevel } } : {}),
+    flags: {
+      [SYSTEM_ID]: {
+        abilityArea: true,
+        sourceItemUuid: item?.uuid ?? null,
+        implementationId: implementationId ?? null,
+        areaId: area?.id ?? null,
+        areaType: area?.type ?? null,
+        ...(actionContext ? { actionContext } : {})
+      }
+    }
   };
 }
 
-export async function placeDroppedAbilityArea(data) {
-  if (data?.type !== ABILITY_AREA_DRAG_TYPE) return null;
-  const area = data.area ?? {};
-  if (area.type === "special") {
+/**
+ * Start Foundry VTT 14's native interactive Region placement workflow for an
+ * Ability area preset. The Region preview follows the cursor and is committed
+ * by Foundry itself, rather than relying on HTML5 drag/drop from the chat log.
+ */
+export async function placeAbilityAreaPreset({ item, implementationId, area, actionContext = null } = {}) {
+  if (!area || area.type === "special") {
     ui.notifications.info("Особая область не имеет автоматической линейки. Разместите её по тексту способности.");
     return null;
   }
@@ -76,51 +85,26 @@ export async function placeDroppedAbilityArea(data) {
     ui.notifications.warn("Сначала откройте сцену.");
     return null;
   }
+  if (typeof canvas?.regions?.placeRegion !== "function") {
+    ui.notifications.error("Foundry VTT не предоставляет штатное размещение Region на этой сцене.");
+    return null;
+  }
 
-  const shape = areaShapeData(area, { x: data.x, y: data.y });
-  if (!shape) return null;
-
-  const label = area.label || "Область";
-  const regionData = {
-    name: `${data.sourceName || "Способность"} — ${label}`,
-    shapes: [shape],
-    locked: false,
-    flags: {
-      [SYSTEM_ID]: {
-        abilityArea: true,
-        sourceItemUuid: data.itemUuid ?? null,
-        implementationId: data.implementationId ?? null,
-        areaId: area.id ?? null,
-        areaType: area.type,
-        ...(data.actionContext ? { actionContext: data.actionContext } : {})
-      }
-    }
-  };
+  const regionData = areaRegionData({ item, implementationId, area, actionContext });
+  if (!regionData) return null;
 
   try {
-    const created = await canvas.scene.createEmbeddedDocuments("Region", [regionData]);
-    return created?.[0] ?? null;
+    return await canvas.regions.placeRegion(regionData, {
+      create: true,
+      allowRotation: area.type === "line" || area.type === "rectangle"
+    });
   } catch (error) {
-    console.warn("Быстрая НРИ | Не удалось создать Region в точке drop; пробуем штатный placement", error);
-    if (typeof canvas?.regions?.placeRegion === "function") {
-      ui.notifications.warn("Не удалось создать область прямо в точке сброса. Выберите её положение штатным инструментом Region.");
-      try {
-        return await canvas.regions.placeRegion(regionData, {
-          allowRotation: area.type === "line",
-          create: true
-        });
-      } catch (placementError) {
-        console.error("Быстрая НРИ | Ошибка размещения Region", placementError);
-      }
-    }
+    console.error("Быстрая НРИ | Ошибка штатного размещения Region", error);
     ui.notifications.error(`Не удалось разместить область: ${error.message}`);
     return null;
   }
 }
 
-export function activateAbilityAreaPlacement() {
-  Hooks.on("dropCanvasData", (_canvas, data) => {
-    if (data?.type !== ABILITY_AREA_DRAG_TYPE) return;
-    void placeDroppedAbilityArea(data);
-  });
-}
+// Kept as a stable activation entry point for fast-nri.mjs. Area placement no
+// longer needs a dropCanvasData hook; chat buttons call placeRegion directly.
+export function activateAbilityAreaPlacement() {}

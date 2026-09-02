@@ -20,7 +20,7 @@ import {
   abilityTraitLabels
 } from "./ability-authoring.mjs";
 import { actionContextFromAbility } from "./action-context.mjs";
-import { abilityAreaDragData } from "./area-templates.mjs";
+import { placeAbilityAreaPreset } from "./area-templates.mjs";
 
 function esc(value) { return foundry.utils.escapeHTML(String(value ?? "")); }
 function escAttr(value) { return esc(value).replaceAll('"', "&quot;"); }
@@ -159,9 +159,9 @@ function implementationAreasHTML(item, runtime, richData) {
     if (!area.draggable) {
       return `<div class="fast-nri-area-preset special"><i class="fa-solid fa-draw-polygon"></i><div><strong>${esc(area.label)}</strong>${area.textHTML ? `<div class="fast-nri-area-preset-text">${area.textHTML}</div>` : ""}</div></div>`;
     }
-    return `<div class="fast-nri-area-preset" draggable="true" data-fast-nri-area-drag
+    return `<button type="button" class="fast-nri-area-preset" data-fast-nri-area-place
       data-item-uuid="${escAttr(item.uuid)}" data-implementation-id="${escAttr(runtime.implementationId ?? "")}" data-area-id="${escAttr(area.id)}"
-      title="Перетащите область на карту"><i class="fa-solid ${area.type === "line" ? "fa-grip-lines" : "fa-vector-square"}"></i><div><strong>${esc(area.label)}</strong>${area.textHTML ? `<div class="fast-nri-area-preset-text">${area.textHTML}</div>` : ""}</div><i class="fa-solid fa-hand-pointer"></i></div>`;
+      title="Разместить область штатным инструментом Region"><i class="fa-solid ${area.type === "line" ? "fa-grip-lines" : "fa-vector-square"}"></i><span><strong>${esc(area.label)}</strong>${area.textHTML ? `<span class="fast-nri-area-preset-text">${area.textHTML}</span>` : ""}</span><i class="fa-solid fa-crosshairs"></i></button>`;
   }).join("")}</div>`;
 }
 
@@ -266,23 +266,24 @@ export async function undoAbilityResource(element) {
 }
 
 export function activateAbilityChatInteractions(root = document) {
-  root.addEventListener("dragstart", event => {
-    const element = event.target?.closest?.("[data-fast-nri-area-drag]");
-    if (!element) return;
-    const item = fromUuidSync(element.dataset.itemUuid);
-    if (!item || item.type !== "ability") return;
-    const runtime = abilityImplementationRuntime(item, element.dataset.implementationId || null);
-    const area = abilityAreaPresets(runtime).find(candidate => candidate.id === element.dataset.areaId);
-    if (!area || area.type === "special") return;
-    const sourceMessage = game.messages?.get(messageIdFromElement(element)) ?? null;
-    const actionContext = sourceMessage?.getFlag("fast-nri", "actionContext") ?? null;
-    event.dataTransfer?.setData("text/plain", JSON.stringify(abilityAreaDragData({
-      item, implementationId: runtime.implementationId, area, actionContext
-    })));
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
-  });
-
   root.addEventListener("click", async event => {
+    const areaButton = event.target.closest("[data-fast-nri-area-place]");
+    if (areaButton) {
+      event.preventDefault(); event.stopPropagation();
+      if (areaButton.dataset.fastNriBusy === "true") return;
+      areaButton.dataset.fastNriBusy = "true";
+      try {
+        const item = await fromUuid(areaButton.dataset.itemUuid);
+        if (!item || item.type !== "ability") return ui.notifications.error("Не удалось найти способность или заклинание.");
+        const runtime = abilityImplementationRuntime(item, areaButton.dataset.implementationId || null);
+        const area = abilityAreaPresets(runtime).find(candidate => candidate.id === areaButton.dataset.areaId);
+        if (!area || area.type === "special") return ui.notifications.error("Не удалось найти стандартную область реализации.");
+        const sourceMessage = game.messages?.get(messageIdFromElement(areaButton)) ?? null;
+        const actionContext = sourceMessage?.getFlag("fast-nri", "actionContext") ?? null;
+        await placeAbilityAreaPreset({ item, implementationId: runtime.implementationId, area, actionContext });
+      } finally { delete areaButton.dataset.fastNriBusy; }
+      return;
+    }
     const implButton = event.target.closest("[data-fast-nri-use-implementation]");
     if (implButton) {
       event.preventDefault(); event.stopPropagation();
