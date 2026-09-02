@@ -28,6 +28,7 @@ import {
   migrateDamageTraitsOnce,
   migrateEquipmentStateOnce,
   migrateRules63Once,
+  migrateWeaponTaxonomyOnce,
   registerDataMigrationSettings
 } from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
@@ -131,6 +132,7 @@ Hooks.once("ready", async () => {
   await migrateRules63Once();
   await migrateDamageTraitsOnce();
   await migrateEquipmentStateOnce();
+  await migrateWeaponTaxonomyOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
   ui.notifications.info("Быстрая НРИ 6.3 загружена");

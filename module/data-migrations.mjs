@@ -7,11 +7,19 @@ import {
   directedAttackTypeFromTraits,
   inferLegacyAbilityActionTraits
 } from "./check-system.mjs";
+import {
+  legacyWeaponTypeIdFromName,
+  normalizeActorWeaponTraining,
+  normalizeWeaponTypeId,
+  weaponCategoryIdForType
+} from "./weapon-taxonomy.mjs";
 
 const DATA_MIGRATION_SETTING = "dataSchemaMigration";
 const DATA_MIGRATION_VERSION = 1;
 const EQUIPMENT_STATE_MIGRATION_SETTING = "equipmentStateMigration";
 const EQUIPMENT_STATE_MIGRATION_VERSION = 1;
+const WEAPON_TAXONOMY_MIGRATION_SETTING = "weaponTaxonomyMigration";
+const WEAPON_TAXONOMY_MIGRATION_VERSION = 1;
 
 export function registerDataMigrationSettings() {
   game.settings.register(game.system.id, DATA_MIGRATION_SETTING, {
@@ -22,6 +30,13 @@ export function registerDataMigrationSettings() {
   });
 
   game.settings.register(game.system.id, EQUIPMENT_STATE_MIGRATION_SETTING, {
+    scope: "world",
+    config: false,
+    type: Number,
+    default: 0
+  });
+
+  game.settings.register(game.system.id, WEAPON_TAXONOMY_MIGRATION_SETTING, {
     scope: "world",
     config: false,
     type: Number,
@@ -176,6 +191,96 @@ export async function migrateEquipmentStateOnce() {
   } catch (error) {
     console.error("Быстрая НРИ | Ошибка миграции Экипирован/В руках 0.5.30", error);
     ui.notifications.error("Не удалось разделить старые состояния «Экипирован» и «В руках».");
+  }
+}
+
+function weaponTaxonomyItemUpdate(item) {
+  if (!item || item.type !== "weapon") return null;
+
+  const storedTypeId = normalizeWeaponTypeId(
+    foundry.utils.getProperty(item._source, "system.typeId")
+  );
+  const typeId = storedTypeId || legacyWeaponTypeIdFromName(item.name);
+  const categoryId = weaponCategoryIdForType(typeId);
+  const rawTypeId = String(foundry.utils.getProperty(item._source, "system.typeId") ?? "");
+  const rawCategoryId = String(foundry.utils.getProperty(item._source, "system.categoryId") ?? "");
+
+  if (rawTypeId === typeId && rawCategoryId === categoryId) return null;
+  return {
+    _id: item.id,
+    "system.typeId": typeId,
+    "system.categoryId": categoryId
+  };
+}
+
+/**
+ * 0.5.56: materialize structured weapon taxonomy and Actor weapon training.
+ * Exact Item-name matching is migration-only; runtime never infers taxonomy
+ * from a name or description. Unknown legacy weapons remain untyped.
+ */
+export async function migrateWeaponTaxonomyOnce() {
+  if (!game.user.isGM) return;
+
+  const current = Number(
+    game.settings.get(game.system.id, WEAPON_TAXONOMY_MIGRATION_SETTING)
+  ) || 0;
+  if (current >= WEAPON_TAXONOMY_MIGRATION_VERSION) return;
+
+  try {
+    let embeddedCount = 0;
+    let worldCount = 0;
+    let actorCount = 0;
+
+    for (const actor of game.actors) {
+      if (actor.type === "character") {
+        const training = normalizeActorWeaponTraining(actor.system ?? {});
+        const currentProficiencies = Array.from(actor.system?.weaponProficiencyIds ?? []);
+        const currentMasteries = Array.from(actor.system?.weaponMasteryIds ?? []);
+        if (
+          JSON.stringify(currentProficiencies) !== JSON.stringify(training.weaponProficiencyIds)
+          || JSON.stringify(currentMasteries) !== JSON.stringify(training.weaponMasteryIds)
+        ) {
+          await actor.update({
+            "system.weaponProficiencyIds": training.weaponProficiencyIds,
+            "system.weaponMasteryIds": training.weaponMasteryIds
+          });
+          actorCount += 1;
+        }
+      }
+
+      const updates = [];
+      for (const item of actor.items) {
+        const update = weaponTaxonomyItemUpdate(item);
+        if (update) updates.push(update);
+      }
+      if (updates.length) {
+        await actor.updateEmbeddedDocuments("Item", updates);
+        embeddedCount += updates.length;
+      }
+    }
+
+    const worldUpdates = [];
+    for (const item of game.items) {
+      const update = weaponTaxonomyItemUpdate(item);
+      if (update) worldUpdates.push(update);
+    }
+    if (worldUpdates.length) {
+      await Item.updateDocuments(worldUpdates);
+      worldCount = worldUpdates.length;
+    }
+
+    await game.settings.set(
+      game.system.id,
+      WEAPON_TAXONOMY_MIGRATION_SETTING,
+      WEAPON_TAXONOMY_MIGRATION_VERSION
+    );
+
+    console.log(
+      `Быстрая НРИ | Миграция оружейной таксономии 0.5.56: ${embeddedCount} embedded, ${worldCount} world Weapon, ${actorCount} Actor(s).`
+    );
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка миграции оружейной таксономии 0.5.56", error);
+    ui.notifications.error("Не удалось завершить миграцию типов оружия 0.5.56.");
   }
 }
 

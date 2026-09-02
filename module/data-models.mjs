@@ -336,6 +336,11 @@ function actorSchema({ hp = 10, speed = 5, combatDie = "1d6" } = {}) {
     // Для существ Бестиария без Куба боя.
     attackModifier: integer(0),
 
+    // 0.5.56: структурированные типы оружия, которыми Character владеет
+    // или для которых имеет Мастерство. Creature поля не использует.
+    weaponProficiencyIds: stringArray(),
+    weaponMasteryIds: stringArray(),
+
     // 6.3: редкое прямое исключение из выбора характеристики Самозащиты.
     // Пустое значение означает обычное правило melee→Стойкость, ranged→Рефлекс.
     selfDefenseCharacteristicOverride: text(""),
@@ -405,6 +410,10 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
     return {
       ...itemBaseSchema(),
       range: text("Ближняя"),
+      // 0.5.56: структурированная таксономия оружия. typeId выбирается из
+      // системного registry, categoryId жёстко синхронизируется по HB-04.
+      typeId: text(""),
+      categoryId: text(""),
       // 6.3: вид направленной атаки против КЗ. Новое оружие по умолчанию
       // является ближним; допустимы только melee/ranged.
       attackType: text("melee"),

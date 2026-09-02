@@ -1,0 +1,29 @@
+typeId,name,img
+chain,Цеп,icons/skills/melee/strike-chain-whip-blue.webp
+flail,Кистень,icons/weapons/maces/flail-ball-grey.webp
+club,Дубина,icons/weapons/clubs/club-simple-stone.webp
+shortSword,Короткий меч,icons/weapons/swords/shortsword-simple.webp
+longSword,Длинный меч,icons/weapons/swords/sword-guard.webp
+rapier,Рапира,icons/weapons/swords/sword-cane.webp
+oneHandedAxe,Одноручный топор,icons/weapons/axes/shortaxe-worn-black.webp
+twoHandedAxe,Двуручный топор,icons/weapons/axes/axe-double.webp
+brutalAxe,Жестокий топор,icons/weapons/axes/axe-battle-heavy-jagged.webp
+twoHandedHammer,Двуручный молот,icons/weapons/hammers/hammer-double-sledge-engraved.webp
+heavyHammer,Тяжёлый молот,icons/weapons/hammers/hammer-war-spiked.webp
+longSpear,Длинное копьё,icons/weapons/polearms/spear-pike-steel.webp
+combatStaff,Боевой посох,icons/weapons/staves/staff-simple.webp
+greatSword,Двуручный меч,icons/weapons/swords/greatsword-crossguard-steel.webp
+pistol,Пистолет,icons/weapons/guns/pistol-flintlock.webp
+whip,Кнут,icons/weapons/misc/whip-leather.webp
+dagger,Кинжал,icons/weapons/daggers/dagger-simple-blue.webp
+sickle,Серп,icons/weapons/sickles/sickle-simple-grey.webp
+sling,Праща,icons/weapons/slings/sling-leather.webp
+longBow,Длинный лук,icons/weapons/bows/longbow-recurve.webp
+crossbow,Арбалет,icons/weapons/crossbows/crossbow-simple-brown.webp
+shortBow,Короткий лук,icons/weapons/bows/shortbow-recurve.webp
+branch,Ветвь,icons/commodities/materials/plant-branch-brown-green.webp
+divineSymbol,Божественный символ,icons/commodities/treasure/token-engraved-symbols-grey.webp
+rod,Жезл,icons/weapons/wands/wand-crook-yellow.webp
+orb,Сфера,icons/commodities/materials/glass-orb-blue-gold.webp
+wand,Волшебная палочка,icons/weapons/wands/wand-gem-blue.webp
+twoHandedMagicStaff,Двуручный волшебный посох,icons/weapons/staves/staff-ornate-blue-jewel.webp

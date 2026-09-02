@@ -21,6 +21,24 @@
       <h2>Оружие</h2>
       <div class="fast-nri-two">
         <label>
+          Тип оружия
+          <select data-fast-nri-weapon-type>
+            <option value="" {{#unless system.typeId}}selected{{/unless}}>— Не указан —</option>
+            {{selectOptions weaponTypeChoices selected=system.typeId}}
+          </select>
+        </label>
+        <label>
+          Категория
+          <select data-fast-nri-weapon-category title="HB-04: категория всегда соответствует выбранному типу оружия">
+            <option value="" {{#unless system.categoryId}}selected{{/unless}}>— Не указана —</option>
+            {{selectOptions weaponCategoryChoices selected=system.categoryId}}
+          </select>
+        </label>
+      </div>
+      <small class="fast-nri-help">HB-04: тип и категория образуют системную пару. Смена категории выбирает совместимый тип.</small>
+
+      <div class="fast-nri-two">
+        <label>
           Дистанция
           <input type="text" name="system.range" value="{{system.range}}" />
         </label>

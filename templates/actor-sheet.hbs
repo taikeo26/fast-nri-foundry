@@ -78,10 +78,12 @@
           <input type="number" name="system.speed" value="{{system.speed}}" />
         </div>
 
-        <div class="fast-nri-card">
-          <h3>Куб боя</h3>
-          <input type="text" name="system.combatDie" value="{{system.combatDie}}" />
-        </div>
+        {{#unless isCreature}}
+          <div class="fast-nri-card">
+            <h3>Куб боя</h3>
+            <input type="text" name="system.combatDie" value="{{system.combatDie}}" />
+          </div>
+        {{/unless}}
 
         <div class="fast-nri-card">
           <h3>Инициатива</h3>
@@ -158,6 +160,29 @@
           <small class="fast-nri-help">Используйте только если карточка существа прямо заменяет характеристику Самозащиты.</small>
         {{/if}}
       </section>
+
+      {{#unless isCreature}}
+        <section class="fast-nri-section fast-nri-weapon-training">
+          <h2>Оружейная подготовка</h2>
+          <p class="fast-nri-help">
+            Владения и Мастерства выбираются по системным типам оружия. HB-03 не допускает Мастерство без Владения.
+          </p>
+          <div class="fast-nri-two">
+            <label class="fast-nri-property-field">
+              Владения
+              <multi-select name="system.weaponProficiencyIds">
+                {{selectOptions weaponTypeChoices selected=system.weaponProficiencyIds}}
+              </multi-select>
+            </label>
+            <label class="fast-nri-property-field">
+              Мастерства
+              <multi-select name="system.weaponMasteryIds">
+                {{selectOptions weaponTypeChoices selected=system.weaponMasteryIds}}
+              </multi-select>
+            </label>
+          </div>
+        </section>
+      {{/unless}}
 
       <section class="fast-nri-section">
         <h2>Устойчивости</h2>

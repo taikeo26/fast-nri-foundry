@@ -6,7 +6,9 @@
 
 export const HARD_BLOCK_IDS = Object.freeze({
   heldItems: "HB-01",
-  interventionChain: "HB-02"
+  interventionChain: "HB-02",
+  masteryRequiresProficiency: "HB-03",
+  weaponCategoryByType: "HB-04"
 });
 
 export const HARD_BLOCK_REGISTRY = Object.freeze({
@@ -29,6 +31,26 @@ export const HARD_BLOCK_REGISTRY = Object.freeze({
     doesNotBlock: "Нехватку запаса Вмешательств, спорный тайминг, повтор того же участника и последовательные Защиты обычного действия.",
     ui: "Вариант не является рабочим; обходной запуск останавливается с сообщением HB-02.",
     enforcement: "action-context"
+  }),
+  [HARD_BLOCK_IDS.masteryRequiresProficiency]: Object.freeze({
+    id: HARD_BLOCK_IDS.masteryRequiresProficiency,
+    key: "mastery-requires-proficiency",
+    label: "Мастерство требует Владения",
+    scope: "Структурированные списки Владений и Мастерств оружия Character Actor.",
+    blocks: "Состояние, в котором typeId присутствует в Мастерствах, но отсутствует во Владениях.",
+    doesNotBlock: "Ручное добавление/удаление Владений и Мастерств в допустимых сочетаниях.",
+    ui: "Добавление Мастерства добавляет Владение; удаление Владения удаляет соответствующее Мастерство.",
+    enforcement: "weapon-training"
+  }),
+  [HARD_BLOCK_IDS.weaponCategoryByType]: Object.freeze({
+    id: HARD_BLOCK_IDS.weaponCategoryByType,
+    key: "weapon-category-by-type",
+    label: "Категория оружия привязана к типу",
+    scope: "Структурированные typeId/categoryId Weapon Item.",
+    blocks: "Несовместимую пару typeId/categoryId, которой нет в системном справочнике оружия.",
+    doesNotBlock: "Вид атаки melee/ranged и прочие свойства Weapon.",
+    ui: "Смена типа синхронизирует категорию; смена категории выбирает совместимый тип.",
+    enforcement: "weapon-taxonomy"
   })
 });
 

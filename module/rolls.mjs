@@ -62,6 +62,8 @@ import {
   abilityProfile
 } from "./ability-authoring.mjs";
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
+import { formulaWithActorCombatTerm, resolveActorCombatTerm, resolveWeaponAttackTerm } from "./attack-term.mjs";
+import { weaponCategoryLabel, weaponTypeLabel } from "./weapon-taxonomy.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -925,8 +927,9 @@ export async function rollWeaponAttack(actor, weapon) {
   if (!itemIsUsable(weapon)) return null;
 
   const attackType = inferWeaponAttackType(weapon);
-  const combatDie = String(actor.system?.combatDie ?? "").trim();
-  const baseFormula = combatDie ? `1d20 + ${combatDie}` : "1d20";
+  const attackTerm = resolveWeaponAttackTerm(actor, weapon);
+  const attackTermFormula = String(attackTerm?.formula ?? "").trim();
+  const baseFormula = attackTermFormula ? `1d20 + ${attackTermFormula}` : "1d20";
   const target = getSingleTarget();
   const baseActionContext = actionContextFromWeapon(actor, weapon, { target });
   const previewTargetDefense = target?.actor
@@ -943,7 +946,11 @@ export async function rollWeaponAttack(actor, weapon) {
     baseFormula,
     baseSources: [
       { formula: "1d20", label: "Базовый d20", reason: "Атака" },
-      ...(combatDie ? [{ formula: combatDie, label: "Куб боя", reason: actor.name }] : [])
+      ...(attackTermFormula ? [{
+        formula: attackTermFormula,
+        label: attackTerm?.label || "Модификатор атаки",
+        reason: attackTerm?.reason || actor.name
+      }] : [])
     ],
     showDC: false,
     contextHTML: armorContextHTML(
@@ -982,6 +989,8 @@ export async function rollWeaponAttack(actor, weapon) {
       ${rollCardHeader("Попадание", "fa-swords")}
       ${attackResultHTML(weapon, target, degree, result.roll.total)}
       <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
+      <div class="fast-nri-attack-type"><small>Тип оружия: <strong>${esc(weaponTypeLabel(weapon.system?.typeId) || "не указан")}</strong>${weapon.system?.categoryId ? ` · ${esc(weaponCategoryLabel(weapon.system.categoryId))}` : ""}</small></div>
+      <div class="fast-nri-attack-type"><small>Базовый член атаки: <strong>${esc(attackTerm?.label || "только d20")}</strong>${attackTerm?.reason ? ` · ${esc(attackTerm.reason)}` : ""}</small></div>
       ${armorMetaHTML(target, effectiveArmor, targetState)}
 
       ${critical ? `
@@ -1011,6 +1020,11 @@ export async function rollWeaponAttack(actor, weapon) {
         rollTotal: result.roll.total,
         naturalD20: result.naturalD20,
         attackType,
+        attackTermKind: attackTerm?.kind ?? "unproficient",
+        weaponTypeId: String(weapon.system?.typeId ?? ""),
+        weaponCategoryId: String(weapon.system?.categoryId ?? ""),
+        weaponProficient: Boolean(attackTerm?.proficient),
+        weaponMastery: Boolean(attackTerm?.mastery),
         actionTraits: actionContext.traits,
         actionContext,
         offGuard: Boolean(targetState?.offGuard),
@@ -2585,14 +2599,7 @@ function hpGainRollCardHTML({ item, kind, state, modifiersHTML = "" }) {
 
 
 function expandAbilityCheckFormula(actor, rawFormula) {
-  const combatDie = String(actor?.system?.combatDie ?? "").trim();
-  const replacement = combatDie || "0";
-  const formula = String(rawFormula ?? "1d20 + {combatDie}")
-    .replaceAll("{combatDie}", replacement)
-    .replaceAll("@combatDie", replacement)
-    .trim();
-
-  return formula || "1d20";
+  return formulaWithActorCombatTerm(actor, rawFormula);
 }
 
 function abilityCheckFormulaSources(actor, rawFormula, expandedFormula, targetCharacteristic) {
@@ -2601,13 +2608,13 @@ function abilityCheckFormulaSources(actor, rawFormula, expandedFormula, targetCh
   const label = `Проверка против ${targetLabel}`;
 
   if (raw.includes("{combatDie}") || raw.includes("@combatDie")) {
-    const combatDie = String(actor?.system?.combatDie ?? "").trim();
+    const term = resolveActorCombatTerm(actor);
     return [{
       formula: expandedFormula,
       label,
-      reason: combatDie
-        ? `Формула способности; Куб боя ${combatDie}`
-        : "Формула способности; Куб боя отсутствует"
+      reason: term
+        ? `Формула способности; ${term.label} ${term.formula}`
+        : "Формула способности; боевой член отсутствует"
     }];
   }
 

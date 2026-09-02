@@ -52,6 +52,14 @@ import {
   DEFENSE_TARGET_SCOPES
 } from "./defense-actions.mjs";
 import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
+import {
+  WEAPON_CATEGORY_CHOICES,
+  WEAPON_TYPE_CHOICES,
+  firstWeaponTypeIdForCategory,
+  normalizeWeaponCategoryId,
+  normalizeWeaponTypeId,
+  weaponCategoryIdForType
+} from "./weapon-taxonomy.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2, ItemSheetV2 } = foundry.applications.sheets;
@@ -248,6 +256,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       skillRows,
       specializationRows,
       traitChoices: CREATURE_TRAITS,
+      weaponTypeChoices: WEAPON_TYPE_CHOICES,
       resistanceChoices: RESISTANCE_TRAITS,
       selectedResistanceIds: Array.from(resistanceIds),
       resistanceRows,
@@ -710,6 +719,56 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       });
     }
 
+
+    const weaponType = this.element.querySelector("[data-fast-nri-weapon-type]");
+    if (weaponType) {
+      weaponType.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const input = event.currentTarget;
+        const typeId = normalizeWeaponTypeId(input.value);
+        input.disabled = true;
+        try {
+          await this.item.update({
+            "system.typeId": typeId,
+            "system.categoryId": weaponCategoryIdForType(typeId)
+          });
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка изменения типа оружия", error);
+          ui.notifications.error(`Не удалось изменить тип оружия: ${error.message}`);
+        } finally {
+          if (input.isConnected) input.disabled = false;
+        }
+      });
+    }
+
+    const weaponCategory = this.element.querySelector("[data-fast-nri-weapon-category]");
+    if (weaponCategory) {
+      weaponCategory.addEventListener("change", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const input = event.currentTarget;
+        const categoryId = normalizeWeaponCategoryId(input.value);
+        const currentTypeId = normalizeWeaponTypeId(this.item.system?.typeId);
+        const nextTypeId = categoryId
+          ? (weaponCategoryIdForType(currentTypeId) === categoryId
+              ? currentTypeId
+              : firstWeaponTypeIdForCategory(categoryId))
+          : "";
+        input.disabled = true;
+        try {
+          await this.item.update({
+            "system.typeId": nextTypeId,
+            "system.categoryId": weaponCategoryIdForType(nextTypeId)
+          });
+        } catch (error) {
+          console.error("Быстрая НРИ | Ошибка изменения категории оружия", error);
+          ui.notifications.error(`Не удалось изменить категорию оружия: ${error.message}`);
+        } finally {
+          if (input.isConnected) input.disabled = false;
+        }
+      });
+    }
 
     for (const input of this.element.querySelectorAll("[data-fast-nri-damage-component-field]")) {
       input.addEventListener("change", async event => {
@@ -1631,6 +1690,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       propertyChoices: this.item.type === "equipment"
         ? Object.fromEntries(Object.entries(ITEM_PROPERTIES).filter(([id]) => id !== "unarmed"))
         : ITEM_PROPERTIES,
+      weaponTypeChoices: WEAPON_TYPE_CHOICES,
+      weaponCategoryChoices: WEAPON_CATEGORY_CHOICES,
       damageTraitChoices: CREATURE_TRAITS,
       damageComponentProfiles,
       outcomeChannels,

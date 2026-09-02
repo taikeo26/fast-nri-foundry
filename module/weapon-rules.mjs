@@ -1,3 +1,10 @@
+import {
+  normalizeActorWeaponTraining,
+  normalizeActorWeaponTrainingUpdate,
+  normalizeWeaponTaxonomy,
+  normalizeWeaponTaxonomyUpdate
+} from "./weapon-taxonomy.mjs";
+
 export const UNARMED_PROPERTY_ID = "unarmed";
 export const DEFAULT_UNARMED_ATTACK_NAME = "Безоружная атака";
 
@@ -148,6 +155,8 @@ export function defaultUnarmedAttackData() {
     type: "weapon",
     system: {
       range: "Ближняя",
+      typeId: "",
+      categoryId: "",
       attackType: "melee",
       propertyIds: [UNARMED_PROPERTY_ID],
       equipped: true,
@@ -184,10 +193,14 @@ export function activateWeaponRules() {
   Hooks.on("preCreateItem", item => {
     if (item?.type !== "weapon") return;
 
-    const normalized = normalizeWeaponSystem(item.system ?? item._source?.system ?? {});
+    const sourceSystem = item.system ?? item._source?.system ?? {};
+    const normalized = normalizeWeaponSystem(sourceSystem);
+    const taxonomy = normalizeWeaponTaxonomy(sourceSystem);
     item.updateSource({
       "system.hands": normalized.hands,
       "system.propertyIds": normalized.propertyIds,
+      "system.typeId": taxonomy.typeId,
+      "system.categoryId": taxonomy.categoryId,
       ...(normalized.hands === 0 ? {
         "system.held": false,
         "system.equippedAt": 0
@@ -197,9 +210,21 @@ export function activateWeaponRules() {
 
   Hooks.on("preUpdateItem", (item, changes) => {
     normalizeWeaponUpdate(item, changes);
+    normalizeWeaponTaxonomyUpdate(item, changes);
   });
 
   Hooks.on("preCreateActor", actor => {
+    if (actor?.type === "character") {
+      const training = normalizeActorWeaponTraining(actor.system ?? actor._source?.system ?? {});
+      actor.updateSource({
+        "system.weaponProficiencyIds": training.weaponProficiencyIds,
+        "system.weaponMasteryIds": training.weaponMasteryIds
+      });
+    }
     addDefaultUnarmedAttackToActorSource(actor);
+  });
+
+  Hooks.on("preUpdateActor", (actor, changes) => {
+    normalizeActorWeaponTrainingUpdate(actor, changes);
   });
 }

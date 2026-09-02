@@ -5,6 +5,7 @@ import {
 } from "./action-context.mjs";
 import { hardBlockDefenseCandidate } from "./hard-blocks.mjs";
 import { abilityCosts, abilityImplementationRuntime, abilityImplementations } from "./ability-authoring.mjs";
+import { resolveActorCombatTerm } from "./attack-term.mjs";
 
 const SYSTEM_ID = "fast-nri";
 const MIGRATION_SETTING = "defenseInfrastructureMigrated";
@@ -152,29 +153,14 @@ export function resolveDefenseCombatSource(actor, actionItem = null, role = "sel
     };
   }
 
-  const combatDie = String(actor?.system?.combatDie ?? "").trim();
-  if (combatDie) {
-    return {
-      formula: combatDie,
-      label: "Куб боя",
-      reason: actor?.name ?? "",
-      sourceItemUuid: null
-    };
-  }
-
-  if (actor?.type === "creature") {
-    const attackModifier = Number(actor?.system?.attackModifier);
-    if (Number.isFinite(attackModifier)) {
-      return {
-        formula: String(attackModifier),
-        label: "Модификатор атаки",
-        reason: "Существо Бестиария без Куба боя",
-        sourceItemUuid: null
-      };
-    }
-  }
-
-  return null;
+  const term = resolveActorCombatTerm(actor);
+  if (!term) return null;
+  return {
+    formula: term.formula,
+    label: term.label,
+    reason: term.reason,
+    sourceItemUuid: null
+  };
 }
 
 export function tokenFootprint(tokenLike, gridSize = null) {
