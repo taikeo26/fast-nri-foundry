@@ -1493,7 +1493,7 @@ function damageCardHTML({
       <div class="fast-nri-chat-damage-profile-name">
         ${esc(profileLabel)}
       </div>
-      ${targetName ? `<div class="fast-nri-chat-damage-target">Цель: <strong>${esc(targetName)}</strong></div>` : ""}
+      ${targetName ? `<div class="fast-nri-chat-damage-target">Исходная цель: <strong>${esc(targetName)}</strong></div>` : ""}
 
       ${damagePartsHTML(state)}
       ${manualDamageSummaryHTML(state)}
@@ -1531,7 +1531,7 @@ function damageCardHTML({
           ${state.fullCancel ? "disabled" : ""}
           title="${state.fullCancel
             ? "Действие полностью отменено"
-            : `Нанести ${escAttr(baseDamage)} урона выделенному токену`
+            : `Применить этот пул к текущим Targets / выделенным токенам`
           }"
         >
           <i class="fa-solid fa-heart-crack"></i>
@@ -1548,7 +1548,7 @@ function damageCardHTML({
             ${state.fullCancel ? "disabled" : ""}
             title="${state.fullCancel
               ? "Действие полностью отменено"
-              : `Нанести ${escAttr(doubledDamage)} урона (×2)`
+              : `Применить этот пул ×2 к текущим Targets / выделенным токенам`
             }"
           >
             <i class="fa-solid fa-xmark"></i>
@@ -5156,20 +5156,31 @@ export async function selfDefenseFromChat(element) {
   return defenseFromChat(element);
 }
 
-function controlledSingleToken() {
-  const controlled = Array.from(canvas?.tokens?.controlled ?? []);
+export function damageApplicationTargets({ targetedTokens = [], controlledTokens = [] } = {}) {
+  const targeted = Array.from(targetedTokens ?? []).filter(Boolean);
+  const controlled = Array.from(controlledTokens ?? []).filter(Boolean);
+  const source = targeted.length ? targeted : controlled;
+  const seen = new Set();
 
-  if (controlled.length === 0) {
-    ui.notifications.warn("Выдели токен, которому нужно нанести урон.");
-    return null;
+  return source.filter(token => {
+    const key = token?.document?.uuid ?? token?.uuid ?? token?.id ?? token;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function currentDamageApplicationTargets() {
+  const tokens = damageApplicationTargets({
+    targetedTokens: game.user?.targets ?? [],
+    controlledTokens: canvas?.tokens?.controlled ?? []
+  });
+
+  if (!tokens.length) {
+    ui.notifications.warn("Выбери одну или несколько целей (Target) либо выдели токены, которым нужно нанести урон.");
   }
 
-  if (controlled.length > 1) {
-    ui.notifications.warn("Для нанесения урона должен быть выделен только один токен.");
-    return null;
-  }
-
-  return controlled[0];
+  return tokens;
 }
 
 function partMatchIds(part) {
@@ -5395,22 +5406,9 @@ function appliedDamageMessageContent({
 export async function applyDamageFromChat(element) {
   const fallbackDamage = Number(element?.dataset?.damage);
   const multiplier = Number(element?.dataset?.multiplier) === 2 ? 2 : 1;
-
   const sourceMessage = chatMessageFromElement(element);
-  const boundTargetUuid = sourceMessage?.getFlag("fast-nri", "resultTargetUuid") ?? null;
-  const token = boundTargetUuid
-    ? await tokenPlaceableFromUuid(boundTargetUuid)
-    : controlledSingleToken();
-  if (!token) {
-    if (boundTargetUuid) ui.notifications.error("Не удалось найти цель, закреплённую за этой карточкой результата.");
-    return null;
-  }
-
-  const actor = token.actor;
-  if (!actor) {
-    ui.notifications.error("У выделенного токена нет Actor.");
-    return null;
-  }
+  const tokens = currentDamageApplicationTargets();
+  if (!tokens.length) return null;
 
   const supersededBy = sourceMessage?.getFlag("fast-nri", "supersededByDamageMessageId") ?? null;
   if (supersededBy) {
@@ -5418,127 +5416,147 @@ export async function applyDamageFromChat(element) {
       "У этой Damage-card есть более новая ревизия. Применение не блокируется; проверьте, что выбрана нужная карточка."
     );
   }
+
   const damageState = sourceMessage?.getFlag("fast-nri", "damageState") ?? null;
   const sourceActionContext = actionContextFromMessage(sourceMessage);
+  if (!damageState?.supported && (!Number.isFinite(fallbackDamage) || fallbackDamage < 0)) {
+    ui.notifications.error("Не удалось определить величину урона.");
+    return null;
+  }
 
-  let resolution;
-  if (damageState?.supported) {
-    resolution = resolveDamageAgainstActor(damageState, actor, multiplier);
-  } else {
-    if (!Number.isFinite(fallbackDamage) || fallbackDamage < 0) {
-      ui.notifications.error("Не удалось определить величину урона.");
-      return null;
+  const applied = [];
+
+  for (const token of tokens) {
+    const actor = token?.actor;
+    if (!actor) {
+      ui.notifications.warn(`${token?.name ?? "Выбранная цель"}: у токена нет Actor; цель пропущена.`);
+      continue;
     }
 
-    resolution = {
-      multiplier,
-      sourceParts: [],
-      survivingParts: [],
-      immuneParts: [],
-      activeMatchIds: [],
-      partsTotal: fallbackDamage / multiplier,
-      penalty: 0,
-      afterPenalty: fallbackDamage / multiplier,
-      afterMultiplier: fallbackDamage,
-      matchingResistances: [],
-      matchingVulnerabilities: [],
-      resistance: null,
-      vulnerability: null,
-      finalDamage: fallbackDamage,
-      fullCancel: false
-    };
-  }
-
-  const previousHp = Number(actor.system?.hp?.value);
-  const previousTemp = Math.max(0, Number(actor.system?.hp?.temp) || 0);
-
-  if (!Number.isFinite(previousHp)) {
-    ui.notifications.error("У выделенного токена нет корректного значения HP.");
-    return null;
-  }
-
-  const finalDamage = Math.max(0, Number(resolution.finalDamage) || 0);
-  const appliedToTemp = Math.min(previousTemp, finalDamage);
-  const remainingAfterTemp = Math.max(0, finalDamage - appliedToTemp);
-  const afterTemp = Math.max(0, previousTemp - appliedToTemp);
-  const afterHp = Math.max(0, previousHp - remainingAfterTemp);
-  const appliedToHp = previousHp - afterHp;
-  const appliedDamage = appliedToTemp + appliedToHp;
-
-  try {
-    await actor.update({
-      "system.hp.temp": afterTemp,
-      "system.hp.value": afterHp
-    }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
-  } catch (error) {
-    console.error("Быстрая НРИ | Ошибка нанесения урона", error);
-    ui.notifications.error("Не удалось изменить HP выделенного токена.");
-    return null;
-  }
-
-  const tokenUuid = tokenDocumentUuid(token) ?? "";
-  const actorUuid = actor.uuid;
-  const tokenName = token.name || actor.name || "Цель";
-  const resolutionHTML = damageResolutionHTML(resolution, {
-    tempAbsorbed: appliedToTemp,
-    hpLost: appliedToHp
-  });
-
-  const content = appliedDamageMessageContent({
-    tokenName,
-    damage: finalDamage,
-    tokenUuid,
-    actorUuid,
-    previousHp,
-    afterHp,
-    previousTemp,
-    afterTemp,
-    appliedToHp,
-    appliedToTemp,
-    resolutionHTML
-  });
-
-  const message = await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor, token: token.document ?? token }),
-    content,
-    flags: {
-      "fast-nri": {
-        kind: "damage-applied",
-        tokenUuid,
-        actorUuid,
-        tokenName,
-        requestedDamage: finalDamage,
-        appliedDamage,
-        appliedToHp,
-        appliedToTemp,
-        previousHp,
-        afterHp,
-        previousTemp,
-        afterTemp,
+    let resolution;
+    if (damageState?.supported) {
+      // Один и тот же сохранённый пул разрешается отдельно против каждого Actor.
+      // resolveDamageAgainstActor клонирует части, поэтому Иммунитеты / Устойчивости /
+      // Уязвимости одной цели не изменяют состояние карточки и расчёт другой цели.
+      resolution = resolveDamageAgainstActor(damageState, actor, multiplier);
+    } else {
+      resolution = {
         multiplier,
-        resolution,
-        actionContext: sourceActionContext
-          ? deriveActionContext(sourceActionContext, { parentMessageId: sourceMessage?.id ?? null })
-          : null,
-        undone: false
-      }
+        sourceParts: [],
+        survivingParts: [],
+        immuneParts: [],
+        activeMatchIds: [],
+        partsTotal: fallbackDamage / multiplier,
+        penalty: 0,
+        afterPenalty: fallbackDamage / multiplier,
+        afterMultiplier: fallbackDamage,
+        matchingResistances: [],
+        matchingVulnerabilities: [],
+        resistance: null,
+        vulnerability: null,
+        finalDamage: fallbackDamage,
+        fullCancel: false
+      };
     }
-  });
 
-  return {
-    message,
-    token,
-    actor,
-    requestedDamage: finalDamage,
-    appliedDamage,
-    appliedToHp,
-    appliedToTemp,
-    previousHp,
-    afterHp,
-    previousTemp,
-    afterTemp,
-    resolution
-  };
+    const previousHp = Number(actor.system?.hp?.value);
+    const previousTemp = Math.max(0, Number(actor.system?.hp?.temp) || 0);
+
+    if (!Number.isFinite(previousHp)) {
+      ui.notifications.warn(`${token?.name ?? actor.name ?? "Выбранная цель"}: нет корректного значения HP; цель пропущена.`);
+      continue;
+    }
+
+    const finalDamage = Math.max(0, Number(resolution.finalDamage) || 0);
+    const appliedToTemp = Math.min(previousTemp, finalDamage);
+    const remainingAfterTemp = Math.max(0, finalDamage - appliedToTemp);
+    const afterTemp = Math.max(0, previousTemp - appliedToTemp);
+    const afterHp = Math.max(0, previousHp - remainingAfterTemp);
+    const appliedToHp = previousHp - afterHp;
+    const appliedDamage = appliedToTemp + appliedToHp;
+
+    try {
+      await actor.update({
+        "system.hp.temp": afterTemp,
+        "system.hp.value": afterHp
+      }, { [HP_FEEDBACK_SUPPRESS_OPTION]: true });
+    } catch (error) {
+      console.error("Быстрая НРИ | Ошибка нанесения урона", error);
+      ui.notifications.warn(`${token?.name ?? actor.name ?? "Выбранная цель"}: не удалось изменить HP; цель пропущена.`);
+      continue;
+    }
+
+    const tokenUuid = tokenDocumentUuid(token) ?? "";
+    const actorUuid = actor.uuid;
+    const tokenName = token.name || actor.name || "Цель";
+    const resolutionHTML = damageResolutionHTML(resolution, {
+      tempAbsorbed: appliedToTemp,
+      hpLost: appliedToHp
+    });
+
+    const content = appliedDamageMessageContent({
+      tokenName,
+      damage: finalDamage,
+      tokenUuid,
+      actorUuid,
+      previousHp,
+      afterHp,
+      previousTemp,
+      afterTemp,
+      appliedToHp,
+      appliedToTemp,
+      resolutionHTML
+    });
+
+    const message = await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor, token: token.document ?? token }),
+      content,
+      flags: {
+        "fast-nri": {
+          kind: "damage-applied",
+          tokenUuid,
+          actorUuid,
+          tokenName,
+          requestedDamage: finalDamage,
+          appliedDamage,
+          appliedToHp,
+          appliedToTemp,
+          previousHp,
+          afterHp,
+          previousTemp,
+          afterTemp,
+          multiplier,
+          resolution,
+          actionContext: sourceActionContext
+            ? deriveActionContext(sourceActionContext, {
+                targets: [token],
+                parentMessageId: sourceMessage?.id ?? null
+              })
+            : null,
+          undone: false
+        }
+      }
+    });
+
+    applied.push({
+      message,
+      token,
+      actor,
+      requestedDamage: finalDamage,
+      appliedDamage,
+      appliedToHp,
+      appliedToTemp,
+      previousHp,
+      afterHp,
+      previousTemp,
+      afterTemp,
+      resolution
+    });
+  }
+
+  if (!applied.length) return null;
+  if (applied.length === 1) return { ...applied[0], applied, count: 1 };
+  return { applied, count: applied.length };
 }
 
 async function resolveDamageActor({ tokenUuid, actorUuid }) {

@@ -9,7 +9,7 @@
         {{#unless isEffect}}
           <label>
             Уровень
-            <input type="number" name="system.level" value="{{system.level}}" />
+            <input type="number" min="0" name="system.level" value="{{system.level}}" />
           </label>
         {{/unless}}
       </div>
@@ -176,9 +176,6 @@
         </div>
       </div>
 
-      <div class="fast-nri-form-grid two-columns">
-        <label>Уровень <input type="number" min="0" name="system.level" value="{{system.level}}" /></label>
-      </div>
       <label>Общее описание способности
         <prose-mirror name="system.description" value="{{system.description}}" toggled></prose-mirror>
       </label>
