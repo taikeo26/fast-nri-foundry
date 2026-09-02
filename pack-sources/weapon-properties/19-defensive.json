@@ -1,0 +1,21 @@
+{
+  "name": "Защитное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "defensive",
+    "description": "<p>Удерживаемое оружие или Щит с этим свойством добавляет <code>1d6</code> к вашей проверке действия со свойством <strong>Защитное</strong>.</p><p>Куб не складывается с другим предметом со свойством <strong>Защитное</strong> и не применяется:</p><ul><li>к действиям <strong>«Вырваться»</strong> и <strong>«Освободить союзника»</strong>;</li><li>к Защитному действию без проверки.</li></ul><p>Свойство не изменяет КЗ и считается подходящим предметом для требования действия <strong>«Прикрыться»</strong>.</p>"
+  },
+  "_id": "Prp802d2a9ffa218",
+  "effects": [],
+  "folder": null,
+  "sort": 1900000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "defensive"
+    }
+  }
+}

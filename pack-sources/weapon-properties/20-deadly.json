@@ -1,0 +1,21 @@
+{
+  "name": "Смертельное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "deadly",
+    "description": "<p><strong>Большой успех:</strong> цель получает <code>−10</code> к Самозащите против этой атаки.</p>"
+  },
+  "_id": "Prp82967ec5ce9e0",
+  "effects": [],
+  "folder": null,
+  "sort": 2000000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "deadly"
+    }
+  }
+}

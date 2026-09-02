@@ -1,1 +1,53 @@
-{"name":"Кистень","type":"weapon","img":"icons/weapons/maces/flail-ball-grey.webp","system":{"level":2,"description":"<p><strong>Категория:</strong> Цепное оружие. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> ближняя. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Сокрушение.</p><p><strong>Владеют по текущему Rulebook:</strong> Защитник.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d6+1d4; Большой успех 1d6+1d4+3. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>","range":"ближняя","typeId":"flail","categoryId":"chainWeapons","attackType":"melee","propertyIds":["crushing"],"details":"","equipped":false,"held":false,"hands":1,"equippedAt":0,"damageType":"physical","damage":{"partial":"1d6","success":"1d6+1d4","great":"1d6+1d4+3"},"damageComponents":{"partial":[],"success":[],"great":[]}},"_id":"Wpnb334cddd1e794","effects":[],"folder":null,"sort":200000,"flags":{"fast-nri":{"contentPack":"weapons","sourceEdition":"6.3","sourceTable":"Оружие","weaponTypeId":"flail","rulebookCategory":"Цепное оружие","rulebookHands":"1","rulebookRange":"ближняя","rulebookDamageType":"физический","rulebookProficientClasses":["Защитник"],"rulebookPrice":1,"stockIcon":"icons/weapons/maces/flail-ball-grey.webp"}}}
+{
+  "name": "Кистень",
+  "type": "weapon",
+  "img": "icons/weapons/maces/flail-ball-grey.webp",
+  "system": {
+    "level": 2,
+    "description": "<p><strong>Категория:</strong> Цепное оружие. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> 1. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Сокрушение.</p><p><strong>Владеют по текущему Rulebook:</strong> Защитник.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d6+1d4; Большой успех 1d6+1d4+3. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>",
+    "range": "1",
+    "typeId": "flail",
+    "categoryId": "chainWeapons",
+    "attackType": "melee",
+    "propertyIds": [
+      "crushing"
+    ],
+    "details": "",
+    "equipped": false,
+    "held": false,
+    "hands": 1,
+    "equippedAt": 0,
+    "damageType": "physical",
+    "damage": {
+      "partial": "1d6",
+      "success": "1d6+1d4",
+      "great": "1d6+1d4+3"
+    },
+    "damageComponents": {
+      "partial": [],
+      "success": [],
+      "great": []
+    }
+  },
+  "_id": "Wpnb334cddd1e794",
+  "effects": [],
+  "folder": null,
+  "sort": 200000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapons",
+      "sourceEdition": "6.3",
+      "sourceTable": "Оружие",
+      "weaponTypeId": "flail",
+      "rulebookCategory": "Цепное оружие",
+      "rulebookHands": "1",
+      "rulebookRange": "ближняя",
+      "rulebookDamageType": "физический",
+      "rulebookProficientClasses": [
+        "Защитник"
+      ],
+      "rulebookPrice": 1,
+      "stockIcon": "icons/weapons/maces/flail-ball-grey.webp"
+    }
+  }
+}

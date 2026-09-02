@@ -1,1 +1,53 @@
-{"name":"Цеп","type":"weapon","img":"icons/skills/melee/strike-chain-whip-blue.webp","system":{"level":1,"description":"<p><strong>Категория:</strong> Цепное оружие. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> ближняя. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Пробивающий.</p><p><strong>Владеют по текущему Rulebook:</strong> Защитник.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d6+1d4; Большой успех 1d6+1d4+3. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>","range":"ближняя","typeId":"chain","categoryId":"chainWeapons","attackType":"melee","propertyIds":["piercing"],"details":"","equipped":false,"held":false,"hands":1,"equippedAt":0,"damageType":"physical","damage":{"partial":"1d6","success":"1d6+1d4","great":"1d6+1d4+3"},"damageComponents":{"partial":[],"success":[],"great":[]}},"_id":"Wpn9414886b1ebf0","effects":[],"folder":null,"sort":100000,"flags":{"fast-nri":{"contentPack":"weapons","sourceEdition":"6.3","sourceTable":"Оружие","weaponTypeId":"chain","rulebookCategory":"Цепное оружие","rulebookHands":"1","rulebookRange":"ближняя","rulebookDamageType":"физический","rulebookProficientClasses":["Защитник"],"rulebookPrice":1,"stockIcon":"icons/skills/melee/strike-chain-whip-blue.webp"}}}
+{
+  "name": "Цеп",
+  "type": "weapon",
+  "img": "icons/skills/melee/strike-chain-whip-blue.webp",
+  "system": {
+    "level": 1,
+    "description": "<p><strong>Категория:</strong> Цепное оружие. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> 1. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Пробивающий.</p><p><strong>Владеют по текущему Rulebook:</strong> Защитник.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d6+1d4; Большой успех 1d6+1d4+3. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>",
+    "range": "1",
+    "typeId": "chain",
+    "categoryId": "chainWeapons",
+    "attackType": "melee",
+    "propertyIds": [
+      "piercing"
+    ],
+    "details": "",
+    "equipped": false,
+    "held": false,
+    "hands": 1,
+    "equippedAt": 0,
+    "damageType": "physical",
+    "damage": {
+      "partial": "1d6",
+      "success": "1d6+1d4",
+      "great": "1d6+1d4+3"
+    },
+    "damageComponents": {
+      "partial": [],
+      "success": [],
+      "great": []
+    }
+  },
+  "_id": "Wpn9414886b1ebf0",
+  "effects": [],
+  "folder": null,
+  "sort": 100000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapons",
+      "sourceEdition": "6.3",
+      "sourceTable": "Оружие",
+      "weaponTypeId": "chain",
+      "rulebookCategory": "Цепное оружие",
+      "rulebookHands": "1",
+      "rulebookRange": "ближняя",
+      "rulebookDamageType": "физический",
+      "rulebookProficientClasses": [
+        "Защитник"
+      ],
+      "rulebookPrice": 1,
+      "stockIcon": "icons/skills/melee/strike-chain-whip-blue.webp"
+    }
+  }
+}

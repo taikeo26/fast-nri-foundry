@@ -24,13 +24,18 @@ export function weaponHasProperty(weapon, propertyId) {
 }
 
 /**
- * Weapon range is still a textual field in 0.5.x. Accept the canonical
- * `Ближняя` value and closely related labels without inventing range rules.
+ * 0.5.56.2: melee/ranged is a structured Weapon property and no longer
+ * inferred from the display value of Distance. Legacy textual range is kept
+ * only as a fallback for pre-migration documents.
  */
 export function isMeleeWeapon(weapon) {
   if (!weapon || weapon.type !== "weapon") return false;
+  const attackType = String(weapon.system?.attackType ?? "").trim().toLowerCase();
+  if (attackType === "melee") return true;
+  if (attackType === "ranged") return false;
+
   const range = normalizeRange(weapon.system?.range);
-  return range === "melee" || range.startsWith("ближ");
+  return range === "melee" || range.startsWith("ближ") || range === "1";
 }
 
 /**

@@ -1,0 +1,21 @@
+{
+  "name": "Досягаемость",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "reach",
+    "description": "<p>Досягаемость измеряется в клетках и <strong>не использует правило диагоналей</strong>. Каждый переход в соседнюю клетку, включая диагональный, считается <code>1</code> клеткой Досягаемости.</p><p>Оружием с Досягаемостью можно атаковать цели на расстоянии 1 или 2 клеток Досягаемости.</p><p>Оно контролирует только клетки на расстоянии 2 Досягаемости. Такая угроза учитывается при Окружении, но цель не считается соседней.</p>"
+  },
+  "_id": "Prpbaff1506c2674",
+  "effects": [],
+  "folder": null,
+  "sort": 100000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "reach"
+    }
+  }
+}

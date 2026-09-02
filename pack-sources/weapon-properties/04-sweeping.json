@@ -1,0 +1,21 @@
+{
+  "name": "Размашистое",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "sweeping",
+    "description": "<p>После броска кубов урона этого оружия можно один раз перебросить каждый куб, на котором выпало <code>1</code> или <code>2</code>. Новый результат обязателен.</p><p>Свойство не действует на урон, добавленный к атаке. Переброс совершается до Защитных действий.</p>"
+  },
+  "_id": "Prp9457039418268",
+  "effects": [],
+  "folder": null,
+  "sort": 400000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "sweeping"
+    }
+  }
+}

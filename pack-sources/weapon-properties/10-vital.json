@@ -1,0 +1,21 @@
+{
+  "name": "Жизненное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "vital",
+    "description": "<p>Когда заклинание, применённое через это оружие, непосредственно восстанавливает HP, каждая его цель восстанавливает дополнительно <code>3 HP</code>.</p><p>Свойство не усиливает Периодическое исцеление и другие последующие срабатывания заклинания.</p>"
+  },
+  "_id": "Prp17cb65e86213d",
+  "effects": [],
+  "folder": null,
+  "sort": 1000000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "vital"
+    }
+  }
+}

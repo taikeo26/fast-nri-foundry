@@ -1,0 +1,21 @@
+{
+  "name": "Заряженное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "charged",
+    "description": "<p>Один раз в день для каждого оружия с этим свойством, объявляя через него Заклинание, можно не использовать классовые ресурсы, указанные в строке <strong>«Требуется»</strong> Заклинания. Использование Заряженного объявляется до выполнения требований этой строки.</p>"
+  },
+  "_id": "Prp37ebb98c6a9d3",
+  "effects": [],
+  "folder": null,
+  "sort": 1500000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "charged"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "Травмирующее",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "traumatic",
+    "description": "<ul><li><strong>Успех:</strong> цель Замедлена и Ослаблена.</li><li><strong>Большой успех:</strong> дополнительно получает Кровотечение <code>1d6</code>.</li></ul>"
+  },
+  "_id": "Prp3a4d4cab56ac2",
+  "effects": [],
+  "folder": null,
+  "sort": 700000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "traumatic"
+    }
+  }
+}

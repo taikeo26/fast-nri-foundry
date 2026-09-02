@@ -1,0 +1,21 @@
+{
+  "name": "Безопасное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "safe",
+    "description": "<p>При объявлении через это оружие Заклинания со свойством <strong>Область действия</strong> выберите до <code>3</code> клеток его области. Выбранные клетки исключаются из области этого Заклинания.</p>"
+  },
+  "_id": "Prpbf31c52c32b0f",
+  "effects": [],
+  "folder": null,
+  "sort": 1200000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "safe"
+    }
+  }
+}

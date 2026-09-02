@@ -7,10 +7,12 @@
       <div class="fast-nri-subline">
         <span>{{item.type}}</span>
         {{#unless isEffect}}
-          <label>
-            Уровень
-            <input type="number" min="0" name="system.level" value="{{system.level}}" />
-          </label>
+          {{#unless isWeaponProperty}}
+            <label>
+              Уровень
+              <input type="number" min="0" name="system.level" value="{{system.level}}" />
+            </label>
+          {{/unless}}
         {{/unless}}
       </div>
     </div>
@@ -60,12 +62,29 @@
 
 
       <div class="fast-nri-two">
-        <label class="fast-nri-property-field">
-          Свойства
+        <div class="fast-nri-property-field">
+          <label>Свойства</label>
           <multi-select name="system.propertyIds">
             {{selectOptions propertyChoices selected=system.propertyIds}}
           </multi-select>
-        </label>
+          {{#if selectedPropertyRows.length}}
+            <div class="fast-nri-selected-properties" aria-label="Выбранные свойства">
+              {{#each selectedPropertyRows as |property|}}
+                {{#if property.uuid}}
+                  <button
+                    type="button"
+                    class="fast-nri-property-reference content-link"
+                    data-action="openWeaponProperty"
+                    data-property-uuid="{{property.uuid}}"
+                    title="Открыть карточку свойства в Compendium"
+                  ><i class="fa-solid fa-book-open"></i>{{property.label}}</button>
+                {{else}}
+                  <span class="fast-nri-property-reference">{{property.label}}</span>
+                {{/if}}
+              {{/each}}
+            </div>
+          {{/if}}
+        </div>
         <div class="fast-nri-item-equip-config">
           <label class="fast-nri-checkbox-label" title="Активен и учитывается в системных расчётах">
             <input
@@ -485,12 +504,34 @@
         </div>
       </div>
 
-      <label class="fast-nri-property-field">
-        Свойства
+      <div class="fast-nri-property-field">
+        <label>Свойства</label>
         <multi-select name="system.propertyIds">
           {{selectOptions propertyChoices selected=system.propertyIds}}
         </multi-select>
-      </label>
+        {{#if selectedPropertyRows.length}}
+          <div class="fast-nri-selected-properties" aria-label="Выбранные свойства">
+            {{#each selectedPropertyRows as |property|}}
+              {{#if property.uuid}}
+                <button type="button" class="fast-nri-property-reference content-link" data-action="openWeaponProperty" data-property-uuid="{{property.uuid}}" title="Открыть карточку свойства в Compendium"><i class="fa-solid fa-book-open"></i>{{property.label}}</button>
+              {{else}}
+                <span class="fast-nri-property-reference">{{property.label}}</span>
+              {{/if}}
+            {{/each}}
+          </div>
+        {{/if}}
+      </div>
+    </section>
+  {{/if}}
+
+  {{#if isWeaponProperty}}
+    <section class="fast-nri-section">
+      <h2>Свойство оружия</h2>
+      <div class="fast-nri-property-reference-card">
+        <span>Системный ID</span>
+        <code>{{system.propertyId}}</code>
+      </div>
+      <small class="fast-nri-help">Справочная карточка из системного Compendium. Механика оружия использует стабильный propertyId.</small>
     </section>
   {{/if}}
 

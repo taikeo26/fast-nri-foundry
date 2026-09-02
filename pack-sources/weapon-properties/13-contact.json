@@ -1,0 +1,21 @@
+{
+  "name": "Контактное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "contact",
+    "description": "<p>Выберите соседнее существо единственной целью Заклинания. Заклинание получает свойство <strong>Быстрое</strong>.</p><p>Это свойство можно использовать только с Заклинанием, которое наносит урон и не имеет свойства <strong>Область действия</strong>.</p>"
+  },
+  "_id": "Prp1a73af9e7ae00",
+  "effects": [],
+  "folder": null,
+  "sort": 1300000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "contact"
+    }
+  }
+}

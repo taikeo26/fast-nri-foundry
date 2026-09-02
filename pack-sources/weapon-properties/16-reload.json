@@ -1,0 +1,21 @@
+{
+  "name": "Перезарядка",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "reload",
+    "description": "<p>В начале подготовленного боя оружие заряжено. После атаки оно становится разряженным и не может атаковать, пока не будет перезаряжено. Перезарядить удерживаемое разряженное оружие — <strong>Манипуляция</strong>, требующая свободной руки.</p>"
+  },
+  "_id": "Prpd6e6e576541fa",
+  "effects": [],
+  "folder": null,
+  "sort": 1600000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "reload"
+    }
+  }
+}

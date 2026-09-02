@@ -1,1 +1,54 @@
-{"name":"Серп","type":"weapon","img":"icons/weapons/sickles/sickle-simple-grey.webp","system":{"level":1,"description":"<p><strong>Категория:</strong> Серпы. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> ближняя. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Подвижное.</p><p><strong>Владеют по текущему Rulebook:</strong> Друид, Колдун.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d8+1d4; Большой успех 1d8+1d4+4. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>","range":"ближняя","typeId":"sickle","categoryId":"sickles","attackType":"melee","propertyIds":["mobile"],"details":"","equipped":false,"held":false,"hands":1,"equippedAt":0,"damageType":"physical","damage":{"partial":"1d6","success":"1d8+1d4","great":"1d8+1d4+4"},"damageComponents":{"partial":[],"success":[],"great":[]}},"_id":"Wpn64bd6cdb81547","effects":[],"folder":null,"sort":1800000,"flags":{"fast-nri":{"contentPack":"weapons","sourceEdition":"6.3","sourceTable":"Оружие","weaponTypeId":"sickle","rulebookCategory":"Серпы","rulebookHands":"1","rulebookRange":"ближняя","rulebookDamageType":"физический","rulebookProficientClasses":["Друид","Колдун"],"rulebookPrice":1,"stockIcon":"icons/weapons/sickles/sickle-simple-grey.webp"}}}
+{
+  "name": "Серп",
+  "type": "weapon",
+  "img": "icons/weapons/sickles/sickle-simple-grey.webp",
+  "system": {
+    "level": 1,
+    "description": "<p><strong>Категория:</strong> Серпы. <strong>Руки:</strong> 1. <strong>Дистанция:</strong> 1. <strong>Цена:</strong> 1.</p><p><strong>Свойства:</strong> Подвижное.</p><p><strong>Владеют по текущему Rulebook:</strong> Друид, Колдун.</p><p><strong>Профили:</strong> Частичный 1d6; Успех 1d8+1d4; Большой успех 1d8+1d4+4. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>",
+    "range": "1",
+    "typeId": "sickle",
+    "categoryId": "sickles",
+    "attackType": "melee",
+    "propertyIds": [
+      "mobile"
+    ],
+    "details": "",
+    "equipped": false,
+    "held": false,
+    "hands": 1,
+    "equippedAt": 0,
+    "damageType": "physical",
+    "damage": {
+      "partial": "1d6",
+      "success": "1d8+1d4",
+      "great": "1d8+1d4+4"
+    },
+    "damageComponents": {
+      "partial": [],
+      "success": [],
+      "great": []
+    }
+  },
+  "_id": "Wpn64bd6cdb81547",
+  "effects": [],
+  "folder": null,
+  "sort": 1800000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapons",
+      "sourceEdition": "6.3",
+      "sourceTable": "Оружие",
+      "weaponTypeId": "sickle",
+      "rulebookCategory": "Серпы",
+      "rulebookHands": "1",
+      "rulebookRange": "ближняя",
+      "rulebookDamageType": "физический",
+      "rulebookProficientClasses": [
+        "Друид",
+        "Колдун"
+      ],
+      "rulebookPrice": 1,
+      "stockIcon": "icons/weapons/sickles/sickle-simple-grey.webp"
+    }
+  }
+}

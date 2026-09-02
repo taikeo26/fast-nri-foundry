@@ -19,7 +19,7 @@ const DATA_MIGRATION_VERSION = 1;
 const EQUIPMENT_STATE_MIGRATION_SETTING = "equipmentStateMigration";
 const EQUIPMENT_STATE_MIGRATION_VERSION = 1;
 const WEAPON_TAXONOMY_MIGRATION_SETTING = "weaponTaxonomyMigration";
-const WEAPON_TAXONOMY_MIGRATION_VERSION = 1;
+const WEAPON_TAXONOMY_MIGRATION_VERSION = 2;
 
 export function registerDataMigrationSettings() {
   game.settings.register(game.system.id, DATA_MIGRATION_SETTING, {
@@ -204,17 +204,28 @@ function weaponTaxonomyItemUpdate(item) {
   const categoryId = weaponCategoryIdForType(typeId);
   const rawTypeId = String(foundry.utils.getProperty(item._source, "system.typeId") ?? "");
   const rawCategoryId = String(foundry.utils.getProperty(item._source, "system.categoryId") ?? "");
+  const rawRange = String(foundry.utils.getProperty(item._source, "system.range") ?? "").trim();
+  const normalizedRange = ["ближняя", "ближнее", "ближний"].includes(rawRange.toLowerCase())
+    ? "1"
+    : rawRange;
 
-  if (rawTypeId === typeId && rawCategoryId === categoryId) return null;
-  return {
+  if (
+    rawTypeId === typeId
+    && rawCategoryId === categoryId
+    && rawRange === normalizedRange
+  ) return null;
+
+  const update = {
     _id: item.id,
     "system.typeId": typeId,
     "system.categoryId": categoryId
   };
+  if (rawRange !== normalizedRange) update["system.range"] = normalizedRange;
+  return update;
 }
 
 /**
- * 0.5.56: materialize structured weapon taxonomy and Actor weapon training.
+ * 0.5.56–0.5.56.2: materialize structured weapon taxonomy, Actor weapon training, and normalize legacy melee range text to 1.
  * Exact Item-name matching is migration-only; runtime never infers taxonomy
  * from a name or description. Unknown legacy weapons remain untyped.
  */

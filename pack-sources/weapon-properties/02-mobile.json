@@ -1,0 +1,21 @@
+{
+  "name": "Подвижное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "mobile",
+    "description": "<p>Один раз в свой ход перед атакой этим оружием выполните свободный Шаг.</p><p>Свойство не действует в чужой ход и при атаке-Вмешательстве.</p>"
+  },
+  "_id": "Prp83d6311e87d47",
+  "effects": [],
+  "folder": null,
+  "sort": 200000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "mobile"
+    }
+  }
+}

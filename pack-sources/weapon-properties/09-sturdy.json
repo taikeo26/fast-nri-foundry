@@ -1,0 +1,21 @@
+{
+  "name": "Крепкое",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "sturdy",
+    "description": "<p><strong>Большой успех:</strong> если цель получила хотя бы <code>1</code> урона, она Оглушена.</p><p>Крепкое может Оглушить не более одного раза за ход. В чужой ход ограничение считается отдельно.</p>"
+  },
+  "_id": "Prp7ce61bfb21441",
+  "effects": [],
+  "folder": null,
+  "sort": 900000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "sturdy"
+    }
+  }
+}

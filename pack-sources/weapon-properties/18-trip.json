@@ -1,0 +1,21 @@
+{
+  "name": "Подсечка",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "trip",
+    "description": "<p>Манёвр <strong>«Сбить с ног»</strong> можно применять этим оружием по цели на всей его Дистанции.</p><p><strong>Большой успех:</strong> после нанесения урона Сбейте цель с ног.</p><p>Это связанный автоматический Манёвр. Примените общие правила связанных автоматических Манёвров.</p>"
+  },
+  "_id": "Prpfdd91fbac0e56",
+  "effects": [],
+  "folder": null,
+  "sort": 1800000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "trip"
+    }
+  }
+}

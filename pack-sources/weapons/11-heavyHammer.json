@@ -1,1 +1,53 @@
-{"name":"Тяжёлый молот","type":"weapon","img":"icons/weapons/hammers/hammer-war-spiked.webp","system":{"level":2,"description":"<p><strong>Категория:</strong> Молоты. <strong>Руки:</strong> 2. <strong>Дистанция:</strong> ближняя. <strong>Цена:</strong> 2.</p><p><strong>Свойства:</strong> Сокрушение.</p><p><strong>Владеют по текущему Rulebook:</strong> Воин.</p><p><strong>Профили:</strong> Частичный 1d8; Успех 1d12+1d4; Большой успех 1d12+1d4+6. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>","range":"ближняя","typeId":"heavyHammer","categoryId":"hammers","attackType":"melee","propertyIds":["crushing"],"details":"","equipped":false,"held":false,"hands":2,"equippedAt":0,"damageType":"physical","damage":{"partial":"1d8","success":"1d12+1d4","great":"1d12+1d4+6"},"damageComponents":{"partial":[],"success":[],"great":[]}},"_id":"Wpn64d386dbf5de8","effects":[],"folder":null,"sort":1100000,"flags":{"fast-nri":{"contentPack":"weapons","sourceEdition":"6.3","sourceTable":"Оружие","weaponTypeId":"heavyHammer","rulebookCategory":"Молоты","rulebookHands":"2","rulebookRange":"ближняя","rulebookDamageType":"физический","rulebookProficientClasses":["Воин"],"rulebookPrice":2,"stockIcon":"icons/weapons/hammers/hammer-war-spiked.webp"}}}
+{
+  "name": "Тяжёлый молот",
+  "type": "weapon",
+  "img": "icons/weapons/hammers/hammer-war-spiked.webp",
+  "system": {
+    "level": 2,
+    "description": "<p><strong>Категория:</strong> Молоты. <strong>Руки:</strong> 2. <strong>Дистанция:</strong> 1. <strong>Цена:</strong> 2.</p><p><strong>Свойства:</strong> Сокрушение.</p><p><strong>Владеют по текущему Rulebook:</strong> Воин.</p><p><strong>Профили:</strong> Частичный 1d8; Успех 1d12+1d4; Большой успех 1d12+1d4+6. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>",
+    "range": "1",
+    "typeId": "heavyHammer",
+    "categoryId": "hammers",
+    "attackType": "melee",
+    "propertyIds": [
+      "crushing"
+    ],
+    "details": "",
+    "equipped": false,
+    "held": false,
+    "hands": 2,
+    "equippedAt": 0,
+    "damageType": "physical",
+    "damage": {
+      "partial": "1d8",
+      "success": "1d12+1d4",
+      "great": "1d12+1d4+6"
+    },
+    "damageComponents": {
+      "partial": [],
+      "success": [],
+      "great": []
+    }
+  },
+  "_id": "Wpn64d386dbf5de8",
+  "effects": [],
+  "folder": null,
+  "sort": 1100000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapons",
+      "sourceEdition": "6.3",
+      "sourceTable": "Оружие",
+      "weaponTypeId": "heavyHammer",
+      "rulebookCategory": "Молоты",
+      "rulebookHands": "2",
+      "rulebookRange": "ближняя",
+      "rulebookDamageType": "физический",
+      "rulebookProficientClasses": [
+        "Воин"
+      ],
+      "rulebookPrice": 2,
+      "stockIcon": "icons/weapons/hammers/hammer-war-spiked.webp"
+    }
+  }
+}

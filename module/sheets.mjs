@@ -60,6 +60,9 @@ import {
   normalizeWeaponTypeId,
   weaponCategoryIdForType
 } from "./weapon-taxonomy.mjs";
+import {
+  weaponPropertyReference
+} from "./weapon-properties.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2, ItemSheetV2 } = foundry.applications.sheets;
@@ -570,7 +573,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       addImplementationProfileComponent: FastNriItemSheet.#addImplementationProfileComponent,
       removeImplementationProfileComponent: FastNriItemSheet.#removeImplementationProfileComponent,
       removeImplementationEffect: FastNriItemSheet.#removeImplementationEffect,
-      removeImplementationProfileEffect: FastNriItemSheet.#removeImplementationProfileEffect
+      removeImplementationProfileEffect: FastNriItemSheet.#removeImplementationProfileEffect,
+      openWeaponProperty: FastNriItemSheet.#openWeaponProperty
     }
   };
 
@@ -1490,6 +1494,23 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     });
   }
 
+  static async #openWeaponProperty(event, target) {
+    event.preventDefault();
+    const uuid = String(target?.dataset?.propertyUuid ?? "").trim();
+    if (!uuid) return;
+    try {
+      const document = await fromUuid(uuid);
+      if (!document) {
+        ui.notifications.warn("Карточка свойства не найдена в системном Compendium.");
+        return;
+      }
+      document.sheet?.render(true);
+    } catch (error) {
+      console.error("Быстрая НРИ | Ошибка открытия свойства оружия", error);
+      ui.notifications.error(`Не удалось открыть свойство: ${error.message}`);
+    }
+  }
+
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
 
@@ -1683,10 +1704,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       durationLabel: durationDefinitionLabel(effect.system)
     }));
 
+    const selectedPropertyRows = Array.from(this.item.system?.propertyIds ?? [])
+      .map(id => weaponPropertyReference(id));
+
     return {
       ...context,
       item: this.item,
       system: this.item.system,
+      selectedPropertyRows,
       propertyChoices: this.item.type === "equipment"
         ? Object.fromEntries(Object.entries(ITEM_PROPERTIES).filter(([id]) => id !== "unarmed"))
         : ITEM_PROPERTIES,
@@ -1699,6 +1724,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       abilityImplementations: abilityImplementationsView,
       hpGainSourceTraitChoices: HP_GAIN_SOURCE_TRAITS,
       isWeapon: this.item.type === "weapon",
+      isWeaponProperty: this.item.type === "weaponProperty",
       isAbility: this.item.type === "ability",
       isEquipment: this.item.type === "equipment",
       showHeldToggle: itemRequiresHands(this.item),

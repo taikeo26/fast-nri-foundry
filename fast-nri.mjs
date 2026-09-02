@@ -43,6 +43,7 @@ import {
   CharacterData,
   CreatureData,
   WeaponData,
+  WeaponPropertyData,
   AbilityData,
   EquipmentData,
   ConsumableData,
@@ -74,6 +75,7 @@ Hooks.once("init", () => {
 
   CONFIG.Item.dataModels = {
     weapon: WeaponData,
+    weaponProperty: WeaponPropertyData,
     ability: AbilityData,
     equipment: EquipmentData,
     consumable: ConsumableData,
@@ -112,7 +114,7 @@ Hooks.once("init", () => {
     foundry.documents.Item,
     game.system.id,
     FastNriItemSheet,
-    { types: ["weapon", "ability", "equipment", "consumable", "effect"], makeDefault: true }
+    { types: ["weapon", "weaponProperty", "ability", "equipment", "consumable", "effect"], makeDefault: true }
   );
 });
 

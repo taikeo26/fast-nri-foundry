@@ -1,0 +1,21 @@
+{
+  "name": "Пробивающий",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "piercing",
+    "description": "<p>Проверка Защитного действия против этой атаки получает <code>−5</code>.</p><p>Штраф не изменяет КЗ и не действует на Защитные действия без проверки.</p>"
+  },
+  "_id": "Prpa32b0438ae40e",
+  "effects": [],
+  "folder": null,
+  "sort": 500000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "piercing"
+    }
+  }
+}

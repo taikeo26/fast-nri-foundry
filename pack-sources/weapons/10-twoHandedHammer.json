@@ -1,1 +1,53 @@
-{"name":"Двуручный молот","type":"weapon","img":"icons/weapons/hammers/hammer-double-sledge-engraved.webp","system":{"level":1,"description":"<p><strong>Категория:</strong> Молоты. <strong>Руки:</strong> 2. <strong>Дистанция:</strong> ближняя. <strong>Цена:</strong> 2.</p><p><strong>Свойства:</strong> Пробивающий.</p><p><strong>Владеют по текущему Rulebook:</strong> Воин.</p><p><strong>Профили:</strong> Частичный 1d8; Успех 1d12+1d4; Большой успех 1d12+1d4+6. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>","range":"ближняя","typeId":"twoHandedHammer","categoryId":"hammers","attackType":"melee","propertyIds":["piercing"],"details":"","equipped":false,"held":false,"hands":2,"equippedAt":0,"damageType":"physical","damage":{"partial":"1d8","success":"1d12+1d4","great":"1d12+1d4+6"},"damageComponents":{"partial":[],"success":[],"great":[]}},"_id":"Wpnffc62c31f8a3b","effects":[],"folder":null,"sort":1000000,"flags":{"fast-nri":{"contentPack":"weapons","sourceEdition":"6.3","sourceTable":"Оружие","weaponTypeId":"twoHandedHammer","rulebookCategory":"Молоты","rulebookHands":"2","rulebookRange":"ближняя","rulebookDamageType":"физический","rulebookProficientClasses":["Воин"],"rulebookPrice":2,"stockIcon":"icons/weapons/hammers/hammer-double-sledge-engraved.webp"}}}
+{
+  "name": "Двуручный молот",
+  "type": "weapon",
+  "img": "icons/weapons/hammers/hammer-double-sledge-engraved.webp",
+  "system": {
+    "level": 1,
+    "description": "<p><strong>Категория:</strong> Молоты. <strong>Руки:</strong> 2. <strong>Дистанция:</strong> 1. <strong>Цена:</strong> 2.</p><p><strong>Свойства:</strong> Пробивающий.</p><p><strong>Владеют по текущему Rulebook:</strong> Воин.</p><p><strong>Профили:</strong> Частичный 1d8; Успех 1d12+1d4; Большой успех 1d12+1d4+6. <strong>Урон:</strong> физический.</p><p><em>Источник: «Быстрая НРИ 6.3», таблица «Оружие».</em></p>",
+    "range": "1",
+    "typeId": "twoHandedHammer",
+    "categoryId": "hammers",
+    "attackType": "melee",
+    "propertyIds": [
+      "piercing"
+    ],
+    "details": "",
+    "equipped": false,
+    "held": false,
+    "hands": 2,
+    "equippedAt": 0,
+    "damageType": "physical",
+    "damage": {
+      "partial": "1d8",
+      "success": "1d12+1d4",
+      "great": "1d12+1d4+6"
+    },
+    "damageComponents": {
+      "partial": [],
+      "success": [],
+      "great": []
+    }
+  },
+  "_id": "Wpnffc62c31f8a3b",
+  "effects": [],
+  "folder": null,
+  "sort": 1000000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapons",
+      "sourceEdition": "6.3",
+      "sourceTable": "Оружие",
+      "weaponTypeId": "twoHandedHammer",
+      "rulebookCategory": "Молоты",
+      "rulebookHands": "2",
+      "rulebookRange": "ближняя",
+      "rulebookDamageType": "физический",
+      "rulebookProficientClasses": [
+        "Воин"
+      ],
+      "rulebookPrice": 2,
+      "stockIcon": "icons/weapons/hammers/hammer-double-sledge-engraved.webp"
+    }
+  }
+}

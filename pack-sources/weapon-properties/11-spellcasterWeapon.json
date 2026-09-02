@@ -1,0 +1,21 @@
+{
+  "name": "Оружие заклинателя",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "spellcasterWeapon",
+    "description": "<p>Это оружие можно выбрать при объявлении Заклинания, только если заклинатель им владеет и оружие проводит энергию этого Заклинания. Его напечатанная Дистанция и свойства определяют Дистанцию и свойства Заклинания по правилам раздела «Магия и дистанция».</p>"
+  },
+  "_id": "Prpc064da0681d33",
+  "effects": [],
+  "folder": null,
+  "sort": 1100000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "spellcasterWeapon"
+    }
+  }
+}

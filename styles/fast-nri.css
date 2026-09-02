@@ -3477,3 +3477,44 @@ body.theme-dark .fast-nri-hp-line label {
   overflow-wrap: anywhere;
 }
 
+
+/* ========================================================= */
+/* v0.5.56.2 - selected property references                  */
+/* ========================================================= */
+
+.fast-nri-selected-properties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.fast-nri-property-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-height: 26px;
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border-light-primary, #999);
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.08);
+  font-size: 0.78rem;
+  line-height: 1.1;
+  text-decoration: none;
+}
+
+button.fast-nri-property-reference {
+  cursor: pointer;
+}
+
+button.fast-nri-property-reference:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.fast-nri-property-reference-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

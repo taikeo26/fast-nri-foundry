@@ -1,0 +1,21 @@
+{
+  "name": "Дальнобойное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "longRange",
+    "description": "<p>Атака по цели в пределах 3 клеток получает Штраф помехи <code>−2</code>.</p><p>На второй дистанции атака получает Штраф помехи <code>−3</code> вместо <code>−6</code>.</p><p>---</p>"
+  },
+  "_id": "Prp86f3df270bd9d",
+  "effects": [],
+  "folder": null,
+  "sort": 2100000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "longRange"
+    }
+  }
+}

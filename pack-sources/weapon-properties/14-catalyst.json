@@ -1,0 +1,21 @@
+{
+  "name": "Катализатор",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "catalyst",
+    "description": "<p>После определения итоговых степеней Заклинания каждый куб его урона, на котором выпало <code>1</code>, перебросьте один раз и примените новый результат.</p>"
+  },
+  "_id": "Prpc6482363313dd",
+  "effects": [],
+  "folder": null,
+  "sort": 1400000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "catalyst"
+    }
+  }
+}

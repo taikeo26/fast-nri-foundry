@@ -1,0 +1,21 @@
+{
+  "name": "Уверенное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "steady",
+    "description": "<p>Если Защитное действие удаляет кубы урона этой атаки, сначала удаляется самый маленький оставшийся куб.</p>"
+  },
+  "_id": "Prp0c69e7aaeb1a8",
+  "effects": [],
+  "folder": null,
+  "sort": 300000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "steady"
+    }
+  }
+}

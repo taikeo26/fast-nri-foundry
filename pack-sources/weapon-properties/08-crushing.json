@@ -1,0 +1,21 @@
+{
+  "name": "Сокрушение",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "crushing",
+    "description": "<p><strong>Большой успех:</strong> после нанесения урона отбросьте цель на 1 клетку от себя или Сбейте её с ног.</p><p>Это связанный автоматический Манёвр. Примените общие правила связанных автоматических Манёвров. Отбрасывание является принудительным перемещением.</p>"
+  },
+  "_id": "Prp2d34680032bba",
+  "effects": [],
+  "folder": null,
+  "sort": 800000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "crushing"
+    }
+  }
+}

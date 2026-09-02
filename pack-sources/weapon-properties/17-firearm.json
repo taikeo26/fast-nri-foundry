@@ -1,0 +1,21 @@
+{
+  "name": "Огнестрельное",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "firearm",
+    "description": "<p>В начале подготовленного боя оружие заряжено. После атаки оно становится разряженным и не может атаковать, пока не будет перезаряжено. Перезарядить его можно активностью <strong>«Перезарядить огнестрельное оружие»</strong> во время Короткого отдыха при наличии владения.</p>"
+  },
+  "_id": "Prp71d6e74592c20",
+  "effects": [],
+  "folder": null,
+  "sort": 1700000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "firearm"
+    }
+  }
+}

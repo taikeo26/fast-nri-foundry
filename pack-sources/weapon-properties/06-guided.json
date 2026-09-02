@@ -1,0 +1,21 @@
+{
+  "name": "Наводимое",
+  "type": "weaponProperty",
+  "img": "icons/sundries/books/book-embossed-gold-red.webp",
+  "system": {
+    "propertyId": "guided",
+    "description": "<p>Направленные атаки и направленные Заклинания через это оружие не получают Штрафов помехи.</p><p>Свойство не действует на Область действия, не позволяет атаковать через сплошные препятствия и не отменяет требование выбрать клетку цели.</p>"
+  },
+  "_id": "Prp5b590af68f6af",
+  "effects": [],
+  "folder": null,
+  "sort": 600000,
+  "flags": {
+    "fast-nri": {
+      "contentPack": "weapon-properties",
+      "sourceEdition": "6.3",
+      "sourceSection": "Свойства оружия",
+      "propertyId": "guided"
+    }
+  }
+}

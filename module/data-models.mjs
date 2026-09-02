@@ -409,7 +409,7 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       ...itemBaseSchema(),
-      range: text("Ближняя"),
+      range: text("1"),
       // 0.5.56: структурированная таксономия оружия. typeId выбирается из
       // системного registry, categoryId жёстко синхронизируется по HB-04.
       typeId: text(""),
@@ -454,6 +454,20 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
         partial: damageComponentArray(),
         success: damageComponentArray(),
         great: damageComponentArray()
+      })
+    };
+  }
+}
+
+
+export class WeaponPropertyData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    return {
+      propertyId: text(""),
+      description: new HTMLField({
+        required: true,
+        nullable: false,
+        initial: ""
       })
     };
   }
