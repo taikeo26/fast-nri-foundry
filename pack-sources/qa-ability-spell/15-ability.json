@@ -1,24 +1,25 @@
 {
-  "name": "QA — Защитная реализация без Вмешательства",
+  "name": "QA — Особое Противодействие токена",
   "type": "ability",
   "img": "icons/svg/shield.svg",
   "system": {
     "level": 1,
     "category": "ability",
-    "description": "<p>Контроль узости HB-02: эта защита не должна блокироваться из-за происхождения исходного действия.</p>",
+    "description": "<p>Проверяет поиск специальной защитной реализации у текущего выбранного токена.</p>",
     "implementations": [
       {
-        "id": "QaFreeDefImpl001",
-        "name": "Свободная защита",
-        "description": "<p>Не является Вмешательством и не должна блокироваться HB-02.</p>",
+        "id": "QaCounterDefImp1",
+        "name": "Особое Противодействие",
+        "description": "<p>Выдайте эту Ability защитнику. Она должна появляться в меню «Защита» для проверки против характеристики.</p>",
         "traitIds": [
-          "defensive"
+          "defensive",
+          "intervention"
         ],
         "costs": {
           "action": 0,
           "movement": 0,
-          "intervention": 0,
-          "freeAction": true,
+          "intervention": 1,
+          "freeAction": false,
           "classResource": 0,
           "additionalText": ""
         },
@@ -63,9 +64,9 @@
         },
         "defenseAction": {
           "enabled": true,
-          "procedure": "directed",
+          "procedure": "counteraction",
           "targetScope": "self",
-          "interventionCost": 0,
+          "interventionCost": 1,
           "rangeMode": "manual",
           "rangeCells": 0,
           "requiresVisibility": false,
@@ -73,22 +74,23 @@
           "damageSelectionMode": "standard",
           "combatDiceFormula": "",
           "selfDefenseCharacteristic": "",
-          "removeDamageParts": 1,
+          "removeDamageParts": 0,
           "effectDegreeReduction": 1,
-          "allowManeuver": false
+          "allowManeuver": true
         },
         "effectUuids": [],
         "repeat": {
           "count": 1,
           "label": "Результат"
-        }
+        },
+        "areas": []
       }
     ]
   },
-  "_id": "QaFreeDefAbil007",
+  "_id": "QaCounterDefAb15",
   "effects": [],
   "folder": null,
-  "sort": 6000,
+  "sort": 14000,
   "flags": {
     "fast-nri": {
       "testFixture": "0.5.55.6",

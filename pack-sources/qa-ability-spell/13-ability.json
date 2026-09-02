@@ -1,25 +1,24 @@
 {
-  "name": "QA — Вмешательство: источник HB-02",
+  "name": "QA — Противодействие: Рефлекс",
   "type": "ability",
-  "img": "icons/svg/lightning.svg",
+  "img": "icons/svg/dice-target.svg",
   "system": {
     "level": 1,
     "category": "ability",
-    "description": "<p>Исходное действие является Вмешательством. Новое Вмешательство-защита должно быть видно, но блокироваться HB-02.</p>",
+    "description": "<p>Изолированный live-QA стандартного Противодействия без Области действия.</p>",
     "implementations": [
       {
-        "id": "QaHB02Impl000001",
-        "name": "Ответная атака",
-        "description": "<p>Проверка происхождения ActionContext и HB-02.</p>",
+        "id": "QaReflexChkImp01",
+        "name": "Проверка против Рефлекса",
+        "description": "<p>После броска на карточке результата должна появиться «Защита» с базовым Противодействием.</p>",
         "traitIds": [
-          "intervention",
-          "attack",
-          "ranged"
+          "action",
+          "maneuver"
         ],
         "costs": {
-          "action": 0,
+          "action": 1,
           "movement": 0,
-          "intervention": 1,
+          "intervention": 0,
           "freeAction": false,
           "classResource": 0,
           "additionalText": ""
@@ -36,22 +35,22 @@
           "areaSize": "",
           "text": ""
         },
-        "conditionText": "<p>Тестовый триггер Вмешательства.</p>",
+        "conditionText": "",
         "requirementText": "",
         "limitationText": "",
         "exceptionText": "",
         "check": {
           "enabled": true,
           "formula": "1d20 + {combatDie}",
-          "targetCharacteristic": "armor"
+          "targetCharacteristic": "reflex"
         },
         "defenseProcedure": {
-          "directedDefense": true
+          "directedDefense": false
         },
         "profiles": {
           "failure": {
             "enabled": true,
-            "text": "<p>Промах.</p>",
+            "text": "<p>QA: без дополнительного эффекта.</p>",
             "damage": {
               "enabled": false,
               "components": [],
@@ -71,16 +70,10 @@
           },
           "partial": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d4",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -97,16 +90,10 @@
           },
           "success": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d6",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -123,16 +110,10 @@
           },
           "great": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d8",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -169,14 +150,15 @@
         "repeat": {
           "count": 1,
           "label": "Результат"
-        }
+        },
+        "areas": []
       }
     ]
   },
-  "_id": "QaHB02Ability005",
+  "_id": "QaReflexAbil0013",
   "effects": [],
   "folder": null,
-  "sort": 4000,
+  "sort": 12000,
   "flags": {
     "fast-nri": {
       "testFixture": "0.5.55.6",

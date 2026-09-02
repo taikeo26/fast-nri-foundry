@@ -174,7 +174,6 @@
           <h2>{{#if abilityIsSpell}}Заклинание{{else}}Способность{{/if}}</h2>
           <small class="fast-nri-help">Ability — контейнер. Исполняемая механика хранится в отдельных реализациях; каждая реализация имеет фиксированную цену.</small>
         </div>
-        <button type="button" data-action="addImplementation"><i class="fa-solid fa-plus"></i> Реализация</button>
       </div>
 
       <div class="fast-nri-form-grid two-columns">
@@ -185,16 +184,25 @@
       </label>
 
       {{#if abilityImplementations.length}}
-        <div class="fast-nri-implementation-list">
+        <div class="fast-nri-implementation-tabs" role="tablist" aria-label="Реализации способности">
           {{#each abilityImplementations as |impl|}}
-            <details class="fast-nri-implementation-card" open>
-              <summary>
+            <button type="button" role="tab" class="fast-nri-implementation-tab {{#if impl.active}}active{{/if}}"
+              data-fast-nri-implementation-tab="{{impl.id}}" aria-selected="{{#if impl.active}}true{{else}}false{{/if}}" title="{{impl.costLabel}}">
+              <span>{{impl.name}}</span>
+            </button>
+          {{/each}}
+          <button type="button" class="fast-nri-implementation-tab-add" data-action="addImplementation" title="Добавить реализацию"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <div class="fast-nri-implementation-panes">
+          {{#each abilityImplementations as |impl|}}
+            <div class="fast-nri-implementation-card fast-nri-implementation-pane {{#if impl.active}}active{{/if}}" data-fast-nri-implementation-pane="{{impl.id}}">
+              <div class="fast-nri-implementation-pane-heading">
                 <div><strong>{{impl.name}}</strong><small>{{impl.costLabel}}{{#if impl.traitLabel}} · {{impl.traitLabel}}{{/if}}</small></div>
                 <div class="fast-nri-inline-actions">
                   <button type="button" data-action="duplicateImplementation" data-implementation-index="{{impl.index}}" title="Дублировать"><i class="fa-solid fa-copy"></i></button>
                   <button type="button" data-action="removeImplementation" data-implementation-index="{{impl.index}}" title="Удалить"><i class="fa-solid fa-trash"></i></button>
                 </div>
-              </summary>
+              </div>
 
               <input type="hidden" name="system.implementations.{{impl.index}}.id" value="{{impl.id}}" />
               <div class="fast-nri-form-grid two-columns">
@@ -241,7 +249,7 @@
               <label>Ограничение <prose-mirror name="system.implementations.{{impl.index}}.limitationText" value="{{impl.implementation.limitationText}}" toggled></prose-mirror></label>
               <label>Исключение <prose-mirror name="system.implementations.{{impl.index}}.exceptionText" value="{{impl.implementation.exceptionText}}" toggled></prose-mirror></label>
 
-              <h3>Цель, дистанция и область</h3>
+              <h3>Цель и дистанция</h3>
               <div class="fast-nri-form-grid two-columns">
                 <label>Режим цели <select name="system.implementations.{{impl.index}}.targeting.mode">{{selectOptions @root.abilityTargetModeChoices selected=impl.implementation.targeting.mode}}</select></label>
                 <label>Отношение <select name="system.implementations.{{impl.index}}.targeting.relation">{{selectOptions @root.abilityTargetRelationChoices selected=impl.implementation.targeting.relation}}</select></label>
@@ -249,11 +257,42 @@
                 <label>Макс. целей <input type="number" min="0" name="system.implementations.{{impl.index}}.targeting.countMax" value="{{impl.implementation.targeting.countMax}}" /></label>
                 <label>Дистанция <select name="system.implementations.{{impl.index}}.targeting.rangeMode">{{selectOptions @root.abilityRangeModeChoices selected=impl.implementation.targeting.rangeMode}}</select></label>
                 <label>Клеток <input type="number" min="0" name="system.implementations.{{impl.index}}.targeting.rangeCells" value="{{impl.implementation.targeting.rangeCells}}" /></label>
-                <label>Форма области <select name="system.implementations.{{impl.index}}.targeting.areaShape">{{selectOptions @root.abilityAreaShapeChoices selected=impl.implementation.targeting.areaShape}}</select></label>
-                <label>Размер области <input type="text" name="system.implementations.{{impl.index}}.targeting.areaSize" value="{{impl.implementation.targeting.areaSize}}" /></label>
               </div>
               <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.targeting.requiresVisibility" {{#if impl.implementation.targeting.requiresVisibility}}checked{{/if}} /><span>Требует видимость</span></label>
-              <label>Частное правило цели / области <prose-mirror name="system.implementations.{{impl.index}}.targeting.text" value="{{impl.implementation.targeting.text}}" toggled></prose-mirror></label>
+              <label>Частное правило цели <prose-mirror name="system.implementations.{{impl.index}}.targeting.text" value="{{impl.implementation.targeting.text}}" toggled></prose-mirror></label>
+
+              <div class="fast-nri-area-editor-heading">
+                <div><h3>Области</h3><small class="fast-nri-help">Можно задать несколько вариантов одной реализации. Стандартные области перетаскиваются из chat-card на карту; «Особая» остаётся только текстом.</small></div>
+                <button type="button" data-action="addImplementationArea" data-implementation-index="{{impl.index}}"><i class="fa-solid fa-plus"></i> Область</button>
+              </div>
+              {{#if impl.areas.length}}
+                <div class="fast-nri-area-editor-list">
+                  {{#each impl.areas as |area|}}
+                    <div class="fast-nri-area-editor-row">
+                      <input type="hidden" name="system.implementations.{{impl.index}}.areas.{{area.index}}.id" value="{{area.id}}" />
+                      <div class="fast-nri-form-grid two-columns">
+                        <label>Тип <select name="system.implementations.{{impl.index}}.areas.{{area.index}}.type">{{selectOptions @root.abilityAreaPresetChoices selected=area.type}}</select></label>
+                        <label>Подпись <input type="text" name="system.implementations.{{impl.index}}.areas.{{area.index}}.label" value="{{area.label}}" placeholder="{{area.labelText}}" /></label>
+                      </div>
+                      {{#if area.isSquare}}
+                        <label>Размер квадрата, клеток <input type="number" min="1" name="system.implementations.{{impl.index}}.areas.{{area.index}}.width" value="{{area.width}}" /></label>
+                      {{/if}}
+                      {{#if area.isRectangle}}
+                        <div class="fast-nri-form-grid two-columns"><label>Ширина, клеток <input type="number" min="1" name="system.implementations.{{impl.index}}.areas.{{area.index}}.width" value="{{area.width}}" /></label><label>Высота, клеток <input type="number" min="1" name="system.implementations.{{impl.index}}.areas.{{area.index}}.height" value="{{area.height}}" /></label></div>
+                      {{/if}}
+                      {{#if area.isLine}}
+                        <div class="fast-nri-form-grid two-columns"><label>Длина, клеток <input type="number" min="1" name="system.implementations.{{impl.index}}.areas.{{area.index}}.length" value="{{area.length}}" /></label><label>Ширина, клеток <input type="number" min="1" name="system.implementations.{{impl.index}}.areas.{{area.index}}.lineWidth" value="{{area.lineWidth}}" /></label></div>
+                      {{/if}}
+                      {{#if area.isSpecial}}
+                        <label>Описание особой геометрии <prose-mirror name="system.implementations.{{impl.index}}.areas.{{area.index}}.text" value="{{area.text}}" toggled></prose-mirror></label>
+                      {{/if}}
+                      <button type="button" class="fast-nri-area-remove" data-action="removeImplementationArea" data-implementation-index="{{impl.index}}" data-area-index="{{area.index}}"><i class="fa-solid fa-trash"></i> Удалить область</button>
+                    </div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <small class="fast-nri-help">Область: нет.</small>
+              {{/if}}
 
               <h3>Проверка</h3>
               <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.check.enabled" {{#if impl.implementation.check.enabled}}checked{{/if}} /><span>Есть Check</span></label>
@@ -330,7 +369,7 @@
               <h3>Эффекты реализации</h3>
               <div class="fast-nri-effect-link-dropzone" data-fast-nri-implementation-effect-dropzone data-implementation-index="{{impl.index}}"><i class="fa-solid fa-link"></i> Перетащите Effect</div>
               {{#each impl.effects as |effect|}}<div class="fast-nri-linked-effect-row"><img src="{{effect.img}}" /><span>{{effect.name}}</span><small>{{effect.durationLabel}}</small><button type="button" data-action="removeImplementationEffect" data-implementation-index="{{impl.index}}" data-effect-uuid="{{effect.uuid}}"><i class="fa-solid fa-xmark"></i></button></div>{{/each}}
-            </details>
+            </div>
           {{/each}}
         </div>
       {{else}}

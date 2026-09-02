@@ -1,0 +1,807 @@
+{
+  "name": "QA — Вкладки областей: 5 реализаций",
+  "type": "ability",
+  "img": "icons/svg/target.svg",
+  "system": {
+    "level": 1,
+    "category": "ability",
+    "description": "<p>Проверяет горизонтальные вкладки реализаций и отдельное drag-and-drop каждой геометрии.</p>",
+    "implementations": [
+      {
+        "id": "QaTabSquareImpl1",
+        "name": "Квадрат 3×3",
+        "description": "<p>QA вкладки: Квадрат 3×3. Перетащите область из карточки на сцену.</p>",
+        "traitIds": [
+          "action",
+          "area"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "cells",
+          "rangeCells": 8,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>QA: без дополнительного эффекта.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "QaTabSquareArea1",
+            "type": "square",
+            "label": "3×3",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          }
+        ]
+      },
+      {
+        "id": "QaTabRect1Impl01",
+        "name": "Прямоугольник 1×6",
+        "description": "<p>QA вкладки: Прямоугольник 1×6. Перетащите область из карточки на сцену.</p>",
+        "traitIds": [
+          "action",
+          "area"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "cells",
+          "rangeCells": 8,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>QA: без дополнительного эффекта.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "QaTabRect1Area01",
+            "type": "rectangle",
+            "label": "1×6",
+            "width": 1,
+            "height": 6,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          }
+        ]
+      },
+      {
+        "id": "QaTabRect2Impl01",
+        "name": "Прямоугольник 2×3",
+        "description": "<p>QA вкладки: Прямоугольник 2×3. Перетащите область из карточки на сцену.</p>",
+        "traitIds": [
+          "action",
+          "area"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "cells",
+          "rangeCells": 8,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>QA: без дополнительного эффекта.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "QaTabRect2Area01",
+            "type": "rectangle",
+            "label": "2×3",
+            "width": 2,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          }
+        ]
+      },
+      {
+        "id": "QaTabLineImpl001",
+        "name": "Линия 8",
+        "description": "<p>QA вкладки: Линия 8. Перетащите область из карточки на сцену.</p>",
+        "traitIds": [
+          "action",
+          "area"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "cells",
+          "rangeCells": 8,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>QA: без дополнительного эффекта.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "QaTabLineArea001",
+            "type": "line",
+            "label": "Линия 8",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          }
+        ]
+      },
+      {
+        "id": "QaTabSpecialImpl",
+        "name": "Особая",
+        "description": "<p>QA вкладки: Особая. Перетащите область из карточки на сцену.</p>",
+        "traitIds": [
+          "action",
+          "area"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "cells",
+          "rangeCells": 8,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>QA: без дополнительного эффекта.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "defenseAction": {
+          "enabled": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "QaTabSpecArea001",
+            "type": "special",
+            "label": "Особая геометрия",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": "<p>Три смежные клетки, одна из которых соседствует с источником. Не создаёт Region.</p>"
+          }
+        ]
+      }
+    ]
+  },
+  "_id": "QaAreaTabsAbil11",
+  "effects": [],
+  "folder": null,
+  "sort": 10000,
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.55.6",
+      "qaPack": true
+    }
+  }
+}

@@ -33,6 +33,7 @@ export const ABILITY_RANGE_MODES = Object.freeze({
   manual: "Частное правило"
 });
 
+// Legacy 0.5.55.4 area representation. Kept only for reading old Items.
 export const ABILITY_AREA_SHAPES = Object.freeze({
   none: "Нет",
   zone: "Зона / прямоугольник",
@@ -40,6 +41,15 @@ export const ABILITY_AREA_SHAPES = Object.freeze({
   radius: "Радиус",
   cone: "Конус",
   manual: "Частная область"
+});
+
+// 0.5.55.5 Rulebook 6.4 standard area vocabulary. Absence of presets means
+// "Нет". Complex geometries deliberately remain Special and have no ruler.
+export const ABILITY_AREA_PRESET_TYPES = Object.freeze({
+  square: "Квадрат",
+  rectangle: "Прямоугольник",
+  line: "Линия",
+  special: "Особая"
 });
 
 function positiveInt(value, fallback = 0) {
@@ -87,6 +97,7 @@ function legacyImplementation(system) {
       additionalText: String(stored.additionalText ?? "")
     },
     targeting: system.targeting ?? {},
+    areas: [],
     conditionText: String(system.conditionText ?? ""),
     requirementText: String(system.requirementText ?? ""),
     limitationText: String(system.limitationText ?? ""),
@@ -268,6 +279,88 @@ export function abilityCostLabel(itemOrSystem, actor = null) {
   return chunks.join(" + ") || "—";
 }
 
+function areaPresetId(source, index) {
+  return text(source?.id) || `area-${index + 1}`;
+}
+
+function parseLegacyAreaDimensions(value) {
+  const match = text(value).match(/(\d+)\s*[x×х]\s*(\d+)/i);
+  if (!match) return null;
+  return { width: positiveInt(match[1], 1), height: positiveInt(match[2], 1) };
+}
+
+function legacyAreaPresets(system) {
+  const source = system?.targeting ?? {};
+  const shape = text(source.areaShape || "none");
+  const size = text(source.areaSize);
+  if (!shape || shape === "none") return [];
+
+  if (shape === "zone") {
+    const dimensions = parseLegacyAreaDimensions(size) ?? { width: 1, height: 1 };
+    return [{
+      id: "legacy-area",
+      type: dimensions.width === dimensions.height ? "square" : "rectangle",
+      label: "",
+      width: dimensions.width,
+      height: dimensions.height,
+      length: 0,
+      lineWidth: 1,
+      text: "",
+      legacy: true
+    }];
+  }
+
+  if (shape === "line") {
+    const length = positiveInt(size.match(/\d+/)?.[0], 0);
+    return [{ id: "legacy-area", type: "line", label: "", width: 0, height: 0, length, lineWidth: 1, text: "", legacy: true }];
+  }
+
+  // Radius/cone/manual are no longer standard Rulebook 6.4 shapes. Preserve
+  // their wording without inventing geometry.
+  return [{
+    id: "legacy-area",
+    type: "special",
+    label: ABILITY_AREA_SHAPES[shape] ?? "Особая",
+    width: 0,
+    height: 0,
+    length: 0,
+    lineWidth: 1,
+    text: size ? `<p>${ABILITY_AREA_SHAPES[shape] ?? "Особая"}: ${size}</p>` : "",
+    legacy: true
+  }];
+}
+
+export function abilityAreaPresets(itemOrSystem) {
+  const system = rawSystem(itemOrSystem);
+  const stored = Array.from(system.areas ?? []);
+  if (!stored.length) return legacyAreaPresets(system);
+  return stored.map((source, index) => {
+    const type = Object.hasOwn(ABILITY_AREA_PRESET_TYPES, source?.type) ? source.type : "special";
+    const width = Math.max(1, positiveInt(source?.width, type === "square" || type === "rectangle" ? 1 : 0));
+    const height = type === "square" ? width : Math.max(1, positiveInt(source?.height, type === "rectangle" ? 1 : 0));
+    return {
+      id: areaPresetId(source, index),
+      type,
+      label: text(source?.label),
+      width,
+      height,
+      length: Math.max(1, positiveInt(source?.length, type === "line" ? 1 : 0)),
+      lineWidth: Math.max(1, positiveInt(source?.lineWidth, 1)),
+      text: String(source?.text ?? ""),
+      legacy: false
+    };
+  });
+}
+
+export function abilityAreaPresetLabel(preset) {
+  if (!preset) return "";
+  if (text(preset.label)) return text(preset.label);
+  if (preset.type === "square") return `Квадрат ${preset.width}×${preset.width}`;
+  if (preset.type === "rectangle") return `Прямоугольник ${preset.width}×${preset.height}`;
+  if (preset.type === "line") return `Линия ${preset.length}×${preset.lineWidth}`;
+  return "Особая область";
+}
+
 export function abilityTargeting(itemOrSystem) {
   const system = rawSystem(itemOrSystem);
   const source = system.targeting ?? {};
@@ -315,10 +408,8 @@ export function abilityRangeSummary(itemOrSystem) {
 }
 
 export function abilityAreaSummary(itemOrSystem) {
-  const target = abilityTargeting(itemOrSystem);
-  if (target.areaShape === "none") return "";
-  const label = ABILITY_AREA_SHAPES[target.areaShape] ?? target.areaShape;
-  return target.areaSize ? `${label}: ${target.areaSize}` : label;
+  const areas = abilityAreaPresets(itemOrSystem);
+  return areas.map(abilityAreaPresetLabel).filter(Boolean).join(" / ");
 }
 
 export function abilityProfile(itemOrSystem, degree) {

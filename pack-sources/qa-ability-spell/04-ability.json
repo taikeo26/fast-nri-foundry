@@ -326,7 +326,7 @@
   "sort": 3000,
   "flags": {
     "fast-nri": {
-      "testFixture": "0.5.55.3",
+      "testFixture": "0.5.55.6",
       "qaPack": true
     }
   }

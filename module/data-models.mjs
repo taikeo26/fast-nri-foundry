@@ -114,8 +114,24 @@ const abilityProfileSchema = () =>
     effectUuids: stringArray()
   });
 
+const abilityAreaPresetSchema = () =>
+  new SchemaField({
+    id: text(""),
+    type: text("square"),
+    label: text(""),
+    width: integer(3),
+    height: integer(3),
+    length: integer(8),
+    lineWidth: integer(1),
+    text: richText("")
+  });
 
-
+const abilityAreaPresetArray = () =>
+  new ArrayField(abilityAreaPresetSchema(), {
+    required: true,
+    nullable: false,
+    initial: []
+  });
 
 const abilityImplementationSchema = () =>
   new SchemaField({
@@ -139,10 +155,15 @@ const abilityImplementationSchema = () =>
       rangeMode: text("none"),
       rangeCells: integer(0),
       requiresVisibility: flag(false),
+      // Legacy 0.5.55.4 area fields. New authoring uses implementation.areas[].
       areaShape: text("none"),
       areaSize: text(""),
       text: richText("")
     }),
+    // 0.5.55.5: one realization can expose several alternative standard
+    // area presets (for example 1×6 or 2×3) without becoming several
+    // realizations. Special geometry stays descriptive and is not placed.
+    areas: abilityAreaPresetArray(),
     conditionText: richText(""),
     requirementText: richText(""),
     limitationText: richText(""),

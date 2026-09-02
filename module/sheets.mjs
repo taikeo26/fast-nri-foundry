@@ -29,11 +29,14 @@ import {
 } from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
 import {
+  ABILITY_AREA_PRESET_TYPES,
   ABILITY_AREA_SHAPES,
   ABILITY_PROFILE_DEGREES,
   ABILITY_RANGE_MODES,
   ABILITY_TARGET_MODES,
   ABILITY_TARGET_RELATIONS,
+  abilityAreaPresetLabel,
+  abilityAreaPresets,
   abilityCostLabel,
   abilityImplementationRuntime,
   abilityImplementations,
@@ -551,6 +554,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       addImplementation: FastNriItemSheet.#addImplementation,
       duplicateImplementation: FastNriItemSheet.#duplicateImplementation,
       removeImplementation: FastNriItemSheet.#removeImplementation,
+      addImplementationArea: FastNriItemSheet.#addImplementationArea,
+      removeImplementationArea: FastNriItemSheet.#removeImplementationArea,
       addImplementationProfileComponent: FastNriItemSheet.#addImplementationProfileComponent,
       removeImplementationProfileComponent: FastNriItemSheet.#removeImplementationProfileComponent,
       removeImplementationEffect: FastNriItemSheet.#removeImplementationEffect,
@@ -568,6 +573,39 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   constructor(options = {}) {
     super(options);
     this._activeAbilityTab = "card";
+    this._activeImplementationId = null;
+  }
+
+  #activateImplementationTabs() {
+    const buttons = Array.from(this.element.querySelectorAll("[data-fast-nri-implementation-tab]"));
+    const panes = Array.from(this.element.querySelectorAll("[data-fast-nri-implementation-pane]"));
+    if (!buttons.length || !panes.length) return;
+
+    const ids = buttons.map(button => button.dataset.fastNriImplementationTab).filter(Boolean);
+    const show = id => {
+      const next = ids.includes(id) ? id : ids[0];
+      if (!next) return;
+      this._activeImplementationId = next;
+      for (const button of buttons) {
+        const active = button.dataset.fastNriImplementationTab === next;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      }
+      for (const pane of panes) {
+        pane.classList.toggle("active", pane.dataset.fastNriImplementationPane === next);
+      }
+    };
+
+    for (const button of buttons) {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        // submitOnChange persists ordinary fields; blur also commits an active
+        // ProseMirror before hiding its realization pane.
+        document.activeElement?.blur?.();
+        show(button.dataset.fastNriImplementationTab);
+      });
+    }
+    show(this._activeImplementationId);
   }
 
   #activateAbilityTabs() {
@@ -599,6 +637,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#activateAbilityTabs();
+    this.#activateImplementationTabs();
 
     const equipped = this.element.querySelector("[data-fast-nri-item-equipped]");
     if (equipped) {
@@ -1198,6 +1237,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       id, name, description: "", traitIds: [],
       costs: { action: 0, movement: 0, intervention: 0, freeAction: false, classResource: 0, additionalText: "" },
       targeting: { mode: "none", relation: "any", countMin: 0, countMax: 0, rangeMode: "none", rangeCells: 0, requiresVisibility: false, areaShape: "none", areaSize: "", text: "" },
+      areas: [],
       conditionText: "", requirementText: "", limitationText: "", exceptionText: "",
       check: { enabled: false, formula: "1d20 + {combatDie}", targetCharacteristic: "armor" },
       defenseProcedure: { directedDefense: false },
@@ -1211,7 +1251,9 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   static async #addImplementation(event) {
     event.preventDefault();
     const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
-    current.push(FastNriItemSheet.#blankImplementation(`Реализация ${current.length + 1}`));
+    const created = FastNriItemSheet.#blankImplementation(`Реализация ${current.length + 1}`);
+    current.push(created);
+    this._activeImplementationId = created.id;
     await this.item.update({ "system.implementations": current });
   }
 
@@ -1224,6 +1266,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     copy.id = globalThis.foundry?.utils?.randomID?.() ?? Math.random().toString(36).slice(2, 18);
     copy.name = `${copy.name || `Реализация ${index + 1}`} — копия`;
     current.splice(index + 1, 0, copy);
+    this._activeImplementationId = copy.id;
     await this.item.update({ "system.implementations": current });
   }
 
@@ -1236,7 +1279,41 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       ui.notifications.warn("У способности должна оставаться хотя бы одна реализация.");
       return;
     }
+    const removedId = current[index]?.id;
     current.splice(index, 1);
+    if (this._activeImplementationId === removedId) {
+      this._activeImplementationId = current[Math.min(index, current.length - 1)]?.id ?? current[0]?.id ?? null;
+    }
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static #blankAreaPreset(type = "square") {
+    const id = globalThis.foundry?.utils?.randomID?.() ?? Math.random().toString(36).slice(2, 18);
+    return { id, type, label: "", width: 3, height: 3, length: 8, lineWidth: 1, text: "" };
+  }
+
+  static async #addImplementationArea(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const implementation = current[implIndex];
+    if (!Number.isInteger(implIndex) || !implementation) return;
+    implementation.areas = Array.from(implementation.areas ?? []);
+    implementation.areas.push(FastNriItemSheet.#blankAreaPreset());
+    this._activeImplementationId = implementation.id;
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementationArea(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const areaIndex = Number(target.dataset.areaIndex);
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const implementation = current[implIndex];
+    if (!Number.isInteger(implIndex) || !Number.isInteger(areaIndex) || !implementation) return;
+    implementation.areas = Array.from(implementation.areas ?? []);
+    implementation.areas.splice(areaIndex, 1);
+    this._activeImplementationId = implementation.id;
     await this.item.update({ "system.implementations": current });
   }
 
@@ -1451,16 +1528,31 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
           });
         }
         const effects = await resolveEffectDocuments(implementation?.effectUuids ?? []);
+        const areas = abilityAreaPresets(runtime).map((area, areaIndex) => ({
+          ...area,
+          index: areaIndex,
+          labelText: abilityAreaPresetLabel(area),
+          isSquare: area.type === "square",
+          isRectangle: area.type === "rectangle",
+          isLine: area.type === "line",
+          isSpecial: area.type === "special"
+        }));
         abilityImplementationsView.push({
           index: implementationIndex,
           id: implementation?.id,
           name: implementation?.name || `Реализация ${implementationIndex + 1}`,
-          implementation, runtime, profiles,
+          implementation, runtime, profiles, areas,
           costLabel: abilityCostLabel(runtime, this.item.parent?.documentName === "Actor" ? this.item.parent : null),
           traitLabel: abilityTraitLabels(runtime).join(" · "),
           effects: effects.map(effect => ({ uuid: effect.uuid, name: effect.name, img: effect.img, durationLabel: durationDefinitionLabel(effect.system) }))
         });
       }
+    }
+
+    if (abilityImplementationsView.length) {
+      const ids = abilityImplementationsView.map(view => view.id);
+      if (!ids.includes(this._activeImplementationId)) this._activeImplementationId = ids[0];
+      for (const view of abilityImplementationsView) view.active = view.id === this._activeImplementationId;
     }
 
     const linkedEffects = this.item.type === "ability"
@@ -1527,6 +1619,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       abilityTargetRelationChoices: ABILITY_TARGET_RELATIONS,
       abilityRangeModeChoices: ABILITY_RANGE_MODES,
       abilityAreaShapeChoices: ABILITY_AREA_SHAPES,
+      abilityAreaPresetChoices: ABILITY_AREA_PRESET_TYPES,
       abilityProfileDegreeChoices: ABILITY_PROFILE_DEGREES
     };
   }

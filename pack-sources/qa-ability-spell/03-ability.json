@@ -1,15 +1,15 @@
 {
-  "name": "QA — Область: один пул 3d8",
+  "name": "QA — Области: стандартные формы + 3d8",
   "type": "ability",
   "img": "icons/svg/explosion.svg",
   "system": {
     "level": 1,
     "category": "spell",
-    "description": "<p>Проверяет область, профили степени и удаление уже выпавших частей одного пула.</p>",
+    "description": "<p>Проверяет стандартизированные области 3×3, 1×6, 2×3, линию и особую геометрию, а также один пул 3d8.</p>",
     "implementations": [
       {
         "id": "QaAreaImpl000001",
-        "name": "Взрыв 3×3",
+        "name": "Взрыв / области",
         "description": "<p>Проверяет один пул урона и удаление выпавших частей по степени.</p>",
         "traitIds": [
           "spell",
@@ -34,8 +34,8 @@
           "rangeMode": "spell",
           "rangeCells": 0,
           "requiresVisibility": true,
-          "areaShape": "zone",
-          "areaSize": "3×3",
+          "areaShape": "none",
+          "areaSize": "",
           "text": "<p>Выберите центр области в дистанции заклинаний.</p>"
         },
         "conditionText": "",
@@ -187,7 +187,59 @@
         "repeat": {
           "count": 1,
           "label": "Результат"
-        }
+        },
+        "areas": [
+          {
+            "id": "QaAreaSquare0001",
+            "type": "square",
+            "label": "3×3",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          },
+          {
+            "id": "QaAreaRect000001",
+            "type": "rectangle",
+            "label": "1×6",
+            "width": 1,
+            "height": 6,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          },
+          {
+            "id": "QaAreaRect000002",
+            "type": "rectangle",
+            "label": "2×3",
+            "width": 2,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          },
+          {
+            "id": "QaAreaLine000001",
+            "type": "line",
+            "label": "Линия 8",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          },
+          {
+            "id": "QaAreaSpecial001",
+            "type": "special",
+            "label": "Особая: три смежные клетки",
+            "width": 3,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": "<p>Три смежные клетки, одна из которых соседствует с источником. Автоматическая линейка не используется.</p>"
+          }
+        ]
       }
     ]
   },
@@ -197,7 +249,7 @@
   "sort": 2000,
   "flags": {
     "fast-nri": {
-      "testFixture": "0.5.55.3",
+      "testFixture": "0.5.55.6",
       "qaPack": true
     }
   }

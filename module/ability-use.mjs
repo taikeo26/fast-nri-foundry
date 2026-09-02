@@ -3,7 +3,8 @@ import { abilityCheckConfig, checkTargetCharacteristicLabel } from "./check-syst
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
 import {
   ABILITY_PROFILE_DEGREES,
-  abilityAreaSummary,
+  abilityAreaPresets,
+  abilityAreaPresetLabel,
   abilityConfiguredOutcomeKinds,
   abilityCostLabel,
   abilityCosts,
@@ -19,6 +20,7 @@ import {
   abilityTraitLabels
 } from "./ability-authoring.mjs";
 import { actionContextFromAbility } from "./action-context.mjs";
+import { abilityAreaDragData } from "./area-templates.mjs";
 
 function esc(value) { return foundry.utils.escapeHTML(String(value ?? "")); }
 function escAttr(value) { return esc(value).replaceAll('"', "&quot;"); }
@@ -74,6 +76,12 @@ async function enrichedImplementationData(item, runtime) {
       })))
     });
   }
+  const areas = await Promise.all(abilityAreaPresets(runtime).map(async area => ({
+    ...area,
+    label: abilityAreaPresetLabel(area),
+    textHTML: await enrichHTML(area.text),
+    draggable: area.type !== "special"
+  })));
   const linkedEffects = await resolveEffectDocuments(runtime.system?.effectUuids ?? []);
   return {
     commonDescription: await enrichHTML(item.system?.description),
@@ -84,6 +92,7 @@ async function enrichedImplementationData(item, runtime) {
     exceptionText: await enrichHTML(runtime.system?.exceptionText),
     additionalCostText: await enrichHTML(runtime.system?.costs?.additionalText),
     targetingText: await enrichHTML(runtime.system?.targeting?.text),
+    areas,
     profiles,
     linkedEffects: await Promise.all(linkedEffects.map(async effect => effectChatCardHTML(effect, {
       compact: true,
@@ -144,12 +153,23 @@ function choiceCardHTML(actor, item, implementations, descriptionHTML) {
   </div>`;
 }
 
+function implementationAreasHTML(item, runtime, richData) {
+  if (!richData.areas?.length) return "";
+  return `<div class="fast-nri-area-preset-list">${richData.areas.map(area => {
+    if (!area.draggable) {
+      return `<div class="fast-nri-area-preset special"><i class="fa-solid fa-draw-polygon"></i><div><strong>${esc(area.label)}</strong>${area.textHTML ? `<div class="fast-nri-area-preset-text">${area.textHTML}</div>` : ""}</div></div>`;
+    }
+    return `<div class="fast-nri-area-preset" draggable="true" data-fast-nri-area-drag
+      data-item-uuid="${escAttr(item.uuid)}" data-implementation-id="${escAttr(runtime.implementationId ?? "")}" data-area-id="${escAttr(area.id)}"
+      title="Перетащите область на карту"><i class="fa-solid ${area.type === "line" ? "fa-grip-lines" : "fa-vector-square"}"></i><div><strong>${esc(area.label)}</strong>${area.textHTML ? `<div class="fast-nri-area-preset-text">${area.textHTML}</div>` : ""}</div><i class="fa-solid fa-hand-pointer"></i></div>`;
+  }).join("")}</div>`;
+}
+
 function implementationCardHTML({ actor, item, runtime, resource, richData, undone = false }) {
   const traits = abilityTraitLabels(runtime);
   const check = abilityCheckConfig(runtime);
   const targetSummary = abilityTargetSummary(runtime);
   const rangeSummary = abilityRangeSummary(runtime);
-  const areaSummary = abilityAreaSummary(runtime);
   const repeat = abilityImplementationRepeat(runtime);
   return `<div class="fast-nri-ability-use-card ${undone ? "resource-undone" : ""}">
     <div class="fast-nri-chat-roll-title"><i class="fa-solid ${abilityIsSpell(runtime) ? "fa-wand-magic-sparkles" : "fa-bolt"}"></i>
@@ -162,7 +182,7 @@ function implementationCardHTML({ actor, item, runtime, resource, richData, undo
       ${richData.requirementText ? metaRow("Требование", richData.requirementText) : ""}
       ${targetSummary ? metaRow("Цель", esc(targetSummary)) : ""}
       ${rangeSummary ? metaRow("Дистанция", esc(rangeSummary)) : ""}
-      ${areaSummary ? metaRow("Область", esc(areaSummary)) : ""}
+      ${richData.areas?.length ? metaRow("Область", implementationAreasHTML(item, runtime, richData)) : ""}
       ${richData.targetingText ? metaRow("Цель/область", richData.targetingText) : ""}
       ${check.enabled ? metaRow("Проверка", `${esc(check.formula)} против ${esc(checkTargetCharacteristicLabel(check.targetCharacteristic))}`) : ""}
       ${richData.limitationText ? metaRow("Ограничение", richData.limitationText) : ""}
@@ -246,6 +266,22 @@ export async function undoAbilityResource(element) {
 }
 
 export function activateAbilityChatInteractions(root = document) {
+  root.addEventListener("dragstart", event => {
+    const element = event.target?.closest?.("[data-fast-nri-area-drag]");
+    if (!element) return;
+    const item = fromUuidSync(element.dataset.itemUuid);
+    if (!item || item.type !== "ability") return;
+    const runtime = abilityImplementationRuntime(item, element.dataset.implementationId || null);
+    const area = abilityAreaPresets(runtime).find(candidate => candidate.id === element.dataset.areaId);
+    if (!area || area.type === "special") return;
+    const sourceMessage = game.messages?.get(messageIdFromElement(element)) ?? null;
+    const actionContext = sourceMessage?.getFlag("fast-nri", "actionContext") ?? null;
+    event.dataTransfer?.setData("text/plain", JSON.stringify(abilityAreaDragData({
+      item, implementationId: runtime.implementationId, area, actionContext
+    })));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+  });
+
   root.addEventListener("click", async event => {
     const implButton = event.target.closest("[data-fast-nri-use-implementation]");
     if (implButton) {

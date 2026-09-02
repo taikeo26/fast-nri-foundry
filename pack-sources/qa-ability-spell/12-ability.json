@@ -1,57 +1,57 @@
 {
-  "name": "QA — Вмешательство: источник HB-02",
+  "name": "QA — Одна реализация: области 1×6 / 2×3",
   "type": "ability",
-  "img": "icons/svg/lightning.svg",
+  "img": "icons/svg/net.svg",
   "system": {
     "level": 1,
-    "category": "ability",
-    "description": "<p>Исходное действие является Вмешательством. Новое Вмешательство-защита должно быть видно, но блокироваться HB-02.</p>",
+    "category": "spell",
+    "description": "<p>Проверяет несколько area presets внутри одной реализации без создания лишних реализаций.</p>",
     "implementations": [
       {
-        "id": "QaHB02Impl000001",
-        "name": "Ответная атака",
-        "description": "<p>Проверка происхождения ActionContext и HB-02.</p>",
+        "id": "QaAltAreasImpl01",
+        "name": "Заросли: выбрать форму",
+        "description": "<p>Одна реализация, две альтернативные стандартные области. Цена и эффект не меняются.</p>",
         "traitIds": [
-          "intervention",
-          "attack",
-          "ranged"
+          "spell",
+          "action",
+          "area"
         ],
         "costs": {
-          "action": 0,
+          "action": 1,
           "movement": 0,
-          "intervention": 1,
+          "intervention": 0,
           "freeAction": false,
           "classResource": 0,
           "additionalText": ""
         },
         "targeting": {
-          "mode": "single",
-          "relation": "enemy",
-          "countMin": 1,
-          "countMax": 1,
-          "rangeMode": "cells",
-          "rangeCells": 6,
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "spell",
+          "rangeCells": 0,
           "requiresVisibility": true,
           "areaShape": "none",
           "areaSize": "",
           "text": ""
         },
-        "conditionText": "<p>Тестовый триггер Вмешательства.</p>",
+        "conditionText": "",
         "requirementText": "",
         "limitationText": "",
         "exceptionText": "",
         "check": {
-          "enabled": true,
+          "enabled": false,
           "formula": "1d20 + {combatDie}",
           "targetCharacteristic": "armor"
         },
         "defenseProcedure": {
-          "directedDefense": true
+          "directedDefense": false
         },
         "profiles": {
           "failure": {
             "enabled": true,
-            "text": "<p>Промах.</p>",
+            "text": "<p>QA: без дополнительного эффекта.</p>",
             "damage": {
               "enabled": false,
               "components": [],
@@ -71,16 +71,10 @@
           },
           "partial": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d4",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -97,16 +91,10 @@
           },
           "success": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d6",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -123,16 +111,10 @@
           },
           "great": {
             "enabled": true,
-            "text": "",
+            "text": "<p>QA: выберите эту степень для проверки карточки результата.</p>",
             "damage": {
-              "enabled": true,
-              "components": [
-                {
-                  "formula": "1d8",
-                  "damageType": "physical",
-                  "traitIds": []
-                }
-              ],
+              "enabled": false,
+              "components": [],
               "removeHighest": 0,
               "removeLowest": 0,
               "removeAll": false
@@ -169,14 +151,36 @@
         "repeat": {
           "count": 1,
           "label": "Результат"
-        }
+        },
+        "areas": [
+          {
+            "id": "QaAltRect1Area01",
+            "type": "rectangle",
+            "label": "1×6",
+            "width": 1,
+            "height": 6,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          },
+          {
+            "id": "QaAltRect2Area01",
+            "type": "rectangle",
+            "label": "2×3",
+            "width": 2,
+            "height": 3,
+            "length": 8,
+            "lineWidth": 1,
+            "text": ""
+          }
+        ]
       }
     ]
   },
-  "_id": "QaHB02Ability005",
+  "_id": "QaAltAreasAbil12",
   "effects": [],
   "folder": null,
-  "sort": 4000,
+  "sort": 11000,
   "flags": {
     "fast-nri": {
       "testFixture": "0.5.55.6",

@@ -31,6 +31,7 @@ import {
   registerDataMigrationSettings
 } from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
+import { activateAbilityAreaPlacement } from "./module/area-templates.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
 import {
   migrateDefenseAbilitiesOnce,
@@ -118,6 +119,7 @@ Hooks.once("ready", async () => {
   console.log("Быстрая НРИ 6.3 | Система готова");
   activateChatInteractions(document);
   activateAbilityChatInteractions(document);
+  activateAbilityAreaPlacement();
   activateHealthChatInteractions(document);
   activateEffectChatInteractions(document);
   activateEffectSystem();
