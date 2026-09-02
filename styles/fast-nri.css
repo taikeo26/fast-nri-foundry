@@ -1496,6 +1496,136 @@ body.theme-dark .fast-nri-resource-shortage {
   font-weight: 700;
 }
 
+.fast-nri-damage-parts-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.fast-nri-damage-edit-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.fast-nri-damage-edit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.fast-nri-damage-edit-button:disabled {
+  opacity: 0.42;
+}
+
+.fast-nri-damage-part-stack.manual-removed {
+  opacity: 0.48;
+  text-decoration: line-through;
+}
+
+.fast-nri-damage-part-stack.manual-added {
+  outline: 1px dashed rgba(90, 120, 155, 0.5);
+  background: rgba(90, 120, 155, 0.06);
+}
+
+.fast-nri-manual-damage-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 3px 0 5px;
+  padding: 4px 6px;
+  border-left: 3px solid rgba(90, 120, 155, 0.6);
+  background: rgba(90, 120, 155, 0.06);
+  font-size: 0.7rem;
+}
+
+.fast-nri-manual-damage-add,
+.fast-nri-manual-damage-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fast-nri-manual-damage-add > p,
+.fast-nri-manual-damage-choice > p {
+  margin: 0;
+}
+
+.fast-nri-manual-damage-dice {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.fast-nri-manual-damage-dice button {
+  min-width: 0;
+  padding: 4px 3px;
+  font-size: 0.72rem;
+}
+
+.fast-nri-manual-damage-add label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fast-nri-manual-damage-meta {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1.3fr);
+  gap: 8px;
+}
+
+.fast-nri-manual-damage-traits-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fast-nri-manual-damage-traits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 6px;
+  max-height: 126px;
+  overflow-y: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border-light-2, currentColor);
+  border-radius: 4px;
+}
+
+.fast-nri-manual-damage-trait-option {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 4px !important;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.fast-nri-manual-damage-trait-option input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .fast-nri-manual-damage-dice {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fast-nri-manual-damage-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fast-nri-damage-parts {
   display: flex;
   flex-wrap: wrap;

@@ -1285,11 +1285,15 @@ function damagePartsHTML(state) {
     const changed = current !== original;
     const statusClass = part.immuneRemoved
       ? "immune-removed"
-      : part.profileZeroed
-        ? "profile-zeroed"
-        : part.defenseZeroed
-          ? "defense-zeroed"
-          : "";
+      : part.manualRemoved
+        ? "manual-removed"
+        : part.profileZeroed
+          ? "profile-zeroed"
+          : part.defenseZeroed
+            ? "defense-zeroed"
+            : part.manualAdded
+              ? "manual-added"
+              : "";
 
     if (part.kind === "die") {
       const nativeLabel = part.nativeLabel ?? original;
@@ -1332,9 +1336,34 @@ function damagePartsHTML(state) {
 
   const total = Math.max(0, Number(state.currentTotal) || 0);
 
+  const removableDice = (state.parts ?? []).some(part =>
+    part?.kind === "die"
+    && !part?.immuneRemoved
+    && (Number(part?.currentValue ?? part?.value) || 0) > 0
+  );
+
   return `
     <section class="fast-nri-damage-parts-block">
-      <div class="fast-nri-damage-parts-title">Кубы урона</div>
+      <div class="fast-nri-damage-parts-heading">
+        <div class="fast-nri-damage-parts-title">Кубы урона</div>
+        <div class="fast-nri-damage-edit-actions" aria-label="Ручное управление уроном">
+          <button
+            type="button"
+            class="fast-nri-damage-edit-button"
+            data-fast-nri-damage-remove-die
+            ${removableDice ? "" : "disabled"}
+            title="Убрать выбранный выпавший куб урона"
+            aria-label="Убрать куб урона"
+          ><i class="fa-solid fa-minus"></i></button>
+          <button
+            type="button"
+            class="fast-nri-damage-edit-button"
+            data-fast-nri-damage-add
+            title="Добавить куб или значение урона"
+            aria-label="Добавить урон"
+          ><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
       <div class="fast-nri-damage-equation">
         <div class="fast-nri-damage-parts">
           ${parts || `<span class="fast-nri-roll-empty">Нет положительных кубов урона.</span>`}
@@ -1345,6 +1374,40 @@ function damagePartsHTML(state) {
       </div>
     </section>
   `;
+}
+
+
+function manualDamageSummaryHTML(state) {
+  const history = Array.from(state?.manualDamageHistory ?? []);
+  const latest = history.at(-1);
+  if (!latest) return "";
+
+  if (latest.kind === "removeDie") {
+    return `
+      <section class="fast-nri-manual-damage-summary">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>Последняя ручная коррекция: убран <strong>d${esc(latest.faces)}: ${esc(latest.value)}</strong>.</span>
+      </section>
+    `;
+  }
+
+  if (latest.kind === "addDamage") {
+    const labels = [
+      damageTypeLabel(latest.damageType),
+      ...(latest.traitIds ?? []).map(id => CREATURE_TRAITS[id] ?? id)
+    ];
+    return `
+      <section class="fast-nri-manual-damage-summary">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>
+          Последняя ручная коррекция: добавлено <strong>${esc(latest.formula || "урон")}</strong>
+          ${labels.length ? `· ${labels.map(esc).join(" · ")}` : ""}.
+        </span>
+      </section>
+    `;
+  }
+
+  return "";
 }
 
 function defenseResultLabel(result) {
@@ -1431,6 +1494,7 @@ function damageCardHTML({
       </div>
 
       ${damagePartsHTML(state)}
+      ${manualDamageSummaryHTML(state)}
       ${defenseSummaryHTML(state)}
 
       ${critical ? `
@@ -1494,6 +1558,444 @@ function damageCardHTML({
       ${modifiersHTML}
     </div>
   `;
+}
+
+
+function activeManualDamageParts(state) {
+  return (state?.parts ?? []).filter(part =>
+    !part?.immuneRemoved
+    && (Number(part?.currentValue ?? part?.value) || 0) > 0
+  );
+}
+
+export function manualDamageDefaultMeta(state) {
+  const active = activeManualDamageParts(state);
+  const pool = active.length ? active : Array.from(state?.parts ?? []);
+  let largest = null;
+
+  for (const part of pool) {
+    const value = Math.max(0, Number(part?.currentValue ?? part?.rolledValue ?? part?.value) || 0);
+    if (!largest || value > largest.value) largest = { part, value };
+  }
+
+  return {
+    damageType: largest?.part?.damageType ?? state?.damageType ?? "physical",
+    traitIds: Array.from(new Set(largest?.part?.traitIds ?? [])),
+    sourcePartId: largest?.part?.id ?? null
+  };
+}
+
+function manualDamageHistoryEntry(kind, details = {}) {
+  return {
+    kind,
+    ...foundry.utils.deepClone(details)
+  };
+}
+
+export function removeManualDamageDieFromState(state, partId) {
+  const next = foundry.utils.deepClone(state ?? {});
+  const part = (next.parts ?? []).find(candidate => candidate?.id === partId);
+  if (!part || part.kind !== "die" || part.immuneRemoved) return null;
+  if ((Number(part.currentValue ?? part.value) || 0) <= 0) return null;
+
+  const before = Number(part.currentValue ?? part.value) || 0;
+  part.currentValue = 0;
+  part.manualRemoved = true;
+  part.removed = true;
+
+  next.manualDamageHistory = [
+    ...(next.manualDamageHistory ?? []),
+    manualDamageHistoryEntry("removeDie", {
+      partId: part.id,
+      faces: part.faces,
+      value: before,
+      damageType: part.damageType,
+      traitIds: Array.from(part.traitIds ?? [])
+    })
+  ];
+
+  return recalculateDamageState(next);
+}
+
+function rekeyAddedDamageParts(existingState, addedState) {
+  const used = new Set((existingState?.parts ?? []).map(part => String(part?.id ?? "")));
+  let sequence = 0;
+
+  return (addedState?.parts ?? []).map(part => {
+    let id;
+    do {
+      id = `manual-part-${sequence++}`;
+    } while (used.has(id));
+    used.add(id);
+    return {
+      ...foundry.utils.deepClone(part),
+      id,
+      manualAdded: true,
+      removed: false
+    };
+  });
+}
+
+export function appendManualDamageState(state, addedState, {
+  formula = "",
+  damageType = "physical",
+  traitIds = []
+} = {}) {
+  if (!addedState?.supported || (addedState.penalties ?? []).length) return null;
+  if (!(addedState.parts ?? []).length) return null;
+
+  const next = foundry.utils.deepClone(state ?? {});
+  const addedParts = rekeyAddedDamageParts(next, addedState);
+  next.parts = [...(next.parts ?? []), ...addedParts];
+  next.manualDamageHistory = [
+    ...(next.manualDamageHistory ?? []),
+    manualDamageHistoryEntry("addDamage", {
+      formula,
+      damageType,
+      traitIds: Array.from(new Set(traitIds ?? [])),
+      partIds: addedParts.map(part => part.id),
+      rolledValues: addedParts.map(part => Number(part.rolledValue ?? part.value) || 0)
+    })
+  ];
+
+  return recalculateDamageState(next);
+}
+
+function manualDamageDieChoiceLabel(part) {
+  const labels = [
+    damagePartLabel(part),
+    damageTypeLabel(part?.damageType),
+    ...(part?.traitIds ?? []).map(id => CREATURE_TRAITS[id] ?? id)
+  ];
+  return labels.filter(Boolean).join(" · ");
+}
+
+async function chooseManualDamageDie(state) {
+  const dice = activeManualDamageParts(state).filter(part => part.kind === "die");
+  if (!dice.length) {
+    ui.notifications.info("В этой карточке нет выпавших кубов, которые можно убрать.");
+    return null;
+  }
+
+  const { DialogV2 } = foundry.applications.api;
+  const selected = await DialogV2.wait({
+    classes: ["fast-nri-manual-damage-dialog"],
+    window: { title: "Убрать куб урона" },
+    content: `
+      <div class="fast-nri-manual-damage-choice">
+        <p>Выберите конкретный уже выпавший куб. Остальные результаты не перебрасываются.</p>
+      </div>
+    `,
+    modal: true,
+    rejectClose: false,
+    buttons: [
+      ...dice.map((part, index) => ({
+        action: `remove-die-${index}`,
+        label: manualDamageDieChoiceLabel(part),
+        icon: "fa-solid fa-dice",
+        callback: async () => part.id
+      })),
+      {
+        action: "cancel",
+        label: "Отмена",
+        icon: "fa-solid fa-xmark",
+        callback: async () => null
+      }
+    ]
+  });
+
+  return selected || null;
+}
+
+function manualDamageTraitOptionsHTML(selectedIds = []) {
+  const selected = new Set(selectedIds ?? []);
+  return Object.entries(CREATURE_TRAITS)
+    .filter(([id]) => !["physical", "magic"].includes(id))
+    .map(([id, label]) => `
+      <label class="fast-nri-manual-damage-trait-option">
+        <input
+          type="checkbox"
+          value="${escAttr(id)}"
+          data-fast-nri-manual-damage-trait
+          ${selected.has(id) ? "checked" : ""}
+        >
+        <span>${esc(label)}</span>
+      </label>
+    `)
+    .join("");
+}
+
+function collectManualDamageAddDialog(dialog) {
+  const root = dialog.element;
+  const formula = String(root.querySelector("[data-fast-nri-manual-damage-formula]")?.value ?? "").trim();
+  const damageType = String(root.querySelector("[data-fast-nri-manual-damage-type]")?.value ?? "physical");
+  const traitIds = Array.from(root.querySelectorAll("[data-fast-nri-manual-damage-trait]:checked"))
+    .map(input => input.value);
+  return { formula, damageType, traitIds };
+}
+
+function attachManualDamageAddDialog(dialog) {
+  const root = dialog.element;
+  const formulaInput = root.querySelector("[data-fast-nri-manual-damage-formula]");
+  root.querySelectorAll("[data-fast-nri-manual-damage-die]").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      if (!formulaInput) return;
+      formulaInput.value = String(button.dataset.fastNriManualDamageDie ?? "1d6");
+      formulaInput.focus();
+      formulaInput.select?.();
+    });
+  });
+}
+
+async function chooseManualDamageAddition(state) {
+  const defaults = manualDamageDefaultMeta(state);
+  const { DialogV2 } = foundry.applications.api;
+  const dice = [4, 6, 8, 10, 12, 20];
+
+  return DialogV2.wait({
+    classes: ["fast-nri-manual-damage-dialog"],
+    window: { title: "Добавить урон" },
+    content: `
+      <div class="fast-nri-manual-damage-add">
+        <p>Добавленные кубы бросаются отдельно. Уже выпавший урон не перебрасывается.</p>
+        <div class="fast-nri-manual-damage-dice">
+          ${dice.map(faces => `
+            <button type="button" data-fast-nri-manual-damage-die="1d${faces}">1d${faces}</button>
+          `).join("")}
+        </div>
+        <label>
+          Кубы / значение
+          <input
+            type="text"
+            value="1d6"
+            placeholder="1d6, 2d8, 1d10+4"
+            data-fast-nri-manual-damage-formula
+          >
+        </label>
+        <div class="fast-nri-manual-damage-meta">
+          <label>
+            Тип урона
+            <select data-fast-nri-manual-damage-type>
+              <option value="physical" ${defaults.damageType === "physical" ? "selected" : ""}>Физический</option>
+              <option value="magic" ${defaults.damageType === "magic" ? "selected" : ""}>Магический</option>
+            </select>
+          </label>
+          <div class="fast-nri-manual-damage-traits-field">
+            <span>Свойства</span>
+            <div class="fast-nri-manual-damage-traits">
+              ${manualDamageTraitOptionsHTML(defaults.traitIds)}
+            </div>
+          </div>
+        </div>
+        <small>
+          Тип и свойства по умолчанию взяты у самой большой текущей части урона.
+          Их можно изменить перед броском.
+        </small>
+      </div>
+    `,
+    modal: true,
+    rejectClose: false,
+    render: (_event, dialog) => attachManualDamageAddDialog(dialog),
+    buttons: [
+      {
+        action: "add",
+        label: "Добавить и бросить",
+        icon: "fa-solid fa-plus",
+        default: true,
+        callback: async (_event, _button, dialog) => collectManualDamageAddDialog(dialog)
+      },
+      {
+        action: "cancel",
+        label: "Отмена",
+        icon: "fa-solid fa-xmark",
+        callback: async () => null
+      }
+    ]
+  });
+}
+
+async function damageCardPresentationFromMessage(message, state) {
+  const stored = message?.getFlag?.("fast-nri", "damageCardMeta") ?? {};
+  const itemUuid = message?.getFlag?.("fast-nri", "itemUuid") ?? null;
+  let sourceItem = null;
+  if (itemUuid) {
+    try {
+      sourceItem = await fromUuid(itemUuid);
+    } catch (error) {
+      console.warn("Быстрая НРИ | Не удалось найти источник Damage-card", error);
+    }
+  }
+
+  const sourceName = stored.sourceName || sourceItem?.name || "Урон";
+  const profile = message?.getFlag?.("fast-nri", "profile") ?? null;
+  const labels = { partial: "Частичный", success: "Успех", great: "Большой" };
+  let profileLabel = stored.profileLabel || labels[profile] || profile || "";
+
+  if (!profileLabel && message?.getFlag?.("fast-nri", "abilityOutcome")) {
+    let runtime = sourceItem;
+    if (sourceItem?.type === "ability") {
+      const implementationId = message?.getFlag?.("fast-nri", "implementationId") ?? null;
+      runtime = abilityImplementationRuntime(sourceItem, implementationId) ?? sourceItem;
+    }
+    profileLabel = abilityIsSpell(runtime) ? "Заклинание" : "Способность";
+  }
+
+  const actionContext = actionContextFromMessage(message);
+  const allowDefense = stored.allowDefense ?? Boolean(
+    message?.getFlag?.("fast-nri", "directedDefense")
+    ?? actionHasDefenseProcedure(actionContext, "directed")
+  );
+  const targetCharacteristic = message?.getFlag?.("fast-nri", "targetCharacteristic")
+    ?? actionContext?.check?.targetCharacteristic
+    ?? null;
+  const hasAttackResult = finiteNumberOrNull(message?.getFlag?.("fast-nri", "attackTotal")) !== null;
+  const allowDouble = stored.allowDouble ?? Boolean(hasAttackResult && targetCharacteristic === "armor");
+
+  return {
+    sourceName,
+    profileLabel,
+    allowDefense,
+    allowDouble,
+    critical: Boolean(message?.getFlag?.("fast-nri", "critical")),
+    modifiersHTML: message?.getFlag?.("fast-nri", "modifierNotesHTML") ?? "",
+    actionContext
+  };
+}
+
+async function derivedDamageMessageData(message, state, operation) {
+  const presentation = await damageCardPresentationFromMessage(message, state);
+  const actionContext = deriveActionContext(
+    presentation.actionContext ?? normalizeActionContext({}),
+    { parentMessageId: message?.id ?? null }
+  );
+  const baseFlags = foundry.utils.deepClone(message?.flags?.["fast-nri"] ?? {});
+  const revision = Math.max(0, Number(baseFlags.damageRevision) || 0) + 1;
+  const damageCardMeta = {
+    sourceName: presentation.sourceName,
+    profileLabel: presentation.profileLabel,
+    allowDefense: presentation.allowDefense,
+    allowDouble: presentation.allowDouble
+  };
+
+  const flavor = damageCardHTML({
+    sourceName: presentation.sourceName,
+    profileLabel: presentation.profileLabel,
+    critical: presentation.critical,
+    state,
+    modifiersHTML: presentation.modifiersHTML,
+    allowDefense: presentation.allowDefense,
+    allowDouble: presentation.allowDouble
+  });
+
+  return {
+    flavor,
+    flags: {
+      ...baseFlags,
+      kind: "damage",
+      sourceDamageMessageId: message?.id ?? null,
+      parentDamageMessageId: message?.id ?? null,
+      damageRevision: revision,
+      damageEditOperation: foundry.utils.deepClone(operation ?? null),
+      finalTotal: state.currentTotal,
+      actionContext,
+      actionTraits: actionContext.traits,
+      targetCharacteristic: actionContext.check.targetCharacteristic || baseFlags.targetCharacteristic || null,
+      damageCardMeta,
+      damageState: state
+    }
+  };
+}
+
+async function markDamageMessageSuperseded(message, derivedMessage) {
+  if (!message?.setFlag || !derivedMessage?.id) return;
+  try {
+    await message.setFlag("fast-nri", "supersededByDamageMessageId", derivedMessage.id);
+  } catch (error) {
+    console.warn("Быстрая НРИ | Не удалось отметить старую Damage-card как устаревшую", error);
+  }
+}
+
+export async function removeDamageDieFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message) return null;
+
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState"));
+  if (!state?.supported) {
+    ui.notifications.warn("Эту Damage-card нельзя безопасно редактировать по отдельным кубам.");
+    return null;
+  }
+
+  const partId = await chooseManualDamageDie(state);
+  if (!partId) return null;
+  const next = removeManualDamageDieFromState(state, partId);
+  if (!next) return null;
+
+  const removedPart = (state.parts ?? []).find(part => part.id === partId) ?? null;
+  const data = await derivedDamageMessageData(message, next, {
+    kind: "removeDie",
+    partId,
+    faces: removedPart?.faces ?? null,
+    value: removedPart?.currentValue ?? removedPart?.value ?? null
+  });
+
+  const derivedMessage = await ChatMessage.create({
+    speaker: message.speaker,
+    content: data.flavor,
+    flags: { "fast-nri": data.flags }
+  });
+  await markDamageMessageSuperseded(message, derivedMessage);
+  return { message: derivedMessage, sourceMessage: message, damageState: next };
+}
+
+export async function addDamageFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message) return null;
+
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState"));
+  if (!state?.supported) {
+    ui.notifications.warn("Эту Damage-card нельзя безопасно расширить структурированным уроном.");
+    return null;
+  }
+
+  const selected = await chooseManualDamageAddition(state);
+  if (!selected?.formula) return null;
+
+  let roll;
+  try {
+    roll = await new Roll(selected.formula).evaluate();
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка формулы добавляемого урона", error);
+    ui.notifications.error(`Некорректная формула урона: ${selected.formula}`);
+    return null;
+  }
+
+  const added = buildDamageState(roll, {
+    damageType: selected.damageType,
+    traitIds: selected.traitIds
+  });
+  if (!added.supported || (added.penalties ?? []).length || !(added.parts ?? []).length) {
+    ui.notifications.error("Добавляемый урон должен состоять из положительных кубов и/или положительных значений.");
+    return null;
+  }
+
+  const next = appendManualDamageState(state, added, selected);
+  if (!next) return null;
+  const data = await derivedDamageMessageData(message, next, {
+    kind: "addDamage",
+    formula: selected.formula,
+    damageType: selected.damageType,
+    traitIds: selected.traitIds,
+    rolledTotal: roll.total
+  });
+
+  const derivedMessage = await roll.toMessage({
+    speaker: message.speaker,
+    flavor: data.flavor,
+    flags: { "fast-nri": data.flags }
+  });
+  await markDamageMessageSuperseded(message, derivedMessage);
+  return { message: derivedMessage, sourceMessage: message, roll, damageState: next };
 }
 
 async function chooseDamagePart(parts, mode = "largest", actionName = "Защита") {
@@ -2430,6 +2932,13 @@ export async function rollAbilityOutcome(actor, item, requestedKind = null, sour
           originalTargetUuid: sourceAttack?.targetUuid ?? null,
           sourceAttackMessageId: sourceAttack?.message?.id ?? null,
           directedDefense,
+          damageCardMeta: {
+            sourceName: item.name,
+            profileLabel: abilityIsSpell(runtime) ? "Заклинание" : "Способность",
+            allowDefense: directedDefense,
+            allowDouble
+          },
+          damageRevision: 0,
           rolledTotal: result.roll.total,
           finalTotal: state.currentTotal,
           modifierNotesHTML: modifiersHTML,
@@ -2570,6 +3079,8 @@ export async function rollDamageFromChat(element) {
   damageState = recalculateDamageState(damageState);
 
   const modifiersHTML = rollSourcesHTML(result);
+  const allowDefense = actionHasDefenseProcedure(actionContext, "directed");
+  const allowDouble = true;
 
   const flavor = damageCardHTML({
     weaponName: weapon.name,
@@ -2577,7 +3088,8 @@ export async function rollDamageFromChat(element) {
     critical,
     state: damageState,
     modifiersHTML,
-    allowDefense: actionHasDefenseProcedure(actionContext, "directed")
+    allowDefense,
+    allowDouble
   });
 
   const message = await result.roll.toMessage({
@@ -2600,6 +3112,13 @@ export async function rollDamageFromChat(element) {
         actionContext,
         originalTargetUuid,
         sourceAttackMessageId: attackMessage?.id ?? null,
+        damageCardMeta: {
+          sourceName: weapon.name,
+          profileLabel: labels[profile] ?? profile,
+          allowDefense,
+          allowDouble
+        },
+        damageRevision: 0,
         rolledTotal: result.roll.total,
         finalTotal: damageState.currentTotal,
         modifierNotesHTML: modifiersHTML,
@@ -4144,6 +4663,12 @@ export async function applyDamageFromChat(element) {
   }
 
   const sourceMessage = chatMessageFromElement(element);
+  const supersededBy = sourceMessage?.getFlag("fast-nri", "supersededByDamageMessageId") ?? null;
+  if (supersededBy) {
+    ui.notifications.warn(
+      "У этой Damage-card есть более новая ревизия. Применение не блокируется; проверьте, что выбрана нужная карточка."
+    );
+  }
   const damageState = sourceMessage?.getFlag("fast-nri", "damageState") ?? null;
   const sourceActionContext = actionContextFromMessage(sourceMessage);
 
@@ -4511,6 +5036,40 @@ export function activateChatInteractions(root = document) {
         await defenseFromChat(defenseButton);
       } finally {
         delete defenseButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
+    const removeDamageDieButton = event.target.closest("[data-fast-nri-damage-remove-die]");
+    if (removeDamageDieButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (removeDamageDieButton.dataset.fastNriBusy === "true") return;
+      removeDamageDieButton.dataset.fastNriBusy = "true";
+
+      try {
+        await removeDamageDieFromChat(removeDamageDieButton);
+      } finally {
+        delete removeDamageDieButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
+    const addDamageButton = event.target.closest("[data-fast-nri-damage-add]");
+    if (addDamageButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (addDamageButton.dataset.fastNriBusy === "true") return;
+      addDamageButton.dataset.fastNriBusy = "true";
+
+      try {
+        await addDamageFromChat(addDamageButton);
+      } finally {
+        delete addDamageButton.dataset.fastNriBusy;
       }
 
       return;
