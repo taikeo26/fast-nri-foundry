@@ -221,6 +221,9 @@ export async function useAbilityImplementation(actor, item, implementationId, { 
   }
 
   const actionContext = actionContextFromAbility(actor, item, { implementationId: runtime.implementationId });
+  const parentMessage = parentMessageId ? globalThis.game?.messages?.get?.(parentMessageId) ?? null : null;
+  const periodicRemovalEffectUuid = parentMessage?.getFlag("fast-nri", "periodicRemovalEffectUuid") ?? null;
+  const periodicRemovalSourceTickMessageId = parentMessage?.getFlag("fast-nri", "periodicRemovalSourceTickMessageId") ?? null;
   const richData = await enrichedImplementationData(item, runtime);
   const content = implementationCardHTML({ actor, item, runtime, resource, richData });
   const message = await ChatMessage.create({
@@ -228,6 +231,7 @@ export async function useAbilityImplementation(actor, item, implementationId, { 
     flags: { "fast-nri": {
       kind: "ability-implementation", actorUuid: actor.uuid, itemUuid: item.uuid,
       implementationId: runtime.implementationId, parentMessageId, resourceUndone: false,
+      periodicRemovalEffectUuid, periodicRemovalSourceTickMessageId,
       ...resource, actionContext
     } }
   });

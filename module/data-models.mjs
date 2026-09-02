@@ -677,6 +677,22 @@ export class EffectData extends foundry.abstract.TypeDataModel {
         formation: formationRulesSchema()
       }),
 
+      // Периодический урон — специализированный режим Effect.
+      // Исходная формула бросается один раз при наложении. runtime.storedValue
+      // хранит выпавшее базовое число; Устойчивость/Уязвимость его не переписывают.
+      periodic: new SchemaField({
+        valueFormula: text("1"),
+        propertyIds: stringArray(),
+        durationTicks: integer(0),
+        standardRemovalCheck: flag(true),
+        removalCheckDc: integer(11),
+        runtime: new SchemaField({
+          storedValue: integer(0),
+          remainingTicks: integer(0),
+          appliedOrder: integer(0)
+        })
+      }),
+
       // Источник и runtime используются только у Effect, встроенного в Actor.
       sourceUuid: text(""),
       runtime: new SchemaField({

@@ -555,8 +555,7 @@
         <div>
           <h2>Effect</h2>
           <p class="fast-nri-help">
-            Пока Effect только отслеживает длительность и стаки. Игровых штрафов,
-            бонусов и ограничений он автоматически не применяет.
+            Обычные Effect отслеживают длительность и стаки. Периодический урон использует отдельный структурированный режим и обрабатывается в Конце хода цели.
           </p>
         </div>
 
@@ -574,47 +573,109 @@
           </select>
         </label>
 
-        <label>
-          Стаки
-          <select name="system.stacking.mode">
-            {{selectOptions effectStackingChoices selected=system.stacking.mode}}
-          </select>
-        </label>
+        {{#unless isPeriodicEffect}}
+          <label>
+            Стаки
+            <select name="system.stacking.mode">
+              {{selectOptions effectStackingChoices selected=system.stacking.mode}}
+            </select>
+          </label>
+        {{/unless}}
       </div>
 
-      <div class="fast-nri-two">
-        <label>
-          Длительность
-          <select name="system.duration.mode">
-            {{selectOptions effectDurationChoices selected=system.duration.mode}}
-          </select>
-        </label>
+      {{#if isPeriodicEffect}}
+        <section class="fast-nri-periodic-definition">
+          <div class="fast-nri-section-heading">
+            <div>
+              <h3>Периодический урон</h3>
+              <small class="fast-nri-help">Каждое наложение создаёт отдельный экземпляр. Формула бросается один раз при наложении.</small>
+            </div>
+          </div>
+
+          <div class="fast-nri-two">
+            <label>Значение
+              <input type="text" name="system.periodic.valueFormula" value="{{system.periodic.valueFormula}}" placeholder="1d6" />
+            </label>
+            <label>Длительность в срабатываниях
+              <input type="number" min="0" step="1" name="system.periodic.durationTicks" value="{{system.periodic.durationTicks}}" />
+              <small class="fast-nri-help">0 — без ограничения по времени.</small>
+            </label>
+          </div>
+
+          <label>Свойства урона
+            <multi-select name="system.periodic.propertyIds" {{#if item.isEmbedded}}disabled{{/if}}>
+              {{selectOptions damageTraitChoices selected=system.periodic.propertyIds}}
+            </multi-select>
+            {{#if item.isEmbedded}}<small class="fast-nri-help">После наложения свойства экземпляра фиксированы.</small>{{/if}}
+          </label>
+          {{#unless periodicPropertyValidation.valid}}
+            <div class="fast-nri-periodic-validation-warning"><i class="fa-solid fa-triangle-exclamation"></i> Требуется хотя бы одно свойство: Физический или Магический.</div>
+          {{/unless}}
+
+          <div class="fast-nri-periodic-rule-summary">
+            <label class="fast-nri-checkbox-label">
+              <input type="checkbox" name="system.periodic.standardRemovalCheck" {{checked system.periodic.standardRemovalCheck}} />
+              Стандартная проверка снятия
+            </label>
+            <span>{{#if system.periodic.standardRemovalCheck}}<strong>1d20 против 11</strong>{{else}}Отключена{{/if}}</span>
+            <span>Длительность: <strong>{{periodicDurationLabel}}</strong></span>
+          </div>
+
+          {{#if item.isEmbedded}}
+            <label>Сохранённое значение
+              <input type="number" step="1" name="system.periodic.runtime.storedValue" value="{{system.periodic.runtime.storedValue}}" />
+            </label>
+            {{#if periodicRemovalAbilityRows.length}}
+              <div class="fast-nri-periodic-special-actions">
+                <small>Специальные способы снятия:</small>
+                {{#each periodicRemovalAbilityRows as |ability|}}
+                  {{#if ability.available}}
+                    <button type="button" data-action="usePeriodicRemovalAbility" data-ability-uuid="{{ability.uuid}}">
+                      <i class="fa-solid fa-kit-medical"></i>{{ability.name}}
+                    </button>
+                  {{else}}
+                    <span class="fast-nri-periodic-missing-ability" title="Ability не найдена">{{ability.name}}</span>
+                  {{/if}}
+                {{/each}}
+              </div>
+            {{/if}}
+          {{/if}}
+        </section>
+      {{else}}
+        <div class="fast-nri-two">
+          <label>
+            Длительность
+            <select name="system.duration.mode">
+              {{selectOptions effectDurationChoices selected=system.duration.mode}}
+            </select>
+          </label>
+
+          {{#if (eq system.duration.mode "rounds")}}
+            <label>
+              Раундов
+              <input
+                type="number"
+                min="1"
+                name="system.duration.rounds"
+                value="{{system.duration.rounds}}"
+              />
+            </label>
+          {{/if}}
+        </div>
 
         {{#if (eq system.duration.mode "rounds")}}
           <label>
-            Раундов
-            <input
-              type="number"
-              min="1"
-              name="system.duration.rounds"
-              value="{{system.duration.rounds}}"
-            />
+            Снимать
+            <select name="system.duration.expiry">
+              {{selectOptions effectExpiryChoices selected=system.duration.expiry}}
+            </select>
           </label>
         {{/if}}
-      </div>
 
-      {{#if (eq system.duration.mode "rounds")}}
-        <label>
-          Снимать
-          <select name="system.duration.expiry">
-            {{selectOptions effectExpiryChoices selected=system.duration.expiry}}
-          </select>
-        </label>
+        <div class="fast-nri-effect-definition-summary">
+          <strong>{{effectDurationLabel}}</strong>
+        </div>
       {{/if}}
-
-      <div class="fast-nri-effect-definition-summary">
-        <strong>{{effectDurationLabel}}</strong>
-      </div>
 
       <div class="fast-nri-formation-rules">
         <h3>Модификаторы Строя</h3>

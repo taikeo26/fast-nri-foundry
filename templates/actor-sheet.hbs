@@ -636,11 +636,14 @@
               <div class="fast-nri-applied-effect-info">
                 <strong>{{row.name}}</strong>
                 <small>{{row.durationLabel}}</small>
+                {{#if row.periodic}}<small>База: {{row.periodicStoredValue}}</small>{{/if}}
               </div>
 
-              {{#if row.stackCount}}
-                <span class="fast-nri-applied-effect-stack">×{{row.stackCount}}</span>
-              {{/if}}
+              {{#unless row.periodic}}
+                {{#if row.stackCount}}
+                  <span class="fast-nri-applied-effect-stack">×{{row.stackCount}}</span>
+                {{/if}}
+              {{/unless}}
 
               <button type="button" data-action="editItem" title="Открыть">
                 <i class="fa-solid fa-pen-to-square"></i>

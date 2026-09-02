@@ -3533,3 +3533,96 @@ button.fast-nri-property-reference:hover {
 .fast-nri-weapon-property-description .fast-nri-rich-text > :last-child {
   margin-bottom: 0;
 }
+
+/* 0.5.57 — Периодический урон */
+.fast-nri-periodic-definition {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-light-2, #8885);
+  border-radius: 6px;
+}
+
+.fast-nri-periodic-validation-warning {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--color-level-warning-border, #a76d00);
+  border-radius: 4px;
+}
+
+.fast-nri-periodic-rule-summary,
+.fast-nri-periodic-meta,
+.fast-nri-periodic-properties,
+.fast-nri-periodic-resolution,
+.fast-nri-periodic-special-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+}
+
+.fast-nri-periodic-rule-summary {
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 5%);
+}
+
+.fast-nri-periodic-tick-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fast-nri-periodic-property {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+
+.fast-nri-periodic-stored-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fast-nri-periodic-stored-editor input {
+  width: 100%;
+  text-align: center;
+}
+
+.fast-nri-periodic-resolution {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 4%);
+}
+
+.fast-nri-periodic-resolution-row.danger,
+.fast-nri-periodic-result.removed {
+  font-weight: 600;
+}
+
+.fast-nri-periodic-special-actions {
+  align-items: center;
+}
+
+.fast-nri-periodic-special-actions small {
+  flex-basis: 100%;
+}
+
+.fast-nri-periodic-result {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 5%);
+}
+
+.fast-nri-periodic-tick-card.undone .fast-nri-periodic-result {
+  text-decoration: line-through;
+  opacity: 0.65;
+}

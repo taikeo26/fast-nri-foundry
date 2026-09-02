@@ -29,6 +29,13 @@ import {
 } from "./effect-system.mjs";
 import { useAbility } from "./ability-use.mjs";
 import {
+  isPeriodicEffect,
+  periodicDurationLabel,
+  periodicSpecialAbilityRows,
+  usePeriodicRemovalAbility,
+  validatePeriodicPropertyIds
+} from "./periodic-damage.mjs";
+import {
   ABILITY_AREA_PRESET_TYPES,
   ABILITY_AREA_SHAPES,
   ABILITY_PROFILE_DEGREES,
@@ -159,6 +166,8 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
         name: item.name,
         img: item.img,
         systemOnly: isSystemOnlyEffect(item),
+        periodic: isPeriodicEffect(item),
+        periodicStoredValue: Number(item.system?.periodic?.runtime?.storedValue) || 0,
         stackCount: effectStackCount(item),
         durationLabel: runtimeDurationLabel(item, game.combat?.started ? {
           combatId: game.combat.id,
@@ -574,7 +583,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeImplementationProfileComponent: FastNriItemSheet.#removeImplementationProfileComponent,
       removeImplementationEffect: FastNriItemSheet.#removeImplementationEffect,
       removeImplementationProfileEffect: FastNriItemSheet.#removeImplementationProfileEffect,
-      openWeaponProperty: FastNriItemSheet.#openWeaponProperty
+      openWeaponProperty: FastNriItemSheet.#openWeaponProperty,
+      usePeriodicRemovalAbility: FastNriItemSheet.#usePeriodicRemovalAbility
     }
   };
 
@@ -1494,6 +1504,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     });
   }
 
+  static async #usePeriodicRemovalAbility(event, target) {
+    event.preventDefault();
+    if (this.item.type !== "effect" || !isPeriodicEffect(this.item) || !this.item.isEmbedded) return;
+    const abilityUuid = String(target?.dataset?.abilityUuid ?? "").trim();
+    if (!abilityUuid) return;
+    await usePeriodicRemovalAbility(this.item, abilityUuid);
+  }
+
   static async #openWeaponProperty(event, target) {
     event.preventDefault();
     const uuid = String(target?.dataset?.propertyUuid ?? "").trim();
@@ -1707,6 +1725,12 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     const selectedPropertyRows = Array.from(this.item.system?.propertyIds ?? [])
       .map(id => weaponPropertyReference(id));
 
+    const periodicRemovalAbilityRows = this.item.type === "effect"
+      && isPeriodicEffect(this.item)
+      && this.item.isEmbedded
+        ? await periodicSpecialAbilityRows(this.item)
+        : [];
+
     return {
       ...context,
       item: this.item,
@@ -1731,6 +1755,14 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       itemUsable: itemIsUsable(this.item),
       isConsumable: this.item.type === "consumable",
       isEffect: this.item.type === "effect",
+      isPeriodicEffect: this.item.type === "effect" && isPeriodicEffect(this.item),
+      periodicPropertyValidation: this.item.type === "effect" && isPeriodicEffect(this.item)
+        ? validatePeriodicPropertyIds(this.item.system?.periodic?.propertyIds ?? [])
+        : { valid: true, propertyIds: [] },
+      periodicDurationLabel: this.item.type === "effect" && isPeriodicEffect(this.item)
+        ? periodicDurationLabel(this.item)
+        : "",
+      periodicRemovalAbilityRows,
       linkedEffectRows,
       effectKindChoices: EFFECT_KINDS,
       effectDurationChoices: EFFECT_DURATION_MODES,

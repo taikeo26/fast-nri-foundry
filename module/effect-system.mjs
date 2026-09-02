@@ -1,4 +1,10 @@
 import { normalizeActionContext } from "./action-context.mjs";
+import {
+  applyPeriodicEffectToActor,
+  isPeriodicEffect,
+  periodicDurationLabel,
+  processPeriodicTurnEnd
+} from "./periodic-damage.mjs";
 
 const SYSTEM_ID = "fast-nri";
 const SEED_SETTING = "builtinEffectsSeeded";
@@ -24,7 +30,8 @@ export const EFFECT_STACKING_MODES = Object.freeze({
 export const EFFECT_KINDS = Object.freeze({
   condition: "Состояние",
   buff: "Бафф",
-  debuff: "Дебафф"
+  debuff: "Дебафф",
+  periodic: "Периодический урон"
 });
 
 export const OFF_GUARD_EFFECT_ID = "off-guard";
@@ -228,6 +235,7 @@ export function removeOneStackState(system = {}) {
 }
 
 export function durationDefinitionLabel(system = {}) {
+  if (isPeriodicEffect(system)) return periodicDurationLabel(system);
   const duration = system.duration ?? {};
   const mode = String(duration.mode ?? "manual");
 
@@ -248,6 +256,7 @@ export function durationDefinitionLabel(system = {}) {
 
 export function runtimeDurationLabel(effectOrSystem, combatState = null) {
   const system = effectOrSystem?.system ?? effectOrSystem ?? {};
+  if (isPeriodicEffect(system)) return periodicDurationLabel(system);
   const timers = Array.from(system.runtime?.timers ?? []);
   if (!timers.length) return durationDefinitionLabel(system);
 
@@ -677,6 +686,18 @@ export async function applyEffectToActor(sourceEffect, actor, { allowSystemOnly 
   if (!sourceEffect || sourceEffect.type !== "effect" || !actor) return null;
   if (isSystemOnlyEffect(sourceEffect) && !allowSystemOnly) return null;
 
+  if (isPeriodicEffect(sourceEffect)) {
+    return applyPeriodicEffectToActor(sourceEffect, actor, {
+      allowSystemOnly,
+      actionContext,
+      sourceKey: effectSourceKey(sourceEffect),
+      onCreated: async embedded => {
+        await syncMirror(embedded);
+        refreshNativeEffectHud(actor);
+      }
+    });
+  }
+
   if (!actor.isOwner && !game.user.isGM) {
     ui.notifications.warn(`Нет прав на изменение ${actor.name}.`);
     return null;
@@ -825,6 +846,9 @@ async function processActorExpiry(actor, events) {
   const effects = Array.from(actor.items ?? []).filter(item => item.type === "effect");
 
   for (const effect of effects) {
+    // Периодический урон считает длительность собственными событиями Конца хода.
+    // Общие таймеры Effect не должны удалить его до разрешения тика.
+    if (isPeriodicEffect(effect)) continue;
     const timers = Array.from(effect.system?.runtime?.timers ?? []);
     if (!timers.length) continue;
 
@@ -868,6 +892,15 @@ async function processCombatTurnChange(combat, prior, current) {
 
   const events = timerEventsForTurnChange(combat, prior, current);
   if (!events.length) return;
+
+  // Периодические эффекты снимают snapshot именно в момент Конца хода
+  // прежнего combatant. Всё созданное после snapshot ждёт следующего Конца хода.
+  if (prior?.combatantId) {
+    const priorCombatant = combat.combatants?.get?.(prior.combatantId)
+      ?? Array.from(combat.combatants ?? []).find(c => c.id === prior.combatantId)
+      ?? null;
+    if (priorCombatant?.actor) await processPeriodicTurnEnd(priorCombatant.actor);
+  }
 
   const actors = new Map();
 

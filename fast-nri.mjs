@@ -16,6 +16,7 @@ import {
   seedBuiltinEffectsOnce
 } from "./module/effect-system.mjs";
 import { activateHealthChatInteractions } from "./module/health-actions.mjs";
+import { activatePeriodicDamage } from "./module/periodic-damage.mjs";
 import { activateWeaponRules } from "./module/weapon-rules.mjs";
 import { activateFieldGeometry } from "./module/field-geometry.mjs";
 // Controlled-cell rules are pure field calculations and require no activation hook.
@@ -124,6 +125,7 @@ Hooks.once("ready", async () => {
   activateAbilityChatInteractions(document);
   activateAbilityAreaPlacement();
   activateHealthChatInteractions(document);
+  activatePeriodicDamage(document);
   activateEffectChatInteractions(document);
   activateEffectSystem();
   activateFastNriEffectPanel();

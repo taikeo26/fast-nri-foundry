@@ -3270,6 +3270,9 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
   const runtime = abilityImplementationRuntime(item, implementationId);
   const config = abilityCheckConfig(runtime);
   if (!config.enabled) return null;
+  const parentMessage = parentMessageId ? globalThis.game?.messages?.get?.(parentMessageId) ?? null : null;
+  const periodicRemovalEffectUuid = parentMessage?.getFlag("fast-nri", "periodicRemovalEffectUuid") ?? null;
+  const periodicRemovalSourceTickMessageId = parentMessage?.getFlag("fast-nri", "periodicRemovalSourceTickMessageId") ?? null;
 
   const targetCharacteristic = normalizeCheckTargetCharacteristic(config.targetCharacteristic) || "armor";
   const actionTraits = abilityActionTraits(runtime);
@@ -3481,6 +3484,8 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
         kind: "ability-check",
         actorUuid: actor.uuid,
         itemUuid: item.uuid,
+        periodicRemovalEffectUuid,
+        periodicRemovalSourceTickMessageId,
         implementationId: runtime?.implementationId ?? implementationId ?? null,
         repeatIndex,
         targetUuid: target?.document?.uuid ?? null,

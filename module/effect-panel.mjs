@@ -7,6 +7,7 @@ import {
   runtimeDurationLabel,
   isSystemOnlyEffect
 } from "./effect-system.mjs";
+import { isPeriodicEffect } from "./periodic-damage.mjs";
 
 const PANEL_ID = "fast-nri-applied-effects-panel";
 const TOOLTIP_ID = "fast-nri-applied-effect-tooltip";
@@ -62,6 +63,8 @@ export function effectPanelData(effect, combatState = null) {
     name: effect.name,
     img: effect.img,
     systemOnly: isSystemOnlyEffect(effect),
+    periodic: isPeriodicEffect(effect),
+    periodicStoredValue: Number(effect.system?.periodic?.runtime?.storedValue) || 0,
     kind,
     stackCount: count,
     stacking,
@@ -156,6 +159,11 @@ async function showTooltip(effect, button) {
         <dt>Длительность</dt>
         <dd>${esc(data.durationDefinition)}</dd>
       </div>
+      ${data.periodic ? `
+      <div>
+        <dt>Сохранённое значение</dt>
+        <dd>${esc(data.periodicStoredValue)}</dd>
+      </div>` : `
       <div>
         <dt>Стаки</dt>
         <dd>${esc(data.stackCount)}</dd>
@@ -163,7 +171,7 @@ async function showTooltip(effect, button) {
       <div>
         <dt>Режим стаков</dt>
         <dd>${esc(data.stacking)}</dd>
-      </div>
+      </div>`}
     </dl>
 
     <footer>
