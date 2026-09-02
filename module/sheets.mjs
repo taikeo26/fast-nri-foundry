@@ -556,6 +556,8 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       removeImplementation: FastNriItemSheet.#removeImplementation,
       addImplementationArea: FastNriItemSheet.#addImplementationArea,
       removeImplementationArea: FastNriItemSheet.#removeImplementationArea,
+      addImplementationOutcomeComponent: FastNriItemSheet.#addImplementationOutcomeComponent,
+      removeImplementationOutcomeComponent: FastNriItemSheet.#removeImplementationOutcomeComponent,
       addImplementationProfileComponent: FastNriItemSheet.#addImplementationProfileComponent,
       removeImplementationProfileComponent: FastNriItemSheet.#removeImplementationProfileComponent,
       removeImplementationEffect: FastNriItemSheet.#removeImplementationEffect,
@@ -1317,6 +1319,45 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     await this.item.update({ "system.implementations": current });
   }
 
+  static async #addImplementationOutcomeComponent(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const kind = target.dataset.outcomeKind;
+    if (!Number.isInteger(implIndex) || !["damage", "healing", "tempHp"].includes(kind)) return;
+
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const impl = current[implIndex];
+    if (!impl) return;
+
+    impl.outcomes ??= {};
+    impl.outcomes[kind] ??= { enabled: false, components: [] };
+    const channel = impl.outcomes[kind];
+    channel.enabled = true;
+    channel.components = Array.from(channel.components ?? []);
+    channel.components.push({ formula: "1d6", damageType: "physical", traitIds: [] });
+    this._activeImplementationId = impl.id;
+    await this.item.update({ "system.implementations": current });
+  }
+
+  static async #removeImplementationOutcomeComponent(event, target) {
+    event.preventDefault();
+    const implIndex = Number(target.dataset.implementationIndex);
+    const kind = target.dataset.outcomeKind;
+    const componentIndex = Number(target.dataset.index);
+    if (!Number.isInteger(implIndex) || !Number.isInteger(componentIndex) || !["damage", "healing", "tempHp"].includes(kind)) return;
+
+    const current = Array.from(this.item.system?.implementations ?? []).map(value => foundry.utils.deepClone(value));
+    const impl = current[implIndex];
+    const channel = impl?.outcomes?.[kind];
+    if (!impl || !channel) return;
+
+    channel.components = Array.from(channel.components ?? []);
+    channel.components.splice(componentIndex, 1);
+    if (!channel.components.length) channel.enabled = false;
+    this._activeImplementationId = impl.id;
+    await this.item.update({ "system.implementations": current });
+  }
+
   static async #addImplementationProfileComponent(event, target) {
     event.preventDefault();
     const implIndex = Number(target.dataset.implementationIndex);
@@ -1511,6 +1552,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
             label: kind === "damage" ? "Урон" : kind === "healing" ? "Лечение" : "Временные HP",
             enabled: Boolean(profile?.[kind]?.enabled),
             isDamage: kind === "damage",
+            isHpGain: kind === "healing" || kind === "tempHp",
             removeHighest: Math.max(0, Number(profile?.damage?.removeHighest) || 0),
             removeLowest: Math.max(0, Number(profile?.damage?.removeLowest) || 0),
             removeAll: Boolean(profile?.damage?.removeAll),
@@ -1527,6 +1569,22 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
             effects: effects.map(effect => ({ uuid: effect.uuid, name: effect.name, img: effect.img, durationLabel: durationDefinitionLabel(effect.system) }))
           });
         }
+        const outcomes = ["damage", "healing", "tempHp"].map(kind => {
+          const channel = implementation?.outcomes?.[kind] ?? {};
+          return {
+            kind,
+            label: kind === "damage" ? "Урон" : kind === "healing" ? "Лечение" : "Временные HP",
+            enabled: Boolean(channel.enabled),
+            isDamage: kind === "damage",
+            isHpGain: kind === "healing" || kind === "tempHp",
+            components: Array.from(channel.components ?? []).map((component, index) => ({
+              index,
+              formula: String(component?.formula ?? "1d6"),
+              damageType: String(component?.damageType ?? "physical"),
+              traitIds: Array.from(component?.traitIds ?? [])
+            }))
+          };
+        });
         const effects = await resolveEffectDocuments(implementation?.effectUuids ?? []);
         const areas = abilityAreaPresets(runtime).map((area, areaIndex) => ({
           ...area,
@@ -1541,7 +1599,7 @@ export class FastNriItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
           index: implementationIndex,
           id: implementation?.id,
           name: implementation?.name || `Реализация ${implementationIndex + 1}`,
-          implementation, runtime, profiles, areas,
+          implementation, runtime, profiles, outcomes, areas,
           costLabel: abilityCostLabel(runtime, this.item.parent?.documentName === "Actor" ? this.item.parent : null),
           traitLabel: abilityTraitLabels(runtime).join(" · "),
           effects: effects.map(effect => ({ uuid: effect.uuid, name: effect.name, img: effect.img, durationLabel: durationDefinitionLabel(effect.system) }))

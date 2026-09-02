@@ -208,6 +208,39 @@
   min-height: 0;
 }
 
+/*
+ * ItemSheet uses the same one-part ApplicationV2 structure. Keeping a second
+ * fixed-height scroller on .fast-nri-sheet can leave long Ability
+ * implementations clipped with no usable scrollbar. Scroll window-content
+ * itself, exactly like ActorSheet, and let the Handlebars body keep its
+ * natural height.
+ */
+.application.fast-nri-item-sheet .window-content,
+.fast-nri-item-sheet .window-content {
+  display: block !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.application.fast-nri-item-sheet .window-content > .fast-nri-sheet,
+.fast-nri-item-sheet .window-content > .fast-nri-sheet,
+.fast-nri-item-sheet .fast-nri-sheet {
+  display: flex !important;
+  flex-direction: column !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: max-content !important;
+  overflow: visible !important;
+  padding-bottom: 32px !important;
+}
+
+.application.fast-nri-item-sheet {
+  min-height: 0;
+}
+
 
 
 /* ========================================================= */
@@ -3386,3 +3419,61 @@ body.theme-dark .fast-nri-hp-line label {
   font-size: 0.9em;
   opacity: 0.85;
 }
+
+/* ========================================================= */
+/* v0.5.55.11 - live QA: narrow chat + ItemSheet scrolling   */
+/* ========================================================= */
+
+/*
+ * Foundry's chat sidebar can be narrow while the browser viewport is wide,
+ * so viewport @media rules are not a reliable way to make chat-card controls
+ * responsive. Use intrinsic wrapping/stacking instead.
+ */
+.fast-nri-damage-actions,
+.fast-nri-damage-actions-three {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+}
+
+.fast-nri-damage-actions > button,
+.fast-nri-multitarget-target-actions > button,
+.fast-nri-multitarget-main-actions > button {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  line-height: 1.15;
+}
+
+.fast-nri-multitarget-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fast-nri-multitarget-degree {
+  grid-column: 1;
+}
+
+.fast-nri-multitarget-row-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.fast-nri-multitarget-target-actions {
+  align-items: stretch;
+}
+
+.fast-nri-multitarget-target-actions > button {
+  width: 100%;
+}
+
+.fast-nri-multitarget-main-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.fast-nri-multitarget-main-actions > button {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+}
+

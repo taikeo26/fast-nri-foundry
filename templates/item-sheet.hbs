@@ -312,6 +312,40 @@
                 <label class="fast-nri-checkbox-label"><input type="checkbox" name="system.implementations.{{impl.index}}.defenseProcedure.directedDefense" {{#if impl.implementation.defenseProcedure.directedDefense}}checked{{/if}} /><span>Направленная защита</span></label>
               {{/if}}
 
+              <h3>Прямой результат</h3>
+              <small class="fast-nri-help">Используется, когда результат не выбирается по степени Check. Если включён хотя бы один профиль степени, runtime использует профиль соответствующей степени вместо этих каналов.</small>
+              <div class="fast-nri-outcome-channel-list fast-nri-implementation-outcomes">
+                {{#each impl.outcomes as |channel|}}
+                  <section class="fast-nri-outcome-channel {{#if channel.enabled}}enabled{{/if}}">
+                    <div class="fast-nri-outcome-channel-heading">
+                      <label class="fast-nri-checkbox-label">
+                        <input type="checkbox" name="system.implementations.{{impl.index}}.outcomes.{{channel.kind}}.enabled" {{#if channel.enabled}}checked{{/if}} />
+                        <span>{{channel.label}}</span>
+                      </label>
+                      <button type="button" data-action="addImplementationOutcomeComponent" data-implementation-index="{{impl.index}}" data-outcome-kind="{{channel.kind}}"><i class="fa-solid fa-plus"></i> Компонент</button>
+                    </div>
+                    {{#if channel.components.length}}
+                      <div class="fast-nri-outcome-component-list">
+                        {{#each channel.components as |component|}}
+                          <div class="fast-nri-outcome-component-row {{#if channel.isDamage}}is-damage{{/if}}">
+                            <input type="text" name="system.implementations.{{impl.index}}.outcomes.{{channel.kind}}.components.{{component.index}}.formula" value="{{component.formula}}" title="Формула" />
+                            {{#if channel.isDamage}}
+                              <select name="system.implementations.{{impl.index}}.outcomes.{{channel.kind}}.components.{{component.index}}.damageType" title="Тип урона"><option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option><option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option></select>
+                              <multi-select name="system.implementations.{{impl.index}}.outcomes.{{channel.kind}}.components.{{component.index}}.traitIds" title="Свойства урона">{{selectOptions @root.damageTraitChoices selected=component.traitIds}}</multi-select>
+                            {{else}}
+                              <multi-select name="system.implementations.{{impl.index}}.outcomes.{{channel.kind}}.components.{{component.index}}.traitIds" title="Свойства Получения HP">{{selectOptions @root.hpGainSourceTraitChoices selected=component.traitIds}}</multi-select>
+                            {{/if}}
+                            <button type="button" data-action="removeImplementationOutcomeComponent" data-implementation-index="{{impl.index}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}" title="Удалить компонент"><i class="fa-solid fa-trash"></i></button>
+                          </div>
+                        {{/each}}
+                      </div>
+                    {{else}}
+                      <small class="fast-nri-help">Компонентов нет. Нажмите «Компонент», чтобы настроить результат.</small>
+                    {{/if}}
+                  </section>
+                {{/each}}
+              </div>
+
               <h3>Профили по степени</h3>
               {{#each impl.profiles as |profile|}}
                 <section class="fast-nri-result-profile {{#if profile.enabled}}enabled{{/if}}">
@@ -336,6 +370,8 @@
                           {{#if channel.isDamage}}
                             <select name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.damageType"><option value="physical" {{#if (eq component.damageType "physical")}}selected{{/if}}>Физический</option><option value="magic" {{#if (eq component.damageType "magic")}}selected{{/if}}>Магический</option></select>
                             <multi-select name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.traitIds">{{selectOptions @root.damageTraitChoices selected=component.traitIds}}</multi-select>
+                          {{else}}
+                            <multi-select name="system.implementations.{{impl.index}}.profiles.{{profile.degree}}.{{channel.kind}}.components.{{component.index}}.traitIds" title="Свойства Получения HP">{{selectOptions @root.hpGainSourceTraitChoices selected=component.traitIds}}</multi-select>
                           {{/if}}
                           <button type="button" data-action="removeImplementationProfileComponent" data-implementation-index="{{impl.index}}" data-degree="{{profile.degree}}" data-outcome-kind="{{channel.kind}}" data-index="{{component.index}}"><i class="fa-solid fa-trash"></i></button>
                         </div>
@@ -357,6 +393,13 @@
                   <label>Дистанция <select name="system.implementations.{{impl.index}}.defenseAction.rangeMode">{{selectOptions @root.defenseRangeModeChoices selected=impl.implementation.defenseAction.rangeMode}}</select></label>
                   <label>Клеток <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.rangeCells" value="{{impl.implementation.defenseAction.rangeCells}}" /></label>
                   <label>Формула боевых кубов <input type="text" name="system.implementations.{{impl.index}}.defenseAction.combatDiceFormula" value="{{impl.implementation.defenseAction.combatDiceFormula}}" /></label>
+                  <label>Характеристика Самозащиты
+                    <select name="system.implementations.{{impl.index}}.defenseAction.selfDefenseCharacteristic">
+                      <option value="" {{#unless impl.implementation.defenseAction.selfDefenseCharacteristic}}selected{{/unless}}>По правилу исходной атаки</option>
+                      <option value="fortitude" {{#if (eq impl.implementation.defenseAction.selfDefenseCharacteristic "fortitude")}}selected{{/if}}>Стойкость</option>
+                      <option value="reflex" {{#if (eq impl.implementation.defenseAction.selfDefenseCharacteristic "reflex")}}selected{{/if}}>Рефлекс</option>
+                    </select>
+                  </label>
                   <label>Удалить частей урона <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.removeDamageParts" value="{{impl.implementation.defenseAction.removeDamageParts}}" /></label>
                   <label>Снижение степени Эффекта <input type="number" min="0" name="system.implementations.{{impl.index}}.defenseAction.effectDegreeReduction" value="{{impl.implementation.defenseAction.effectDegreeReduction}}" /></label>
                   <label>Выбор частей <select name="system.implementations.{{impl.index}}.defenseAction.damageSelectionMode">{{selectOptions @root.defenseDamageSelectionChoices selected=impl.implementation.defenseAction.damageSelectionMode}}</select></label>
