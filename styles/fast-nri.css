@@ -3265,3 +3265,124 @@ body.theme-dark .fast-nri-hp-line label {
 .fast-nri-area-preset-text { margin-top: 3px; white-space: normal; }
 .fast-nri-area-preset-text > :first-child { margin-top: 0; }
 .fast-nri-area-preset-text > :last-child { margin-bottom: 0; }
+
+/* 0.5.55.10 — multi-target Ability/Spell result dispatcher */
+.fast-nri-ability-multitarget-card .fast-nri-damage-parts-block {
+  margin-block: 0.5rem;
+}
+
+.fast-nri-multitarget-section {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.fast-nri-multitarget-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fast-nri-multitarget-heading small {
+  opacity: 0.72;
+}
+
+.fast-nri-multitarget-list {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fast-nri-multitarget-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(7.5rem, auto) auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--color-border-light-primary, rgba(0, 0, 0, 0.2));
+  border-radius: 4px;
+}
+
+.fast-nri-multitarget-target,
+.fast-nri-multitarget-degree {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fast-nri-multitarget-target small,
+.fast-nri-multitarget-manual {
+  opacity: 0.7;
+}
+
+.fast-nri-multitarget-row-actions,
+.fast-nri-multitarget-target-actions,
+.fast-nri-multitarget-main-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fast-nri-multitarget-row-actions button {
+  min-width: 2rem;
+}
+
+.fast-nri-multitarget-menu-button,
+.fast-nri-multitarget-remove-button {
+  width: 2rem;
+  padding-inline: 0;
+}
+
+.fast-nri-multitarget-target-actions {
+  margin-top: 0.45rem;
+}
+
+.fast-nri-multitarget-main-actions {
+  margin-top: 0.55rem;
+}
+
+.fast-nri-multitarget-main-actions > button {
+  flex: 1 1 0;
+}
+
+.fast-nri-multitarget-applied-note {
+  display: block;
+  margin-top: 0.35rem;
+  opacity: 0.72;
+}
+
+.fast-nri-multitarget-result-target {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--color-border-light-primary, rgba(0, 0, 0, 0.2));
+  border-radius: 4px;
+}
+
+@media (max-width: 520px) {
+  .fast-nri-multitarget-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .fast-nri-multitarget-degree {
+    grid-column: 1;
+  }
+
+  .fast-nri-multitarget-row-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .fast-nri-multitarget-main-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.fast-nri-chat-damage-target {
+  margin-top: 0.2rem;
+  font-size: 0.9em;
+  opacity: 0.85;
+}

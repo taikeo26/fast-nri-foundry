@@ -1269,7 +1269,7 @@ function damagePartTraitsHTML(part) {
   return `<small class="fast-nri-damage-part-traits">${labels.map(esc).join(" · ")}</small>`;
 }
 
-function damagePartsHTML(state) {
+function damagePartsHTML(state, { editable = true, title = "Кубы урона" } = {}) {
   if (!state?.supported) {
     return `
       <div class="fast-nri-damage-structure-warning">
@@ -1345,8 +1345,8 @@ function damagePartsHTML(state) {
   return `
     <section class="fast-nri-damage-parts-block">
       <div class="fast-nri-damage-parts-heading">
-        <div class="fast-nri-damage-parts-title">Кубы урона</div>
-        <div class="fast-nri-damage-edit-actions" aria-label="Ручное управление уроном">
+        <div class="fast-nri-damage-parts-title">${esc(title)}</div>
+        ${editable ? `<div class="fast-nri-damage-edit-actions" aria-label="Ручное управление уроном">
           <button
             type="button"
             class="fast-nri-damage-edit-button"
@@ -1362,7 +1362,7 @@ function damagePartsHTML(state) {
             title="Добавить куб или значение урона"
             aria-label="Добавить урон"
           ><i class="fa-solid fa-plus"></i></button>
-        </div>
+        </div>` : ""}
       </div>
       <div class="fast-nri-damage-equation">
         <div class="fast-nri-damage-parts">
@@ -1476,6 +1476,7 @@ function damageCardHTML({
   weaponName,
   sourceName = weaponName,
   profileLabel,
+  targetName = "",
   critical = false,
   state,
   modifiersHTML = "",
@@ -1492,6 +1493,7 @@ function damageCardHTML({
       <div class="fast-nri-chat-damage-profile-name">
         ${esc(profileLabel)}
       </div>
+      ${targetName ? `<div class="fast-nri-chat-damage-target">Цель: <strong>${esc(targetName)}</strong></div>` : ""}
 
       ${damagePartsHTML(state)}
       ${manualDamageSummaryHTML(state)}
@@ -1855,6 +1857,7 @@ async function damageCardPresentationFromMessage(message, state) {
   return {
     sourceName,
     profileLabel,
+    targetName: stored.targetName ?? message?.getFlag?.("fast-nri", "resultTargetName") ?? "",
     allowDefense,
     allowDouble,
     critical: Boolean(message?.getFlag?.("fast-nri", "critical")),
@@ -1874,6 +1877,7 @@ async function derivedDamageMessageData(message, state, operation) {
   const damageCardMeta = {
     sourceName: presentation.sourceName,
     profileLabel: presentation.profileLabel,
+    targetName: presentation.targetName,
     allowDefense: presentation.allowDefense,
     allowDouble: presentation.allowDouble
   };
@@ -1881,6 +1885,7 @@ async function derivedDamageMessageData(message, state, operation) {
   const flavor = damageCardHTML({
     sourceName: presentation.sourceName,
     profileLabel: presentation.profileLabel,
+    targetName: presentation.targetName,
     critical: presentation.critical,
     state,
     modifiersHTML: presentation.modifiersHTML,
@@ -2643,6 +2648,615 @@ function degreeForAbilityCheck(result, targetCharacteristic, resolvedTarget) {
   return degreeVsDC(result.roll.total, dc, result.naturalD20);
 }
 
+
+const MULTI_TARGET_ABILITY_KIND = "ability-multitarget";
+const MULTI_TARGET_DEGREE_ORDER = ["failure", "partial", "success", "great"];
+
+function multiTargetAbilityEligible(runtime, actionTraits) {
+  return Boolean(actionTraits?.area && abilityHasDegreeProfiles(runtime));
+}
+
+function componentSignature(component) {
+  return JSON.stringify({
+    formula: String(component?.formula ?? "").replace(/\s+/g, "").trim(),
+    damageType: component?.damageType === "magic" ? "magic" : "physical",
+    traitIds: Array.from(new Set(component?.traitIds ?? [])).sort()
+  });
+}
+
+function sharedAreaDamagePlan(actor, runtime) {
+  const configured = [];
+  for (const degree of ["great", "success", "partial", "failure"]) {
+    const channel = abilityOutcomeChannel(runtime, "damage", degree);
+    if (!channel?.enabled) continue;
+    const components = abilityOutcomeComponents(actor, runtime, "damage", degree);
+    if (!components.length) continue;
+    configured.push({ degree, channel, components });
+  }
+
+  if (!configured.length) {
+    return { compatible: true, degree: null, components: [], reason: null };
+  }
+
+  const canonical = configured[0];
+  const signature = canonical.components.map(componentSignature).join("|");
+  const incompatible = configured.find(entry => entry.components.map(componentSignature).join("|") !== signature);
+  if (incompatible) {
+    return {
+      compatible: false,
+      degree: canonical.degree,
+      components: canonical.components,
+      reason: "Профили степеней используют разные формулы урона. Общий пул нельзя безопасно бросить один раз."
+    };
+  }
+
+  return {
+    compatible: true,
+    degree: canonical.degree,
+    components: canonical.components,
+    reason: null
+  };
+}
+
+function tokenDocumentUuid(token) {
+  return token?.document?.uuid ?? token?.uuid ?? null;
+}
+
+function multiTargetEntryForToken(token, { result, targetCharacteristic, sourceActor }) {
+  if (!token?.actor) return null;
+  const resolved = resolveAbilityCheckTarget(token, targetCharacteristic, sourceActor);
+  const baseDegree = resolved ? degreeForAbilityCheck(result, targetCharacteristic, resolved) : null;
+  const defenseValue = targetCharacteristic === "armor"
+    ? finiteNumberOrNull(resolved?.armor)
+    : finiteNumberOrNull(resolved?.value);
+  return {
+    tokenUuid: tokenDocumentUuid(token),
+    actorUuid: token.actor.uuid ?? null,
+    name: token.name || token.actor.name || "Цель",
+    defenseValue,
+    baseDegree,
+    defendedDegree: null,
+    manualDegree: null,
+    pendingDefenses: [],
+    appliedDefenseHistory: [],
+    lastDefenseOutcome: null
+  };
+}
+
+export function multiTargetFinalDegree(target = {}) {
+  const manual = MULTI_TARGET_DEGREE_ORDER.includes(target?.manualDegree) ? target.manualDegree : null;
+  const defended = MULTI_TARGET_DEGREE_ORDER.includes(target?.defendedDegree) ? target.defendedDegree : null;
+  const base = MULTI_TARGET_DEGREE_ORDER.includes(target?.baseDegree) ? target.baseDegree : null;
+  return manual ?? defended ?? base;
+}
+
+export function applyPendingMultiTargetDefenses(target = {}) {
+  const next = foundry.utils.deepClone(target ?? {});
+  let degree = MULTI_TARGET_DEGREE_ORDER.includes(next.defendedDegree)
+    ? next.defendedDegree
+    : MULTI_TARGET_DEGREE_ORDER.includes(next.baseDegree)
+      ? next.baseDegree
+      : null;
+  let lastOutcome = next.lastDefenseOutcome ?? null;
+
+  for (const defense of Array.from(next.pendingDefenses ?? [])) {
+    lastOutcome = defense?.result ?? lastOutcome;
+    if (defense?.result !== "success") continue;
+    if (!degree) continue;
+    if (Number(defense?.naturalD20) === 20) degree = "failure";
+    else degree = lowerDegree(degree, Math.max(1, Number(defense?.degreeReduction) || 1));
+  }
+
+  next.defendedDegree = degree;
+  next.lastDefenseOutcome = lastOutcome;
+  next.appliedDefenseHistory = [
+    ...(next.appliedDefenseHistory ?? []),
+    ...(next.pendingDefenses ?? [])
+  ];
+  next.pendingDefenses = [];
+  return next;
+}
+
+function multiTargetDegreeLabel(target) {
+  const finalDegree = multiTargetFinalDegree(target);
+  return finalDegree ? (DEGREE_LABELS[finalDegree] ?? finalDegree) : "Не определена";
+}
+
+function multiTargetManualMarker(target) {
+  return MULTI_TARGET_DEGREE_ORDER.includes(target?.manualDegree)
+    ? `<small class="fast-nri-multitarget-manual">вручную</small>`
+    : "";
+}
+
+function multiTargetRowsHTML(state, actionContext) {
+  const allowDefense = ["counteraction", "dodge"].some(procedure => actionHasDefenseProcedure(actionContext, procedure));
+  const targetLabel = checkTargetCharacteristicLabel(state?.targetCharacteristic);
+  return Array.from(state?.targets ?? []).map(target => `
+    <div class="fast-nri-multitarget-row" data-target-uuid="${escAttr(target.tokenUuid ?? "")}">
+      <div class="fast-nri-multitarget-target">
+        <strong>${esc(target.name)}</strong>
+        ${Number.isFinite(target.defenseValue) ? `<small>${esc(targetLabel)} ${esc(target.defenseValue)}</small>` : ""}
+      </div>
+      <div class="fast-nri-multitarget-degree">
+        <span>${esc(multiTargetDegreeLabel(target))}</span>
+        ${multiTargetManualMarker(target)}
+      </div>
+      <div class="fast-nri-multitarget-row-actions">
+        ${allowDefense ? `<button type="button" class="fast-nri-multitarget-defense-button" data-fast-nri-multitarget-defense data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Бросить Защиту этой цели"><i class="fa-solid fa-shield-halved"></i><span>Защита</span></button>` : ""}
+        <button type="button" class="fast-nri-multitarget-menu-button" data-fast-nri-multitarget-degree-menu data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Вручную изменить итоговую степень"><i class="fa-solid fa-ellipsis"></i></button>
+        <button type="button" class="fast-nri-multitarget-remove-button" data-fast-nri-multitarget-remove-target data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Убрать цель из этой карточки"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function multiTargetAbilityCardHTML({ item, runtime, state, sharedDamageState = null, modifiersHTML = "", actionContext }) {
+  const targetLabel = checkTargetCharacteristicLabel(state?.targetCharacteristic);
+  const targetCount = Array.from(state?.targets ?? []).length;
+  return `
+    <div class="fast-nri-chat-roll fast-nri-ability-multitarget-card">
+      ${rollCardHeader(`${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`, "fa-wand-magic-sparkles")}
+      <div class="fast-nri-attack-summary">
+        <span>Общий результат: <strong>${esc(state.checkTotal)}</strong></span>
+        <span>Против: <strong>${esc(targetLabel)}</strong></span>
+        <span>Целей: <strong>${esc(targetCount)}</strong></span>
+      </div>
+      ${state.naturalD20 === 20 && state.targetCharacteristic === "armor" ? `<div class="fast-nri-critical-roll"><i class="fa-solid fa-burst"></i><strong>Натуральная 20 · критический урон после Защит</strong></div>` : ""}
+      ${sharedDamageState?.supported ? damagePartsHTML(sharedDamageState, { editable: false, title: "Общий пул урона" }) : ""}
+      <section class="fast-nri-multitarget-section">
+        <div class="fast-nri-multitarget-heading"><strong>Цели и итоговые степени</strong><small>Степень считается независимо для каждой цели.</small></div>
+        <div class="fast-nri-multitarget-list">
+          ${multiTargetRowsHTML(state, actionContext) || `<div class="fast-nri-roll-empty">Цели пока не добавлены.</div>`}
+        </div>
+      </section>
+      <div class="fast-nri-multitarget-target-actions">
+        <button type="button" data-fast-nri-multitarget-add-targets title="Добавить текущие Foundry Targets"><i class="fa-solid fa-user-plus"></i><span>Добавить выбранные цели</span></button>
+      </div>
+      <div class="fast-nri-multitarget-main-actions">
+        <button type="button" data-fast-nri-multitarget-apply-defenses><i class="fa-solid fa-shield"></i><span>Применить брошенные защиты</span></button>
+        <button type="button" data-fast-nri-multitarget-apply-results ${targetCount ? "" : "disabled"}><i class="fa-solid fa-burst"></i><span>Применить результаты</span></button>
+      </div>
+      ${state.lastResultsAppliedAt ? `<small class="fast-nri-multitarget-applied-note">Результаты уже создавались. Повторное применение разрешено после ручной проверки степеней.</small>` : ""}
+      ${modifiersHTML}
+    </div>
+  `;
+}
+
+async function prepareSharedAreaDamage(actor, item, runtime, plan) {
+  if (!plan?.components?.length) return { result: null, state: null, modifiersHTML: "" };
+  const formula = flavoredDamageFormula(plan.components);
+  const displayFormula = plainDamageFormula(plan.components);
+  const result = await prepareRoll({
+    actor,
+    label: `Общий урон: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
+    baseFormula: formula,
+    baseSources: [{
+      formula: displayFormula,
+      label: runtime?.implementationName ? `${item.name} — ${runtime.implementationName}` : item.name,
+      reason: "Общий пул урона многоцелевого действия"
+    }],
+    showDC: false
+  });
+  if (!result) return null;
+  let state = buildDamageState(result.roll, {
+    components: plan.components,
+    damageType: plan.components[0]?.damageType ?? "physical",
+    traitIds: plan.components[0]?.traitIds ?? []
+  });
+  state.originalEffectDegree = null;
+  state.effectDegree = null;
+  state = recalculateDamageState(state);
+  return { result, state, modifiersHTML: rollSourcesHTML(result) };
+}
+
+async function updateMultiTargetMessage(message, { state = null, actionContext = null } = {}) {
+  if (!message) return null;
+  const nextState = state ?? foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const nextContext = actionContext ?? actionContextFromMessage(message);
+  const actor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
+  const item = message.getFlag("fast-nri", "itemUuid") ? await fromUuid(message.getFlag("fast-nri", "itemUuid")) : null;
+  if (!item || item.type !== "ability") return null;
+  const runtime = abilityImplementationRuntime(item, message.getFlag("fast-nri", "implementationId") ?? null);
+  const sharedDamageState = message.getFlag("fast-nri", "sharedDamageState") ?? null;
+  const modifiersHTML = message.getFlag("fast-nri", "sharedDamageModifiersHTML") ?? "";
+  const content = multiTargetAbilityCardHTML({ item, runtime, state: nextState, sharedDamageState, modifiersHTML, actionContext: nextContext });
+  await message.update({
+    flavor: content,
+    "flags.fast-nri.multiTargetState": nextState,
+    "flags.fast-nri.actionContext": nextContext
+  });
+  return { message, actor, item, runtime, state: nextState, actionContext: nextContext };
+}
+
+async function chooseManualMultiTargetDegree(target) {
+  const { DialogV2 } = foundry.applications.api;
+  const buttons = MULTI_TARGET_DEGREE_ORDER.map(degree => ({
+    action: degree,
+    label: DEGREE_LABELS[degree],
+    callback: async () => degree
+  }));
+  buttons.push({ action: "auto", label: "Вернуть автоматическую степень", icon: "fa-solid fa-rotate-left", callback: async () => "__auto__" });
+  buttons.push({ action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", callback: async () => null });
+  return DialogV2.wait({
+    window: { title: `Итоговая степень: ${target?.name ?? "цель"}` },
+    content: `<div class="fast-nri-defense-choice"><p>Ручная степень перекрывает автоматический расчёт и все применённые Защиты для этой цели.</p></div>`,
+    modal: true,
+    rejectClose: false,
+    buttons
+  });
+}
+
+async function tokenPlaceableFromUuid(uuid) {
+  if (!uuid) return null;
+  const doc = await fromUuid(uuid);
+  return doc?.object ?? doc ?? null;
+}
+
+export async function multiTargetDegreeMenuFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const target = Array.from(state.targets ?? []).find(entry => entry.tokenUuid === element?.dataset?.targetUuid);
+  if (!target) return null;
+  const selected = await chooseManualMultiTargetDegree(target);
+  if (selected == null) return null;
+  target.manualDegree = selected === "__auto__"
+    ? null
+    : MULTI_TARGET_DEGREE_ORDER.includes(selected) ? selected : target.manualDegree;
+  return updateMultiTargetMessage(message, { state });
+}
+
+export async function multiTargetRemoveTargetFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const targetUuid = element?.dataset?.targetUuid;
+  state.targets = Array.from(state.targets ?? []).filter(entry => entry.tokenUuid !== targetUuid);
+  const context = actionContextFromMessage(message);
+  const targetTokens = [];
+  for (const entry of state.targets) {
+    const token = await tokenPlaceableFromUuid(entry.tokenUuid);
+    if (token) targetTokens.push(token);
+  }
+  const nextContext = deriveActionContext(context, { targets: targetTokens });
+  return updateMultiTargetMessage(message, { state, actionContext: nextContext });
+}
+
+export async function multiTargetAddTargetsFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const sourceActor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
+  const rollStub = { roll: { total: state.checkTotal }, naturalD20: state.naturalD20 };
+  const existing = new Set(Array.from(state.targets ?? []).map(entry => entry.tokenUuid));
+  for (const token of Array.from(game.user?.targets ?? [])) {
+    const uuid = tokenDocumentUuid(token);
+    if (!uuid || existing.has(uuid)) continue;
+    const entry = multiTargetEntryForToken(token, {
+      result: rollStub,
+      targetCharacteristic: state.targetCharacteristic,
+      sourceActor
+    });
+    if (entry) {
+      state.targets.push(entry);
+      existing.add(uuid);
+    }
+  }
+  const context = actionContextFromMessage(message);
+  const targetTokens = [];
+  for (const entry of state.targets ?? []) {
+    const token = await tokenPlaceableFromUuid(entry.tokenUuid);
+    if (token) targetTokens.push(token);
+  }
+  const nextContext = deriveActionContext(context, { targets: targetTokens });
+  return updateMultiTargetMessage(message, { state, actionContext: nextContext });
+}
+
+export async function multiTargetApplyDefensesFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  state.targets = Array.from(state.targets ?? []).map(target => applyPendingMultiTargetDefenses(target));
+  return updateMultiTargetMessage(message, { state });
+}
+
+function multiTargetDefenseFlavorHTML({ method, token, characteristic, attackTotal, result, resource }) {
+  return `
+    <div class="fast-nri-chat-roll fast-nri-defense-roll-card fast-nri-check-defense-roll-card">
+      ${rollCardHeader(`${method.actionName}: ${token.name}`, "fa-shield-halved")}
+      <div class="fast-nri-defense-roll-result">
+        <span>Характеристика: <strong>${esc(checkTargetCharacteristicLabel(characteristic))}</strong></span>
+        <span>Исходный результат: <strong>${esc(attackTotal)}</strong></span>
+        <span>Защита: <strong>${esc(result.roll.total)}</strong></span>
+        <span>Результат: <strong>${esc(defenseResultLabel(result.resolvedResult))}</strong></span>
+      </div>
+      <small>Степень в общей карточке не меняется, пока не нажато «Применить брошенные защиты».</small>
+      ${defenseResourceHTML(resource, false)}
+      ${rollSourcesHTML(result)}
+    </div>
+  `;
+}
+
+export async function multiTargetDefenseFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const actionContext = actionContextFromMessage(message);
+  if (!actionContext) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const target = Array.from(state.targets ?? []).find(entry => entry.tokenUuid === element?.dataset?.targetUuid);
+  if (!target) return null;
+  const token = await tokenPlaceableFromUuid(target.tokenUuid);
+  if (!token?.actor) {
+    ui.notifications.error("Не удалось найти токен цели для Защиты.");
+    return null;
+  }
+  const defender = token.actor;
+  const procedures = ["counteraction", "dodge"].filter(procedure => actionHasDefenseProcedure(actionContext, procedure));
+  if (!procedures.length) {
+    ui.notifications.info("Для этой многоцелевой проверки нет доступной стандартной Защиты.");
+    return null;
+  }
+  const defenseHistory = [
+    ...(target.appliedDefenseHistory ?? []),
+    ...(target.pendingDefenses ?? [])
+  ];
+  const method = await chooseDefenseMethod({
+    actor: defender,
+    defenderToken: token,
+    protectedToken: token,
+    role: "self",
+    defenseHistory,
+    actionContext,
+    procedures
+  });
+  if (!method) return null;
+  if (!enforceDefenseMethodHardBlock(actionContext, method)) return null;
+  if (method.warnings.length) ui.notifications.warn(`${method.actionName}: ${method.warnings.join("; ")}.`);
+
+  const procedure = method.procedure;
+  const characteristic = procedure === "dodge"
+    ? "reflex"
+    : normalizeCheckTargetCharacteristic(state.targetCharacteristic);
+  if (!characteristic || characteristic === "armor") {
+    ui.notifications.error("Не удалось определить характеристику Защиты.");
+    return null;
+  }
+  let dodgeMovement = null;
+  if (procedure === "dodge") {
+    dodgeMovement = await chooseDodgeMovement(method.actionName);
+    if (!dodgeMovement) return null;
+  }
+  const sourceActor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
+  const sourceItem = message.getFlag("fast-nri", "itemUuid") ? await fromUuid(message.getFlag("fast-nri", "itemUuid")) : null;
+  const characteristicState = effectiveDefenseCharacteristicForAction(token, characteristic, sourceActor);
+  const characteristicValue = finiteNumberOrNull(characteristicState.value);
+  if (characteristicValue === null) {
+    ui.notifications.error(`У цели нет корректного значения «${checkTargetCharacteristicLabel(characteristic)}».`);
+    return null;
+  }
+  const combatSource = defenseCombatTerm(defender, method.item, "self");
+  const baseFormula = combatSource?.formula
+    ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
+    : `1d20 + ${characteristicValue}`;
+  const selectedClassResourceCost = await chooseDefenseClassResourceCost(defender, method.item);
+  if (selectedClassResourceCost === null) return null;
+  const contextualModifiers = selfDefenseContextualModifiers(defender, sourceItem, multiTargetFinalDegree(target))
+    .filter(modifier => modifier.id !== "weapon-deadly");
+  const result = await prepareRoll({
+    actor: defender,
+    label: `${method.actionName}: ${token.name}`,
+    baseFormula,
+    baseSources: [
+      { formula: "1d20", label: "Базовый d20", reason: method.actionName },
+      { formula: String(characteristicValue), label: checkTargetCharacteristicLabel(characteristic), reason: defender.name },
+      ...(combatSource ? [combatSource] : [])
+    ],
+    showDC: false,
+    additionalModifiers: contextualModifiers
+  });
+  if (!result) return null;
+  const attackTotal = finiteNumberOrNull(state.checkTotal);
+  if (attackTotal === null) return null;
+  let degreeReduction = Math.max(1, Number(method.config.effectDegreeReduction) || 1);
+  const preliminarySuccess = result.naturalD20 === 20 || (result.naturalD20 !== 1 && result.roll.total >= attackTotal);
+  if (procedure === "dodge" && preliminarySuccess && result.naturalD20 !== 20 && multiTargetFinalDegree(target)) {
+    degreeReduction = Number(await chooseDodgeDegreeReduction(method.actionName)) || 1;
+  }
+  const resolved = resolveCheckDefenseResult({
+    degreeBefore: multiTargetFinalDegree(target),
+    defenseTotal: result.roll.total,
+    attackTotal,
+    naturalD20: result.naturalD20,
+    degreeReduction
+  });
+  result.resolvedResult = resolved.result;
+  const resource = await spendDefenseClassResource(defender, method.item, selectedClassResourceCost);
+  const defenseEntry = {
+    kind: "multi-target-check-defense",
+    procedure,
+    actionName: method.actionName,
+    abilityUuid: method.item?.uuid ?? null,
+    actorUuid: defender.uuid,
+    defenderTokenUuid: tokenDocumentUuid(token),
+    protectedTokenUuid: tokenDocumentUuid(token),
+    protectedActorUuid: defender.uuid,
+    protectedTokenName: token.name || defender.name,
+    characteristic,
+    attackTotal,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    result: resolved.result,
+    degreeReduction: resolved.degreeReduction || degreeReduction,
+    dodgeMovement,
+    interventionCost: Math.max(0, Number(method.config.interventionCost) || 0)
+  };
+  target.pendingDefenses = [...(target.pendingDefenses ?? []), defenseEntry];
+
+  const defenseActionContext = actionContextForDefenseAction(actionContext, {
+    actor: defender,
+    item: method.item,
+    defenderToken: token,
+    protectedToken: token,
+    actionName: method.actionName,
+    procedure,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    parentMessageId: message.id
+  });
+  const flavor = multiTargetDefenseFlavorHTML({ method, token, characteristic, attackTotal, result, resource });
+  const defenseMessage = await result.roll.toMessage({
+    speaker: ChatMessage.getSpeaker({ actor: defender, token: token.document }),
+    flavor,
+    flags: {
+      "fast-nri": {
+        kind: "defense-roll",
+        multiTargetSourceMessageId: message.id,
+        sourceCheckMessageId: message.id,
+        defenderActorUuid: defender.uuid,
+        defenderTokenUuid: tokenDocumentUuid(token),
+        protectedTokenUuid: target.tokenUuid,
+        result: resolved.result,
+        actionContext: defenseActionContext,
+        defenseDisplay: {
+          actionName: method.actionName,
+          defenderTokenName: token.name || defender.name,
+          protectedTokenName: token.name || defender.name,
+          role: "self",
+          attackTotal,
+          defenseTotal: result.roll.total,
+          defenseResult: resolved.result,
+          sourcesHTML: rollSourcesHTML(result)
+        },
+        resourceCost: resource.cost,
+        resourceLabel: resource.label,
+        resourceBefore: resource.before,
+        resourceAfter: resource.after,
+        resourceSpent: resource.spent,
+        resourceShortage: resource.shortage,
+        resourceUndone: false
+      }
+    }
+  });
+  await message.update({ "flags.fast-nri.multiTargetState": state });
+  return { message, defenseMessage, defense: defenseEntry };
+}
+
+async function multiTargetResultContent({ item, runtime, target, degree, damageState = null, critical = false, profileHTML = "" }) {
+  const targetHeader = `<section class="fast-nri-multitarget-result-target"><strong>${esc(target.name)}</strong><span>Итоговая степень: <strong>${esc(DEGREE_LABELS[degree] ?? degree)}</strong></span></section>`;
+  if (damageState?.supported) {
+    const damageHTML = damageCardHTML({
+      sourceName: item.name,
+      profileLabel: `${abilityIsSpell(runtime) ? "Заклинание" : "Способность"} · ${DEGREE_LABELS[degree] ?? degree}`,
+      targetName: target.name,
+      critical,
+      state: damageState,
+      modifiersHTML: "",
+      allowDefense: false,
+      allowDouble: Boolean(critical)
+    });
+    return `<div class="fast-nri-multitarget-result-card">${damageHTML}${profileHTML}</div>`;
+  }
+  return `<div class="fast-nri-chat-roll fast-nri-multitarget-result-card">${rollCardHeader(`Результат: ${item.name}`, "fa-wand-magic-sparkles")}${targetHeader}${profileHTML || `<div class="fast-nri-roll-empty">Для этой степени нет автоматического урона или Effect.</div>`}</div>`;
+}
+
+export async function multiTargetApplyResultsFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const actor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
+  const item = message.getFlag("fast-nri", "itemUuid") ? await fromUuid(message.getFlag("fast-nri", "itemUuid")) : null;
+  if (!actor || !item || item.type !== "ability") return null;
+  const runtime = abilityImplementationRuntime(item, message.getFlag("fast-nri", "implementationId") ?? null);
+  const sharedDamageState = message.getFlag("fast-nri", "sharedDamageState") ?? null;
+  const baseContext = actionContextFromMessage(message);
+  const created = [];
+  const unappliedDefenseCount = Array.from(state.targets ?? []).reduce(
+    (sum, target) => sum + Array.from(target?.pendingDefenses ?? []).length,
+    0
+  );
+  if (unappliedDefenseCount > 0) {
+    ui.notifications.warn(
+      `Есть неприменённые броски Защит: ${unappliedDefenseCount}. Результаты создаются по текущим степеням; сначала нажмите «Применить брошенные защиты», если хотите их учесть.`
+    );
+  }
+
+  for (const target of Array.from(state.targets ?? [])) {
+    const degree = multiTargetFinalDegree(target);
+    if (!degree) {
+      ui.notifications.warn(`${target.name}: итоговая степень не определена; результат не создан.`);
+      continue;
+    }
+    const token = await tokenPlaceableFromUuid(target.tokenUuid);
+    const targetContext = deriveActionContext(baseContext, {
+      targets: token ? [token] : [],
+      check: { ...baseContext.check, degree },
+      parentMessageId: message.id
+    });
+    let damageState = null;
+    const damageChannel = abilityOutcomeChannel(runtime, "damage", degree);
+    if (sharedDamageState?.supported && damageChannel?.enabled) {
+      damageState = foundry.utils.deepClone(sharedDamageState);
+      damageState = applyAbilityProfileDamageTransform(damageState, damageChannel);
+      damageState.originalEffectDegree = degree;
+      damageState.effectDegree = degree;
+      damageState = recalculateDamageState(damageState);
+    }
+    const profileHTML = await enrichAbilityProfileHTML(runtime, degree);
+    const content = await multiTargetResultContent({
+      item,
+      runtime,
+      target,
+      degree,
+      damageState,
+      critical: Boolean(state.critical),
+      profileHTML
+    });
+    const flags = {
+      kind: damageState?.supported ? "damage" : "ability-result",
+      actorUuid: actor.uuid,
+      itemUuid: item.uuid,
+      implementationId: runtime?.implementationId ?? null,
+      abilityOutcome: true,
+      outcomeKind: damageState?.supported ? "damage" : "effect",
+      targetUuid: target.tokenUuid,
+      resultTargetUuid: target.tokenUuid,
+      resultTargetName: target.name,
+      degree,
+      attackDegree: degree,
+      automaticAttackDegree: target.baseDegree,
+      critical: Boolean(state.critical),
+      targetCharacteristic: state.targetCharacteristic,
+      actionTraits: targetContext.traits,
+      actionContext: targetContext,
+      sourceAttackMessageId: message.id,
+      area: true,
+      directedDefense: false,
+      damageCardMeta: damageState?.supported ? {
+        sourceName: item.name,
+        profileLabel: `${abilityIsSpell(runtime) ? "Заклинание" : "Способность"} · ${DEGREE_LABELS[degree] ?? degree}`,
+        targetName: target.name,
+        allowDefense: false,
+        allowDouble: Boolean(state.critical)
+      } : null,
+      damageRevision: 0,
+      rolledTotal: damageState?.originalRollTotal ?? null,
+      finalTotal: damageState?.currentTotal ?? null,
+      damageState
+    };
+    const resultMessage = await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content,
+      flags: { "fast-nri": flags }
+    });
+    created.push(resultMessage);
+  }
+
+  state.lastResultsAppliedAt = Date.now();
+  state.lastResultsMessageIds = created.map(entry => entry?.id).filter(Boolean);
+  await updateMultiTargetMessage(message, { state });
+  return created;
+}
+
 export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null, implementationId = null, repeatIndex = 0 } = {}) {
   if (!actor || !item || item.type !== "ability") return null;
 
@@ -2680,10 +3294,17 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
 
   const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
   const formula = expandAbilityCheckFormula(actor, rawFormula);
-  const target = getSingleTarget();
+  const requestedMultiTarget = multiTargetAbilityEligible(runtime, actionTraits);
+  const sharedDamagePlan = requestedMultiTarget ? sharedAreaDamagePlan(actor, runtime) : null;
+  const multiTargetWorkflow = Boolean(requestedMultiTarget && sharedDamagePlan?.compatible !== false);
+  if (requestedMultiTarget && sharedDamagePlan?.compatible === false) {
+    ui.notifications.warn(`${item.name}: ${sharedDamagePlan.reason} Используется старый пошаговый результат.`);
+  }
+
+  const target = multiTargetWorkflow ? null : getSingleTarget();
   const previewTarget = resolveAbilityCheckTarget(target, targetCharacteristic, actor);
 
-  if ((game.user?.targets?.size ?? 0) > 1) {
+  if (!multiTargetWorkflow && (game.user?.targets?.size ?? 0) > 1) {
     ui.notifications.warn(
       "Для направленной проверки способности выбери одну цель. Проверка будет выполнена без автоматической степени."
     );
@@ -2700,6 +3321,93 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
   });
 
   if (!result) return null;
+
+  if (multiTargetWorkflow) {
+    const sharedDamage = await prepareSharedAreaDamage(actor, item, runtime, sharedDamagePlan);
+    if (sharedDamage === null) return null;
+
+    // Цели берутся после обоих pre-roll диалогов: пользователь может менять Targets
+    // до публикации общей карточки. Дальше список живёт уже внутри самой карточки.
+    const selectedTargets = Array.from(game.user?.targets ?? []);
+    const targetEntries = selectedTargets
+      .map(token => multiTargetEntryForToken(token, { result, targetCharacteristic, sourceActor: actor }))
+      .filter(Boolean);
+    const critical = targetCharacteristic === "armor" && result.naturalD20 === 20;
+    const actionContext = deriveActionContext(baseActionContext, {
+      targets: selectedTargets,
+      check: {
+        ...baseActionContext.check,
+        formula: result.formula,
+        total: result.roll.total,
+        naturalD20: result.naturalD20,
+        degree: null,
+        critical
+      },
+      parentMessageId
+    });
+    const multiTargetState = {
+      version: 1,
+      targetCharacteristic,
+      checkTotal: result.roll.total,
+      naturalD20: result.naturalD20,
+      critical,
+      targets: targetEntries,
+      lastResultsAppliedAt: null,
+      lastResultsMessageIds: []
+    };
+    const sourcesHTML = `${rollSourcesHTML(result)}${sharedDamage?.modifiersHTML ?? ""}`;
+    const flavor = multiTargetAbilityCardHTML({
+      item,
+      runtime,
+      state: multiTargetState,
+      sharedDamageState: sharedDamage?.state ?? null,
+      modifiersHTML: sourcesHTML,
+      actionContext
+    });
+    const message = await result.roll.toMessage({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      flavor,
+      flags: {
+        "fast-nri": {
+          kind: MULTI_TARGET_ABILITY_KIND,
+          actorUuid: actor.uuid,
+          itemUuid: item.uuid,
+          implementationId: runtime?.implementationId ?? implementationId ?? null,
+          repeatIndex,
+          critical,
+          rollTotal: result.roll.total,
+          naturalD20: result.naturalD20,
+          targetCharacteristic,
+          actionTraits,
+          actionContext,
+          attackType,
+          area: true,
+          multiTargetState,
+          sharedDamageState: sharedDamage?.state ?? null,
+          sharedDamageModifiersHTML: sourcesHTML,
+          sharedDamageFormula: sharedDamage?.result?.formula ?? null,
+          sharedDamageRollTotal: sharedDamage?.result?.roll?.total ?? null
+        }
+      }
+    });
+    return {
+      message,
+      roll: result.roll,
+      total: result.roll.total,
+      naturalD20: result.naturalD20,
+      degree: null,
+      critical,
+      targetUuid: null,
+      targetCharacteristic,
+      actionTraits,
+      actionContext,
+      implementationId: runtime?.implementationId ?? implementationId ?? null,
+      repeatIndex,
+      directedDefense: false,
+      attackType,
+      multiTarget: true
+    };
+  }
 
   // Resolve from the latest Scene state after the pre-roll dialog closes.
   const resolvedTarget = resolveAbilityCheckTarget(target, targetCharacteristic, actor);
@@ -4688,8 +5396,15 @@ export async function applyDamageFromChat(element) {
   const fallbackDamage = Number(element?.dataset?.damage);
   const multiplier = Number(element?.dataset?.multiplier) === 2 ? 2 : 1;
 
-  const token = controlledSingleToken();
-  if (!token) return null;
+  const sourceMessage = chatMessageFromElement(element);
+  const boundTargetUuid = sourceMessage?.getFlag("fast-nri", "resultTargetUuid") ?? null;
+  const token = boundTargetUuid
+    ? await tokenPlaceableFromUuid(boundTargetUuid)
+    : controlledSingleToken();
+  if (!token) {
+    if (boundTargetUuid) ui.notifications.error("Не удалось найти цель, закреплённую за этой карточкой результата.");
+    return null;
+  }
 
   const actor = token.actor;
   if (!actor) {
@@ -4697,7 +5412,6 @@ export async function applyDamageFromChat(element) {
     return null;
   }
 
-  const sourceMessage = chatMessageFromElement(element);
   const supersededBy = sourceMessage?.getFlag("fast-nri", "supersededByDamageMessageId") ?? null;
   if (supersededBy) {
     ui.notifications.warn(
@@ -4762,7 +5476,7 @@ export async function applyDamageFromChat(element) {
     return null;
   }
 
-  const tokenUuid = token.document?.uuid ?? "";
+  const tokenUuid = tokenDocumentUuid(token) ?? "";
   const actorUuid = actor.uuid;
   const tokenName = token.name || actor.name || "Цель";
   const resolutionHTML = damageResolutionHTML(resolution, {
@@ -4785,7 +5499,7 @@ export async function applyDamageFromChat(element) {
   });
 
   const message = await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor, token: token.document }),
+    speaker: ChatMessage.getSpeaker({ actor, token: token.document ?? token }),
     content,
     flags: {
       "fast-nri": {
@@ -5039,6 +5753,72 @@ export function activateChatInteractions(root = document) {
         delete undoDefenseResourceButton.dataset.fastNriBusy;
       }
 
+      return;
+    }
+
+    const multiTargetDefenseButton = event.target.closest("[data-fast-nri-multitarget-defense]");
+    if (multiTargetDefenseButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetDefenseButton.dataset.fastNriBusy === "true") return;
+      multiTargetDefenseButton.dataset.fastNriBusy = "true";
+      try { await multiTargetDefenseFromChat(multiTargetDefenseButton); }
+      finally { delete multiTargetDefenseButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetDegreeButton = event.target.closest("[data-fast-nri-multitarget-degree-menu]");
+    if (multiTargetDegreeButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetDegreeButton.dataset.fastNriBusy === "true") return;
+      multiTargetDegreeButton.dataset.fastNriBusy = "true";
+      try { await multiTargetDegreeMenuFromChat(multiTargetDegreeButton); }
+      finally { delete multiTargetDegreeButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetRemoveButton = event.target.closest("[data-fast-nri-multitarget-remove-target]");
+    if (multiTargetRemoveButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetRemoveButton.dataset.fastNriBusy === "true") return;
+      multiTargetRemoveButton.dataset.fastNriBusy = "true";
+      try { await multiTargetRemoveTargetFromChat(multiTargetRemoveButton); }
+      finally { delete multiTargetRemoveButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetAddButton = event.target.closest("[data-fast-nri-multitarget-add-targets]");
+    if (multiTargetAddButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetAddButton.dataset.fastNriBusy === "true") return;
+      multiTargetAddButton.dataset.fastNriBusy = "true";
+      try { await multiTargetAddTargetsFromChat(multiTargetAddButton); }
+      finally { delete multiTargetAddButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetApplyDefensesButton = event.target.closest("[data-fast-nri-multitarget-apply-defenses]");
+    if (multiTargetApplyDefensesButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetApplyDefensesButton.dataset.fastNriBusy === "true") return;
+      multiTargetApplyDefensesButton.dataset.fastNriBusy = "true";
+      try { await multiTargetApplyDefensesFromChat(multiTargetApplyDefensesButton); }
+      finally { delete multiTargetApplyDefensesButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetApplyResultsButton = event.target.closest("[data-fast-nri-multitarget-apply-results]");
+    if (multiTargetApplyResultsButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetApplyResultsButton.dataset.fastNriBusy === "true") return;
+      multiTargetApplyResultsButton.dataset.fastNriBusy = "true";
+      try { await multiTargetApplyResultsFromChat(multiTargetApplyResultsButton); }
+      finally { delete multiTargetApplyResultsButton.dataset.fastNriBusy; }
       return;
     }
 
