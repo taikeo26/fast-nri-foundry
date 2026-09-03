@@ -1,6 +1,6 @@
 {
   "_id": "qaUnified066Macr",
-  "name": "QA 0.5.68 — Unified ActionState",
+  "name": "QA 0.5.69 — Unified ActionState",
   "type": "script",
   "scope": "global",
   "command": "game.fastNri.qa.startUnifiedAction();",
@@ -8,10 +8,12 @@
   "author": null,
   "folder": null,
   "sort": 0,
-  "ownership": { "default": 0 },
+  "ownership": {
+    "default": 0
+  },
   "flags": {
     "fast-nri": {
-      "testFixture": "0.5.68",
+      "testFixture": "0.5.69",
       "qaPurpose": "unified-actionstate-vertical-slice"
     }
   }

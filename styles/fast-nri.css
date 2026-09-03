@@ -3832,7 +3832,7 @@ button.fast-nri-property-reference:hover {
   }
 }
 
-/* 0.5.66–0.5.68 — isolated Unified ActionState live-QA vertical slice. */
+/* 0.5.66–0.5.69 — isolated Unified ActionState live-QA vertical slice. */
 .fast-nri-qa-action-card,
 .fast-nri-qa-final-card,
 .fast-nri-qa-application-card {
@@ -3928,7 +3928,7 @@ button.fast-nri-property-reference:hover {
   width: 100%;
 }
 
-/* 0.5.67–0.5.68 — two-card QA declaration/resolution split; reusable Declaration Card. */
+/* 0.5.67–0.5.69 — two-card QA declaration/resolution split; reusable Declaration Card. */
 .fast-nri-qa-degree-actions {
   display: inline-flex;
   gap: 0.2rem;
