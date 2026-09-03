@@ -3831,3 +3831,42 @@ button.fast-nri-property-reference:hover {
     flex: 1 1 0;
   }
 }
+
+/* ========================================================= */
+/* v0.5.64 - declaration check -> target degrees -> damage   */
+/* ========================================================= */
+
+.fast-nri-declaration-check-result {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0;
+  padding: 6px 7px;
+  border: 1px solid var(--color-border-light-2, rgba(0, 0, 0, 0.16));
+  border-radius: 5px;
+}
+
+.fast-nri-declaration-check-result small {
+  opacity: 0.72;
+  overflow-wrap: anywhere;
+}
+
+.fast-nri-declared-target-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fast-nri-declared-target-main strong,
+.fast-nri-declared-target-main small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fast-nri-declared-target-main small {
+  opacity: 0.76;
+}
+
+.fast-nri-declaration-damage-button {
+  width: 100%;
+  min-height: 34px;
+}

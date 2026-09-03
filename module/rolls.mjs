@@ -3020,6 +3020,23 @@ function multiTargetEntryForToken(token, { result, targetCharacteristic, sourceA
   };
 }
 
+
+export function abilityDeclarationTargetEntry(token, {
+  checkTotal = null,
+  naturalD20 = null,
+  targetCharacteristic = "armor",
+  sourceActor = null
+} = {}) {
+  if (!token?.actor) return null;
+  const total = finiteNumberOrNull(checkTotal);
+  if (total === null) return null;
+  return multiTargetEntryForToken(token, {
+    result: { roll: { total }, naturalD20: finiteNumberOrNull(naturalD20) },
+    targetCharacteristic: normalizeCheckTargetCharacteristic(targetCharacteristic) || "armor",
+    sourceActor
+  });
+}
+
 export function multiTargetFinalDegree(target = {}) {
   const manual = MULTI_TARGET_DEGREE_ORDER.includes(target?.manualDegree) ? target.manualDegree : null;
   const defended = MULTI_TARGET_DEGREE_ORDER.includes(target?.defendedDegree) ? target.defendedDegree : null;
@@ -3206,8 +3223,9 @@ async function updateMultiTargetMessage(message, { state = null, actionContext =
   const sharedDamageState = message.getFlag("fast-nri", "sharedDamageState") ?? null;
   const modifiersHTML = message.getFlag("fast-nri", "sharedDamageModifiersHTML") ?? "";
   const content = multiTargetAbilityCardHTML({ item, runtime, state: nextState, sharedDamageState, modifiersHTML, actionContext: nextContext });
+  const inPlaceRoot = Boolean(message.getFlag("fast-nri", "inPlaceAbilityRoot"));
   await message.update({
-    flavor: content,
+    ...(inPlaceRoot ? { content, flavor: "" } : { flavor: content }),
     "flags.fast-nri.multiTargetState": nextState,
     "flags.fast-nri.actionContext": nextContext
   });
@@ -3696,6 +3714,93 @@ export async function multiTargetApplyResultsFromChat(element) {
   return created;
 }
 
+
+/**
+ * 0.5.64 declaration-stage check.
+ * The ability's Attack/Check is rolled immediately when the implementation is
+ * declared. No ChatMessage is created here: the caller stores the result in the
+ * declaration card and targets may be added/removed afterwards. Their degrees
+ * are derived from this preserved roll.
+ */
+export async function rollAbilityDeclarationCheck(actor, item, {
+  actionContext: inheritedActionContext = null,
+  parentMessageId = null,
+  implementationId = null,
+  repeatIndex = 0
+} = {}) {
+  if (!actor || !item || item.type !== "ability") return null;
+
+  const runtime = abilityImplementationRuntime(item, implementationId);
+  const config = abilityCheckConfig(runtime);
+  if (!config.enabled) return null;
+
+  const targetCharacteristic = normalizeCheckTargetCharacteristic(config.targetCharacteristic) || "armor";
+  const actionTraits = abilityActionTraits(runtime);
+  const attackType = directedAttackTypeFromTraits(actionTraits);
+  const baseActionContext = actionContextFromAbility(actor, item, {
+    originActionContext: inheritedActionContext,
+    implementationId: runtime?.implementationId ?? implementationId
+  });
+  const structureWarnings = checkStructureWarnings({
+    targetCharacteristic,
+    traits: actionTraits
+  });
+  if (structureWarnings.length) {
+    ui.notifications.warn(`${item.name}: ${structureWarnings.join("; ")}.`);
+  }
+
+  const rawFormula = String(config.formula ?? "1d20 + {combatDie}");
+  const formula = expandAbilityCheckFormula(actor, rawFormula);
+  const result = await prepareRoll({
+    actor,
+    label: `Проверка: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
+    baseFormula: formula,
+    baseSources: abilityCheckFormulaSources(actor, rawFormula, formula, targetCharacteristic),
+    showDC: false,
+    contextHTML: `
+      <section class="fast-nri-roll-context">
+        <i class="fa-solid fa-crosshairs"></i>
+        <div>
+          <strong>Объявление способности</strong>
+          <small>Сначала фиксируется этот бросок. Степени будут рассчитаны отдельно для существ, добавленных в карточку объявления.</small>
+        </div>
+      </section>
+    `
+  });
+  if (!result) return null;
+
+  await showInPlaceRollDice(result.roll);
+  const critical = targetCharacteristic === "armor" && result.naturalD20 === 20;
+  const actionContext = deriveActionContext(baseActionContext, {
+    check: {
+      ...baseActionContext.check,
+      enabled: true,
+      formula: result.formula,
+      targetCharacteristic,
+      total: result.roll.total,
+      naturalD20: result.naturalD20,
+      degree: null,
+      critical
+    },
+    parentMessageId
+  });
+
+  return {
+    roll: result.roll,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    critical,
+    formula: result.formula,
+    targetCharacteristic,
+    actionTraits,
+    actionContext,
+    attackType,
+    implementationId: runtime?.implementationId ?? implementationId ?? null,
+    repeatIndex,
+    modifiersHTML: rollSourcesHTML(result)
+  };
+}
+
 export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null, implementationId = null, repeatIndex = 0, declaredTargets = null } = {}) {
   if (!actor || !item || item.type !== "ability") return null;
 
@@ -3977,6 +4082,243 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     directedDefense,
     attackType
   };
+}
+
+
+/**
+ * Roll damage from an already completed declaration-stage Attack/Check.
+ * The declaration ChatMessage is reused:
+ * - Area/degree-profile actions become the existing target/defense card.
+ * - Directed single-target actions become the existing structured damage card.
+ * No intermediate Check or Damage ChatMessage is created.
+ */
+export async function rollAbilityDamageFromDeclaration(message) {
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
+
+  const actorUuid = message.getFlag("fast-nri", "actorUuid");
+  const itemUuid = message.getFlag("fast-nri", "itemUuid");
+  const actor = actorUuid ? await fromUuid(actorUuid) : null;
+  const item = itemUuid ? await fromUuid(itemUuid) : null;
+  if (!actor || !item || item.type !== "ability") {
+    ui.notifications.error("Не удалось найти способность или персонажа для броска урона.");
+    return null;
+  }
+
+  const runtime = abilityImplementationRuntime(item, message.getFlag("fast-nri", "implementationId") ?? null);
+  const declarationCheck = foundry.utils.deepClone(message.getFlag("fast-nri", "declarationCheck") ?? null);
+  const storedTargets = Array.from(message.getFlag("fast-nri", "declarationTargetResults") ?? [])
+    .map(entry => foundry.utils.deepClone(entry));
+  if (!declarationCheck || finiteNumberOrNull(declarationCheck.total) === null) {
+    ui.notifications.error("В карточке объявления нет завершённого броска атаки/проверки.");
+    return null;
+  }
+  if (!storedTargets.length) {
+    ui.notifications.warn("Сначала добавьте хотя бы одно существо в список целей способности.");
+    return null;
+  }
+
+  const actionTraits = normalizeActionTraits(declarationCheck.actionTraits ?? message.getFlag("fast-nri", "actionContext")?.traits ?? {});
+  const targetCharacteristic = normalizeCheckTargetCharacteristic(declarationCheck.targetCharacteristic) || "armor";
+  const baseContext = normalizeActionContext(
+    message.getFlag("fast-nri", "actionContext")
+      ?? actionContextFromAbility(actor, item, { implementationId: runtime?.implementationId ?? null })
+  );
+  const targetTokens = [];
+  for (const entry of storedTargets) {
+    const token = await tokenPlaceableFromUuid(entry?.tokenUuid ?? null);
+    if (token?.actor) targetTokens.push(token);
+  }
+  let actionContext = deriveActionContext(baseContext, {
+    targets: targetTokens,
+    check: {
+      ...baseContext.check,
+      enabled: true,
+      formula: declarationCheck.formula ?? baseContext.check.formula,
+      targetCharacteristic,
+      total: declarationCheck.total,
+      naturalD20: declarationCheck.naturalD20,
+      degree: null,
+      critical: Boolean(declarationCheck.critical)
+    },
+    parentMessageId: message.id
+  });
+
+  if (actionTraits.area && abilityHasDegreeProfiles(runtime)) {
+    const plan = sharedAreaDamagePlan(actor, runtime);
+    if (plan?.compatible === false) {
+      ui.notifications.warn(`${item.name}: ${plan.reason} Для этого действия пока нельзя безопасно перейти к общему броску урона.`);
+      return null;
+    }
+    if (!plan?.components?.length) {
+      ui.notifications.info(`${item.name}: в профилях степеней не настроен урон.`);
+      return null;
+    }
+
+    const sharedDamage = await prepareSharedAreaDamage(actor, item, runtime, plan);
+    if (!sharedDamage) return null;
+    if (sharedDamage.result?.roll) await showInPlaceRollDice(sharedDamage.result.roll);
+
+    const multiTargetState = {
+      version: 2,
+      phase: "resolution",
+      targetCharacteristic,
+      checkTotal: declarationCheck.total,
+      naturalD20: declarationCheck.naturalD20,
+      critical: Boolean(declarationCheck.critical),
+      targets: storedTargets.map(target => ({
+        ...target,
+        defendedDegree: target.defendedDegree ?? null,
+        manualDegree: target.manualDegree ?? null,
+        pendingDefenses: Array.from(target.pendingDefenses ?? []),
+        appliedDefenseHistory: Array.from(target.appliedDefenseHistory ?? []),
+        lastDefenseOutcome: target.lastDefenseOutcome ?? null
+      })),
+      lastResultsAppliedAt: null,
+      lastResultsMessageIds: []
+    };
+
+    const content = multiTargetAbilityCardHTML({
+      item,
+      runtime,
+      state: multiTargetState,
+      sharedDamageState: sharedDamage.state ?? null,
+      modifiersHTML: `${declarationCheck.modifiersHTML ?? ""}${sharedDamage.modifiersHTML ?? ""}`,
+      actionContext
+    });
+
+    await message.update({
+      content,
+      flavor: "",
+      "flags.fast-nri.kind": MULTI_TARGET_ABILITY_KIND,
+      "flags.fast-nri.inPlaceAbilityRoot": true,
+      "flags.fast-nri.multiTargetState": multiTargetState,
+      "flags.fast-nri.sharedDamageState": sharedDamage.state ?? null,
+      "flags.fast-nri.sharedDamageModifiersHTML": `${declarationCheck.modifiersHTML ?? ""}${sharedDamage.modifiersHTML ?? ""}`,
+      "flags.fast-nri.sharedDamageFormula": sharedDamage.result?.formula ?? null,
+      "flags.fast-nri.sharedDamageRollTotal": sharedDamage.result?.roll?.total ?? null,
+      "flags.fast-nri.rollTotal": declarationCheck.total,
+      "flags.fast-nri.naturalD20": declarationCheck.naturalD20,
+      "flags.fast-nri.critical": Boolean(declarationCheck.critical),
+      "flags.fast-nri.targetCharacteristic": targetCharacteristic,
+      "flags.fast-nri.actionTraits": actionTraits,
+      "flags.fast-nri.attackType": directedAttackTypeFromActionContext(actionContext),
+      "flags.fast-nri.area": true,
+      "flags.fast-nri.actionContext": actionContext
+    });
+    return { message, multiTarget: true, sharedDamageState: sharedDamage.state, state: multiTargetState };
+  }
+
+  // Directed / ordinary single-target damage keeps the established structured
+  // damage/Directed Defense workflow, but replaces the declaration card
+  // instead of creating a new ChatMessage.
+  const target = storedTargets[0];
+  if (storedTargets.length > 1) {
+    ui.notifications.warn(`${item.name}: действие не является Областью; для броска урона используется первая цель в списке.`);
+  }
+  const degree = multiTargetFinalDegree(target);
+  if (!degree) {
+    ui.notifications.warn(`${target?.name ?? "Цель"}: степень успеха не определена.`);
+    return null;
+  }
+  const channel = abilityOutcomeChannel(runtime, "damage", degree);
+  if (!channel.enabled) {
+    ui.notifications.info(`${item.name}: для степени «${DEGREE_LABELS[degree] ?? degree}» урон не настроен.`);
+    return null;
+  }
+  const components = abilityOutcomeComponents(actor, runtime, "damage", degree);
+  if (!components.length) {
+    ui.notifications.info(`${item.name}: для этой степени нет формулы урона.`);
+    return null;
+  }
+
+  const formula = flavoredDamageFormula(components);
+  const displayFormula = plainDamageFormula(components);
+  const result = await prepareRoll({
+    actor,
+    label: `Урон: ${item.name}${runtime?.implementationName ? ` — ${runtime.implementationName}` : ""}`,
+    baseFormula: formula,
+    baseSources: [{
+      formula: displayFormula,
+      label: runtime?.implementationName ? `${item.name} — ${runtime.implementationName}` : item.name,
+      reason: abilityIsSpell(runtime) ? "Урон заклинания" : "Урон способности"
+    }],
+    showDC: false
+  });
+  if (!result) return null;
+  await showInPlaceRollDice(result.roll);
+
+  let state = buildDamageState(result.roll, {
+    components,
+    damageType: components[0]?.damageType ?? "physical",
+    traitIds: components[0]?.traitIds ?? []
+  });
+  state = applyAbilityProfileDamageTransform(state, channel);
+  state.originalEffectDegree = degree;
+  state.effectDegree = degree;
+  state = recalculateDamageState(state);
+
+  const targetToken = await tokenPlaceableFromUuid(target?.tokenUuid ?? null);
+  actionContext = deriveActionContext(actionContext, {
+    targets: targetToken ? [targetToken] : [],
+    check: {
+      ...actionContext.check,
+      degree,
+      critical: Boolean(declarationCheck.critical)
+    }
+  });
+  const applicationEffects = await abilityApplicationEffects(runtime, degree);
+  const directedDefense = actionHasDefenseProcedure(actionContext, "directed");
+  const attackType = directedAttackTypeFromActionContext(actionContext)
+    || directedAttackTypeFromTraits(actionTraits);
+  const modifiersHTML = rollSourcesHTML(result);
+  const content = damageCardHTML({
+    sourceName: item.name,
+    profileLabel: abilityIsSpell(runtime) ? "Заклинание" : "Способность",
+    targetName: target?.name ?? "",
+    critical: Boolean(declarationCheck.critical),
+    state,
+    modifiersHTML,
+    applicationEffectsHTML: applicationEffects.html,
+    allowDefense: directedDefense,
+    allowDouble: targetCharacteristic === "armor"
+  });
+
+  await message.update({
+    content,
+    flavor: "",
+    "flags.fast-nri.kind": "damage",
+    "flags.fast-nri.inPlaceAbilityRoot": true,
+    "flags.fast-nri.abilityOutcome": true,
+    "flags.fast-nri.outcomeKind": "damage",
+    "flags.fast-nri.critical": Boolean(declarationCheck.critical),
+    "flags.fast-nri.attackTotal": declarationCheck.total,
+    "flags.fast-nri.attackNaturalD20": declarationCheck.naturalD20,
+    "flags.fast-nri.attackDegree": degree,
+    "flags.fast-nri.automaticAttackDegree": target?.baseDegree ?? degree,
+    "flags.fast-nri.targetCharacteristic": targetCharacteristic,
+    "flags.fast-nri.actionTraits": actionTraits,
+    "flags.fast-nri.actionContext": actionContext,
+    "flags.fast-nri.attackType": attackType,
+    "flags.fast-nri.area": Boolean(actionTraits.area),
+    "flags.fast-nri.originalTargetUuid": target?.tokenUuid ?? null,
+    "flags.fast-nri.sourceAttackMessageId": message.id,
+    "flags.fast-nri.directedDefense": directedDefense,
+    "flags.fast-nri.damageCardMeta": {
+      sourceName: item.name,
+      profileLabel: abilityIsSpell(runtime) ? "Заклинание" : "Способность",
+      targetName: target?.name ?? "",
+      allowDefense: directedDefense,
+      allowDouble: targetCharacteristic === "armor"
+    },
+    "flags.fast-nri.damageRevision": 0,
+    "flags.fast-nri.applicationPhase": "final",
+    "flags.fast-nri.applicationEffectUuids": applicationEffects.uuids,
+    "flags.fast-nri.rolledTotal": result.roll.total,
+    "flags.fast-nri.finalTotal": state.currentTotal,
+    "flags.fast-nri.modifierNotesHTML": modifiersHTML,
+    "flags.fast-nri.damageState": state
+  });
+  return { message, multiTarget: false, damageState: state, roll: result.roll, degree };
 }
 
 /** Compatibility alias for macros or modules written against <= 0.5.51. */
