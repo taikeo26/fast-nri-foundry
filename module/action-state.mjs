@@ -592,6 +592,8 @@ export function normalizeOutcomePart(value = {}, index = 0) {
     kind,
     faces: kind === "die" ? finiteNumberOrNull(value?.faces) : null,
     value: rolled ?? 0,
+    excluded: Boolean(value?.excluded),
+    exclusionReason: Boolean(value?.excluded) ? (text(value?.exclusionReason) || "manual") : null,
     metadata: jsonClone(value?.metadata ?? {}, {})
   };
 }
@@ -945,6 +947,40 @@ export function registerOutcomePool(actionState, poolEntry, { attach = true } = 
   bump(next, ["outcome"]);
   staleFinalization(next);
   return normalizeActionState(next);
+}
+
+export function updateRegisteredOutcomePart(actionState, { poolId, partId, value = undefined, excluded = undefined, exclusionReason = undefined } = {}) {
+  const next = normalizeActionState(actionState);
+  const pool = next.poolRegistry.find(entry => entry.poolId === text(poolId));
+  if (!pool) return next;
+  const part = pool.parts.find(entry => entry.partId === text(partId));
+  if (!part) return next;
+
+  const numeric = finiteNumberOrNull(value);
+  if (value !== undefined && part.kind === "die" && numeric !== null && numeric > 0) part.value = numeric;
+  if (excluded !== undefined) {
+    part.excluded = Boolean(excluded);
+    part.exclusionReason = part.excluded ? (text(exclusionReason) || "manual") : null;
+  }
+
+  bump(next, ["outcome", "resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+/** Replace one registered source die value without creating a new pool. */
+export function rerollRegisteredOutcomePart(actionState, { poolId, partId, value } = {}) {
+  return updateRegisteredOutcomePart(actionState, { poolId, partId, value });
+}
+
+/** Manual source-pool exclusion is reversible and preserves the rolled value. */
+export function setRegisteredOutcomePartExcluded(actionState, { poolId, partId, excluded, reason = "manual" } = {}) {
+  return updateRegisteredOutcomePart(actionState, {
+    poolId,
+    partId,
+    excluded: Boolean(excluded),
+    exclusionReason: Boolean(excluded) ? reason : null
+  });
 }
 
 export function assignOutcomeUnitToTarget(actionState, {

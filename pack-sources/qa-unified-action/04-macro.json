@@ -1,6 +1,6 @@
 {
   "_id": "qaV2Alloc071AAAA",
-  "name": "QA 0.5.73 — Распределение 6d6",
+  "name": "QA 0.5.76 — Распределение 6d6",
   "type": "script",
   "scope": "global",
   "command": "game.fastNri.qa.startAllocation();",
@@ -13,7 +13,7 @@
   },
   "flags": {
     "fast-nri": {
-      "testFixture": "0.5.73",
+      "testFixture": "0.5.76",
       "qaPurpose": "actionstate-v2-rolled-parts-allocation"
     }
   }

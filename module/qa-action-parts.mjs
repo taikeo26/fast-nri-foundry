@@ -11,6 +11,8 @@ import {
   recalculateTargetResult,
   registerActionRoll,
   registerOutcomePool,
+  rerollRegisteredOutcomePart,
+  setRegisteredOutcomePartExcluded,
   removePartResolutionStep,
   removeTargetSlotSelection,
   rerollPartResolutionStep,
@@ -26,8 +28,6 @@ import {
   materializeActionFinalResults,
   normalizeApplicationReceipt,
   normalizeFinalResultPackage,
-  rerollAllFinalResultPackageDice,
-  rerollFinalResultPackagePart,
   resolveFinalResultAmount
 } from "./action-final-results.mjs";
 import { HP_FEEDBACK_SUPPRESS_OPTION } from "./hp-feedback.mjs";
@@ -35,7 +35,7 @@ import { filterDuplicateTargetSelectionsByHardBlock } from "./hard-blocks.mjs";
 import { preventDuplicateTargetSelectionsEnabled } from "./settings.mjs";
 
 /**
- * Fast NRI 0.5.74 — ActionState v2 multi-stream FinalResult/Application QA cards.
+ * Fast NRI 0.5.76 — target-first ActionState v2 lifecycle QA cards.
  *
  * Artificial fixtures only. They prove that the canonical two-card UX can
  * address ActionPart + TargetSlot directly, then materialize independent FinalResult recipient streams and Application receipts without falling back to root affected[]. Real Ability/Spell/Weapon adapters remain untouched.
@@ -64,7 +64,7 @@ const SCENARIOS = Object.freeze({
     description: "Три ActionPart, три независимых Attack Roll и три именованных потока целей.",
     definition: {
       sourceKind: "ability",
-      sourceRef: { name: "QA 0.5.73 — 3 независимые атаки", implementationId: "qa-v2-arrows" },
+      sourceRef: { name: "QA 0.5.76 — 3 независимые атаки", implementationId: "qa-v2-arrows" },
       parts: [{
         partId: "arrow",
         label: "Стрела",
@@ -103,7 +103,7 @@ const SCENARIOS = Object.freeze({
     description: "Один ActionPart, отдельный resolution/recipient slot урона и recipient-only slot источника.",
     definition: {
       sourceKind: "spell",
-      sourceRef: { name: "QA 0.5.73 — Зависимый результат", implementationId: "qa-v2-drain" },
+      sourceRef: { name: "QA 0.5.76 — Зависимый результат", implementationId: "qa-v2-drain" },
       parts: [{
         partId: "drain",
         label: "Похищение-like",
@@ -171,7 +171,7 @@ const SCENARIOS = Object.freeze({
     description: "Recipient-only TargetSlot и rolledPartsToTargets: назначение не меняет выпавшее значение.",
     definition: {
       sourceKind: "spell",
-      sourceRef: { name: "QA 0.5.73 — Распределяемый пул", implementationId: "qa-v2-allocation" },
+      sourceRef: { name: "QA 0.5.76 — Распределяемый пул", implementationId: "qa-v2-allocation" },
       parts: [{
         partId: "mass-heal",
         label: "Распределяемое лечение",
@@ -252,7 +252,7 @@ function contextForQa(scenario) {
       actorUuid: source.actorUuid ?? null,
       itemUuid: null,
       itemType: "ability",
-      name: `QA 0.5.73 — ${scenario.label}`
+      name: `QA 0.5.76 — ${scenario.label}`
     },
     initiator: { actorUuid: source.actorUuid ?? null, tokenUuid: source.tokenUuid ?? null },
     targets: [],
@@ -268,7 +268,7 @@ async function showDice(roll) {
   if (!roll || !dice3d || typeof dice3d.showForRoll !== "function") return false;
   try { return Boolean(await dice3d.showForRoll(roll, game.user, true, null, false)); }
   catch (error) {
-    console.warn("Быстрая НРИ | QA 0.5.73: Dice So Nice", error);
+    console.warn("Быстрая НРИ | QA 0.5.76: Dice So Nice", error);
     return false;
   }
 }
@@ -437,7 +437,7 @@ function defenseRowsHTML(part, slot, selection, result) {
   }).join("")}</div>`;
 }
 
-function slotHTML(state, part, slot, { resolution = false } = {}) {
+function slotHTML(state, part, slot, { resolution = false, outcomeReady = false } = {}) {
   const roleText = slot.roles.includes("resolution")
     ? (slot.roles.includes("recipient") ? "цель проверки + получатель" : "цель проверки")
     : "только получатель";
@@ -446,8 +446,6 @@ function slotHTML(state, part, slot, { resolution = false } = {}) {
     : slot.selectionMode === "fixed"
       ? " · по умолчанию: указанная цель"
       : "";
-  // source/fixed describe the default suggestion only. Every TargetSlot stays
-  // editable under the soft-automation policy.
   const targetActions = `<div class="fast-nri-qa-target-actions">
     <button type="button" data-fast-nri-v2-add-targets data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}"><span>Добавить цели</span></button>
     <button type="button" data-fast-nri-v2-add-controlled data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}"><span>Добавить выделенное</span></button>
@@ -460,16 +458,16 @@ function slotHTML(state, part, slot, { resolution = false } = {}) {
       ? `<span class="fast-nri-qa-degree-actions"><button type="button" data-fast-nri-v2-degree-shift data-delta="-1" data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}" data-selection-id="${escAttr(selection.selectionId)}">−</button><button type="button" data-fast-nri-v2-degree-shift data-delta="1" data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}" data-selection-id="${escAttr(selection.selectionId)}">+</button></span>`
       : "";
     const remove = `<button type="button" data-fast-nri-v2-remove-selection data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}" data-selection-id="${escAttr(selection.selectionId)}" title="Удалить"><i class="fa-solid fa-trash"></i></button>`;
-    const defense = resolution && slot.roles.includes("resolution") && result?.targetResult?.current?.outcomeViews?.length
+    const defense = resolution && outcomeReady && slot.roles.includes("resolution") && result?.targetResult
       ? `<button type="button" data-fast-nri-v2-defense data-part-id="${escAttr(part.partId)}" data-slot-id="${escAttr(slot.slotId)}" data-selection-id="${escAttr(selection.selectionId)}"><span>Защита</span></button>`
       : "";
     return `<div class="fast-nri-qa-target-row">
       <div class="fast-nri-qa-target-head"><span><strong>${esc(selectionName(selection))}</strong> ${degree} ${controls}</span>${remove}</div>
-      ${resolution ? resultDiceHTML(result) : ""}
-      ${resolution ? defenseRowsHTML(part, slot, selection, result) : ""}
+      ${resolution && outcomeReady ? resultDiceHTML(result) : ""}
+      ${resolution && outcomeReady ? defenseRowsHTML(part, slot, selection, result) : ""}
       ${defense}
     </div>`;
-  }).join("") : `<div class="fast-nri-roll-empty">${slot.selectionMode === "source" ? "Источник не определён: запусти QA с выделенным токеном-источником." : "Получатели не выбраны."}</div>`;
+  }).join("") : `<div class="fast-nri-roll-empty">${slot.selectionMode === "source" ? "Источник не определён: можно назначить получателя вручную." : "Получатели не выбраны."}</div>`;
 
   return `<div class="fast-nri-v2-slot">
     <div class="fast-nri-qa-stage-title">${esc(slot.label)} <small>· ${esc(roleText)}${esc(defaultHint)}</small></div>
@@ -484,15 +482,65 @@ function diagnosticsHTML(state) {
   return `<div class="fast-nri-qa-warning">Диагностика v2: ${diagnostics.map(item => esc(`${item.level}: ${item.code}${item.partId ? ` · ${item.partId}` : ""}${item.slotId ? `/${item.slotId}` : ""}`)).join("; ")}</div>`;
 }
 
+function partRollOutcomeComponents(part) {
+  return part.outcomeComponents.filter(component => component.valueSource?.type === "roll");
+}
+
+function componentPool(state, partId, componentId) {
+  return state.poolRegistry.find(pool => pool.partId === partId && pool.componentId === componentId) ?? null;
+}
+
+function partOutcomesReady(state, part) {
+  return partRollOutcomeComponents(part).every(component => Boolean(componentPool(state, part.partId, component.componentId)));
+}
+
+function outcomeButtonLabel(component) {
+  const explicit = String(component.metadata?.rollButtonLabel ?? component.valueSource?.params?.buttonLabel ?? "").trim();
+  if (explicit) return explicit;
+  if (component.type === "damage") return "Бросить урон";
+  if (component.type === "healing") return "Бросить исцеление";
+  if (component.type === "tempHp") return "Бросить временные HP";
+  return component.label ? `Бросить: ${component.label}` : "Бросить результат";
+}
+
+function outcomePoolEditorHTML(state, part, component) {
+  const pool = componentPool(state, part.partId, component.componentId);
+  if (!pool) {
+    return `<button type="button" data-fast-nri-v2-outcome-roll data-part-id="${escAttr(part.partId)}" data-component-id="${escAttr(component.componentId)}"><i class="fa-solid fa-dice"></i><span>${esc(outcomeButtonLabel(component))}</span></button>`;
+  }
+  const activeDice = pool.parts.filter(entry => entry.kind === "die" && !entry.excluded);
+  return `<div class="fast-nri-qa-reroll-editor" data-pool-id="${escAttr(pool.poolId)}">
+    <div class="fast-nri-qa-stage-title">${esc(component.label || component.type || "Результат")} · ${esc(pool.formula || "бросок")}</div>
+    ${pool.parts.map(entry => `<div class="fast-nri-qa-final-die-row ${entry.excluded ? "fast-nri-qa-die-excluded" : ""}">
+      <span>${entry.kind === "die" ? `d${esc(entry.faces)}` : "фикс."} = <strong>${esc(entry.value)}</strong>${entry.excluded ? " · исключён" : ""}</span>
+      <span class="fast-nri-qa-row-actions">
+        ${entry.kind === "die" && !entry.excluded ? `<button type="button" data-fast-nri-v2-outcome-reroll data-pool-id="${escAttr(pool.poolId)}" data-part-value-id="${escAttr(entry.partId)}" data-faces="${escAttr(entry.faces)}"><span>Переброс</span></button>` : ""}
+        ${entry.kind === "die" ? `<button type="button" data-fast-nri-v2-outcome-toggle data-pool-id="${escAttr(pool.poolId)}" data-part-value-id="${escAttr(entry.partId)}" data-excluded="${entry.excluded ? "true" : "false"}"><span>${entry.excluded ? "Вернуть" : "Исключить"}</span></button>` : ""}
+      </span>
+    </div>`).join("")}
+    <button type="button" data-fast-nri-v2-outcome-reroll-all data-pool-id="${escAttr(pool.poolId)}" ${activeDice.length ? "" : "disabled"}><i class="fa-solid fa-dice"></i><span>Перебросить всё</span></button>
+  </div>`;
+}
+
+function partOutcomeSectionHTML(state, part) {
+  const rollComponents = partRollOutcomeComponents(part);
+  if (!rollComponents.length) return `<section class="fast-nri-qa-stage"><div class="fast-nri-qa-stage-title">Дополнительный бросок</div><div>Для этой части отдельный бросок результата не требуется.</div></section>`;
+  return `<section class="fast-nri-qa-stage"><div class="fast-nri-qa-stage-title">Дополнительный результат</div>${rollComponents.map(component => outcomePoolEditorHTML(state, part, component)).join("")}</section>`;
+}
+
 function partHTML(state, part, { resolution = false } = {}) {
   const roll = registeredDeclarationRoll(state, part);
   const rollLine = part.declaration.rollMode === "none"
-    ? `<div>Проверка: <strong>нет</strong></div>`
-    : `<div>Атака/проверка: <strong>${esc(roll?.formula || part.declaration.formula || "—")} = ${esc(roll?.total ?? "—")}</strong>${roll?.naturalD20 ? ` · d20=${esc(roll.naturalD20)}` : ""}</div>`;
+    ? `<div>Атака/проверка: <strong>не требуется</strong></div>`
+    : resolution
+      ? `<div>Атака/проверка: <strong>${esc(roll?.formula || part.declaration.formula || "—")} = ${esc(roll?.total ?? "—")}</strong>${roll?.naturalD20 ? ` · d20=${esc(roll.naturalD20)}` : ""}</div>`
+      : `<div>Атака/проверка: <strong>${esc(part.declaration.formula || "настроенная проверка")}</strong> · будет брошена после заявления действия.</div>`;
+  const ready = partOutcomesReady(state, part);
   return `<section class="fast-nri-qa-stage fast-nri-v2-part" data-part-id="${escAttr(part.partId)}">
     <div class="fast-nri-v2-part-title"><strong>${esc(part.label)}</strong> <code>${esc(part.partId)}</code></div>
     ${rollLine}
-    ${part.targetSlots.map(slot => slotHTML(state, part, slot, { resolution })).join("")}
+    ${part.targetSlots.map(slot => slotHTML(state, part, slot, { resolution, outcomeReady: ready })).join("")}
+    ${resolution ? partOutcomeSectionHTML(state, part) : ""}
   </section>`;
 }
 
@@ -536,28 +584,34 @@ export function qaV2DeclarationCardHTML(rawState, { resolutionMessageId = null }
   const state = normalizeActionState(rawState);
   const scenario = scenarioFromState(state);
   return `<div class="fast-nri-chat-roll fast-nri-qa-action-card fast-nri-v2-card">
-    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-diagram-project"></i><strong>QA 0.5.73 — ${esc(scenario.label)}</strong></div>
-    <div class="fast-nri-chat-roll-meta"><span>ActionState v2 · Карточка 1/2</span><span>ActionPart + TargetSlot</span></div>
+    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-bullseye"></i><strong>QA 0.5.76 — ${esc(scenario.label)}</strong></div>
+    <div class="fast-nri-chat-roll-meta"><span>Карточка 1 · цели</span><span>сначала цель, потом бросок</span></div>
     <div class="fast-nri-qa-warning">${esc(scenario.description)}</div>
     ${state.parts.map(part => partHTML(state, part)).join("")}
     ${diagnosticsHTML(state)}
-    <section class="fast-nri-qa-stage"><button type="button" data-fast-nri-v2-resolve><i class="fa-solid fa-scale-balanced"></i><span>Рассчитать степени</span></button>${resolutionMessageId ? `<div class="fast-nri-qa-warning">Карточка объявления остаётся активной. Последняя обработка: ${esc(resolutionMessageId)}.</div>` : ""}</section>
+    <section class="fast-nri-qa-stage">
+      <button type="button" data-fast-nri-v2-declare><i class="fa-solid fa-bullhorn"></i><span>Заявить действие</span></button>
+      <div class="fast-nri-qa-warning">Пустой обязательный TargetSlot — предупреждение, а не hard block. После броска цели всё равно можно исправить.</div>
+      ${resolutionMessageId ? `<div class="fast-nri-qa-warning">Карточка выбора целей остаётся активной. Последняя обработка: ${esc(resolutionMessageId)}.</div>` : ""}
+    </section>
   </div>`;
 }
 
 export function qaV2ResolutionCardHTML(rawState) {
   const state = normalizeActionState(rawState);
   const scenario = scenarioFromState(state);
+  const anyPendingOutcome = state.parts.some(part => !partOutcomesReady(state, part));
   return `<div class="fast-nri-chat-roll fast-nri-qa-action-card fast-nri-v2-card">
-    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-gears"></i><strong>QA 0.5.73 — Обработка · ${esc(scenario.label)}</strong></div>
-    <div class="fast-nri-chat-roll-meta"><span>ActionState v2 · Карточка 2/2</span><span>производный snapshot</span></div>
+    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-gears"></i><strong>QA 0.5.76 — Разрешение · ${esc(scenario.label)}</strong></div>
+    <div class="fast-nri-chat-roll-meta"><span>Карточка 2 · атака, результат и Защиты</span><span>редактируемый snapshot</span></div>
     ${state.parts.map(part => partHTML(state, part, { resolution: true })).join("")}
     ${allocationHTML(state)}
     ${dependentPreviewHTML(state)}
     ${diagnosticsHTML(state)}
+    ${anyPendingOutcome ? `<div class="fast-nri-qa-warning">Сначала выполните нужные дополнительные броски. Это не блокирует редактирование целей и исходных степеней.</div>` : ""}
     <section class="fast-nri-qa-stage">
-      <button type="button" data-fast-nri-v2-finalize><i class="fa-solid fa-file-circle-check"></i><span>Сформировать результаты</span></button>
-      <div class="fast-nri-qa-warning">Finalizer 0.5.73 создаёт независимые recipient streams. Provenance не является адресом Application: применение по-прежнему идёт только на текущие выделенные токены.</div>
+      <button type="button" data-fast-nri-v2-finalize><i class="fa-solid fa-arrow-right-to-bracket"></i><span>Применить результат</span></button>
+      <div class="fast-nri-qa-warning">Кнопка создаёт одну общую Final/Application Card. Никакие HP/эффекты на этом шаге ещё не меняются.</div>
     </section>
   </div>`;
 }
@@ -586,24 +640,11 @@ async function persistResolution(message, state) {
 
 async function buildInitialState(scenarioId) {
   const scenario = SCENARIOS[scenarioId] ?? SCENARIOS.arrows;
-  let state = createActionState({
+  return createActionState({
     actionContext: contextForQa(scenario),
     definition: scenario.definition,
-    metadata: { qaFixture: "0.5.73", qaV2Scenario: scenario.id }
+    metadata: { qaFixture: "0.5.76", qaV2Scenario: scenario.id, lifecycle: "target-first" }
   });
-
-  for (const part of state.parts) {
-    if (part.declaration.rollMode === "none" || !part.declaration.formula) continue;
-    const roll = await evaluatedRoll(part.declaration.formula);
-    state = registerActionRoll(state, {
-      rollId: `declaration-${part.partId}`,
-      partId: part.partId,
-      kind: "declaration",
-      label: part.declaration.label,
-      roll: rollStateFromRoll(roll, part.declaration.formula)
-    });
-  }
-  return state;
 }
 
 export async function startMultiPartQa(scenarioId = "arrows") {
@@ -647,8 +688,8 @@ function profileSnapshot(state, part, result) {
         kind: entry.kind,
         faces: entry.faces,
         value: entry.value,
-        excluded: index >= activeCount,
-        exclusionReason: index >= activeCount ? "profile" : null,
+        excluded: Boolean(entry.excluded) || index >= activeCount,
+        exclusionReason: Boolean(entry.excluded) ? (entry.exclusionReason || "manual") : index >= activeCount ? "profile" : null,
         metadata: { componentId: pool.componentId }
       }))
     }],
@@ -714,44 +755,62 @@ async function removeSelection(element) {
   else if (messageKind(message) === QA_V2_DECLARATION_KIND) await persistDeclaration(message, next);
 }
 
-async function rollConfiguredOutcomes(rawState) {
+async function rollDeclarationChecks(rawState) {
   let state = normalizeActionState(rawState);
   for (const part of state.parts) {
-    for (const component of part.outcomeComponents) {
-      if (component.valueSource.type !== "roll") continue;
-      const formula = String(component.valueSource.params?.formula ?? "").trim();
-      if (!formula) continue;
-      const roll = await evaluatedRoll(formula);
-      const parts = rolledDiceParts(roll);
-      const allocation = state.metadata.qaV2Scenario === "allocation"
-        ? { mode: "rolledPartsToTargets" }
-        : { mode: "none" };
-      state = registerOutcomePool(state, {
-        poolId: `pool-${part.partId}-${component.componentId}`,
-        partId: part.partId,
-        componentId: component.componentId,
-        formula,
-        parts,
-        allocation,
-        metadata: { qaV2: true }
-      });
-    }
-  }
-
-  for (const part of state.parts) {
-    for (const result of part.targetResults) {
-      if (!result.targetResult || result.degreeState?.status !== "resolved") continue;
-      state = bindPoolToResult(state, part.partId, result.targetSlotId, result.selectionId);
-    }
+    if (part.declaration.rollMode === "none" || !part.declaration.formula) continue;
+    const roll = await evaluatedRoll(part.declaration.formula);
+    state = registerActionRoll(state, {
+      rollId: `declaration-${part.partId}-${randomId("roll")}`,
+      partId: part.partId,
+      kind: "declaration",
+      label: part.declaration.label,
+      roll: rollStateFromRoll(roll, part.declaration.formula)
+    });
   }
   return state;
 }
 
-async function resolveToSecondCard(element) {
+async function rollOneOutcomeComponent(rawState, partId, componentId) {
+  let state = normalizeActionState(rawState);
+  const part = state.parts.find(entry => entry.partId === partId);
+  const component = part?.outcomeComponents.find(entry => entry.componentId === componentId);
+  if (!part || !component || component.valueSource?.type !== "roll") return state;
+  const formula = String(component.valueSource.params?.formula ?? "").trim();
+  if (!formula) return state;
+  const roll = await evaluatedRoll(formula);
+  const parts = rolledDiceParts(roll);
+  const allocation = state.metadata.qaV2Scenario === "allocation"
+    ? { mode: "rolledPartsToTargets" }
+    : { mode: "none" };
+  state = registerOutcomePool(state, {
+    poolId: `pool-${part.partId}-${component.componentId}`,
+    partId: part.partId,
+    componentId: component.componentId,
+    formula,
+    parts,
+    allocation,
+    metadata: { qaV2: true }
+  });
+  return rebindPartResultsToPools(state, part.partId);
+}
+
+function rebindPartResultsToPools(rawState, partId) {
+  let state = normalizeActionState(rawState);
+  const part = state.parts.find(entry => entry.partId === partId);
+  if (!part) return state;
+  for (const result of part.targetResults) {
+    if (!result.targetResult || result.degreeState?.status !== "resolved") continue;
+    state = bindPoolToResult(state, part.partId, result.targetSlotId, result.selectionId);
+  }
+  return state;
+}
+
+async function declareToResolution(element) {
   const { message, state } = stateFromElement(element);
   if (!message || !state || messageKind(message) !== QA_V2_DECLARATION_KIND) return;
-  let resolved = resolveAllPartTargetDegrees(state, qaDegreeResolver);
-  resolved = await rollConfiguredOutcomes(resolved);
+  let resolved = await rollDeclarationChecks(state);
+  resolved = resolveAllPartTargetDegrees(resolved, qaDegreeResolver);
   const resolution = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
     content: qaV2ResolutionCardHTML(resolved),
@@ -759,6 +818,59 @@ async function resolveToSecondCard(element) {
   });
   await persistResolution(resolution, resolved);
   await persistDeclaration(message, state, { resolutionMessageId: resolution.id });
+}
+
+async function rollOutcomeFromCard(element) {
+  const { message, state } = stateFromElement(element);
+  if (!message || !state || messageKind(message) !== QA_V2_RESOLUTION_KIND) return;
+  const next = await rollOneOutcomeComponent(state, element.dataset.partId, element.dataset.componentId);
+  await persistResolution(message, next);
+}
+
+async function rerollOutcomePart(element) {
+  const { message, state } = stateFromElement(element);
+  if (!message || !state || messageKind(message) !== QA_V2_RESOLUTION_KIND) return;
+  const faces = Math.max(2, Number(element.dataset.faces) || 2);
+  const roll = await evaluatedRoll(`1d${faces}`);
+  const value = rolledDiceParts(roll)[0]?.value;
+  if (!value) return;
+  const poolId = element.dataset.poolId;
+  const pool = state.poolRegistry.find(entry => entry.poolId === poolId);
+  if (!pool) return;
+  let next = rerollRegisteredOutcomePart(state, { poolId, partId: element.dataset.partValueId, value });
+  next = rebindPartResultsToPools(next, pool.partId);
+  await persistResolution(message, next);
+}
+
+async function rerollAllOutcomeParts(element) {
+  const { message, state } = stateFromElement(element);
+  if (!message || !state || messageKind(message) !== QA_V2_RESOLUTION_KIND) return;
+  const pool = state.poolRegistry.find(entry => entry.poolId === element.dataset.poolId);
+  if (!pool) return;
+  let next = state;
+  for (const part of pool.parts.filter(entry => entry.kind === "die" && !entry.excluded)) {
+    const roll = await evaluatedRoll(`1d${Math.max(2, Number(part.faces) || 2)}`);
+    const value = rolledDiceParts(roll)[0]?.value;
+    if (value) next = rerollRegisteredOutcomePart(next, { poolId: pool.poolId, partId: part.partId, value });
+  }
+  next = rebindPartResultsToPools(next, pool.partId);
+  await persistResolution(message, next);
+}
+
+async function toggleOutcomePart(element) {
+  const { message, state } = stateFromElement(element);
+  if (!message || !state || messageKind(message) !== QA_V2_RESOLUTION_KIND) return;
+  const pool = state.poolRegistry.find(entry => entry.poolId === element.dataset.poolId);
+  if (!pool) return;
+  const excluded = element.dataset.excluded === "true";
+  let next = setRegisteredOutcomePartExcluded(state, {
+    poolId: pool.poolId,
+    partId: element.dataset.partValueId,
+    excluded: !excluded,
+    reason: "manual"
+  });
+  next = rebindPartResultsToPools(next, pool.partId);
+  await persistResolution(message, next);
 }
 
 async function shiftDegree(element) {
@@ -841,10 +953,6 @@ async function assignUnit(element) {
 }
 
 
-function finalResultFromMessage(message) {
-  const raw = message?.getFlag?.("fast-nri", "qaV2FinalResult") ?? null;
-  return raw ? normalizeFinalResultPackage(raw) : null;
-}
 
 function finalMessagesForBatch(batchId) {
   const id = String(batchId ?? "").trim();
@@ -855,8 +963,21 @@ function finalMessagesForBatch(batchId) {
   );
 }
 
+function finalResultsFromMessage(message) {
+  const many = message?.getFlag?.("fast-nri", "qaV2FinalResults");
+  if (Array.isArray(many)) return many.map(normalizeFinalResultPackage);
+  const one = message?.getFlag?.("fast-nri", "qaV2FinalResult");
+  return one ? [normalizeFinalResultPackage(one)] : [];
+}
+
+function finalResultFromMessage(message, finalResultId = null) {
+  const values = finalResultsFromMessage(message);
+  if (!finalResultId) return values[0] ?? null;
+  return values.find(result => result.finalResultId === String(finalResultId)) ?? null;
+}
+
 function currentFinalResultsForBatch(batchId) {
-  return finalMessagesForBatch(batchId).map(finalResultFromMessage).filter(Boolean);
+  return finalMessagesForBatch(batchId).flatMap(finalResultsFromMessage);
 }
 
 function applicationMessagesForBatch(batchId) {
@@ -887,80 +1008,47 @@ function finalTypeLabel(type) {
   })[type] ?? type ?? "Результат";
 }
 
-function finalTypeIcon(type) {
-  return ({
-    damage: "fa-heart-crack",
-    healing: "fa-heart-pulse",
-    resource: "fa-bolt",
-    effect: "fa-wand-magic-sparkles"
-  })[type] ?? "fa-file-circle-check";
-}
-
-function finalPartRows(finalResult) {
-  const result = normalizeFinalResultPackage(finalResult);
-  if (!result.value.parts.length) return "";
-  return `<div class="fast-nri-qa-reroll-editor">
-    <div class="fast-nri-qa-stage-title">Кубы FinalResult</div>
-    ${result.value.parts.map(part => `<div class="fast-nri-qa-final-die-row ${part.excluded ? "fast-nri-qa-die-excluded" : ""}">
-      <span>${part.kind === "die" ? `d${esc(part.faces)}` : "фикс."} = <strong>${esc(part.value)}</strong>${part.excluded ? " · исключён" : ""}</span>
-      ${part.kind === "die" && !part.excluded ? `<button type="button" data-fast-nri-v2-final-reroll data-part-id="${escAttr(part.partId)}" data-faces="${escAttr(part.faces)}"><i class="fa-solid fa-rotate"></i><span>Переброс</span></button>` : ""}
-    </div>`).join("")}
-    <button type="button" data-fast-nri-v2-final-reroll-all ${result.value.parts.some(part => part.kind === "die" && !part.excluded) ? "" : "disabled"}><i class="fa-solid fa-dice"></i><span>Перебросить всё</span></button>
-  </div>`;
-}
-
 function dependencyStatusHTML(finalResult, dependencyState) {
   const result = normalizeFinalResultPackage(finalResult);
   if (!result.dependencies.length) return "";
-  const rows = dependencyState.details.map(detail => `<div>${detail.satisfied ? "✓" : "○"} ${esc(detail.componentId || "компонент")} · ${esc(detail.condition)}${detail.matchingReceiptIds.length ? ` · receipts ${esc(detail.matchingReceiptIds.length)}` : ""}</div>`).join("");
-  return `<div class="fast-nri-qa-warning"><strong>Зависимость Application:</strong>${rows}${dependencyState.ready ? "<div>Условие выполнено.</div>" : "<div>⚠ Условие сейчас не выполнено. Это предупреждение, а не запрет Application.</div>"}</div>`;
+  return `<div class="fast-nri-qa-warning">${dependencyState.ready ? "✓ Условие зависимого результата выполнено." : "⚠ Условие зависимого результата сейчас не выполнено. Индивидуальное применение остаётся доступным."}</div>`;
 }
 
-export function qaV2FinalCardHTML(rawFinalResult, { finalResults = [], receipts = [] } = {}) {
-  const finalResult = normalizeFinalResultPackage(rawFinalResult);
-  const allResults = finalResults.length ? finalResults.map(normalizeFinalResultPackage) : [finalResult];
-  const amount = resolveFinalResultAmount(finalResult, { finalResults: allResults });
-  const dependencies = evaluateFinalResultDependencies(finalResult, receipts);
-  const recipient = finalResult.provenance.recipient;
-  const resolution = finalResult.provenance.resolution;
-  const provenanceRecipient = recipient.name || recipient.actorUuid || recipient.tokenUuid || "—";
-  const resolutionLine = resolution.selectionId
-    ? `<span>Рассчитано по: ${esc(resolution.name || resolution.actorUuid || "цели")} · ${esc(DEGREE_LABELS[resolution.degree] ?? resolution.degree ?? "—")}</span>`
-    : `<span>Получатель не является целью проверки</span>`;
+function finalResultRowHTML(finalResult, allResults, receipts) {
+  const result = normalizeFinalResultPackage(finalResult);
+  const amount = resolveFinalResultAmount(result, { finalResults: allResults });
+  const dependencies = evaluateFinalResultDependencies(result, receipts);
+  const recipient = result.provenance.recipient;
+  const resolution = result.provenance.resolution;
+  const degree = resolution.degree ? ` · ${DEGREE_LABELS[resolution.degree] ?? resolution.degree}` : "";
+  return `<section class="fast-nri-qa-stage fast-nri-v2-final-result-row" data-final-result-id="${escAttr(result.finalResultId)}">
+    <div class="fast-nri-qa-stage-title"><strong>${esc(result.partLabel || result.partId || "Результат")}</strong> · ${esc(result.componentLabel || finalTypeLabel(result.componentType))}</div>
+    <div>Назначено: <strong>${esc(recipient.name || recipient.actorUuid || recipient.tokenUuid || "не назначено")}</strong>${esc(degree)}</div>
+    <div class="fast-nri-qa-final-total">${esc(finalTypeLabel(result.componentType))}: <strong>${esc(amount)}</strong></div>
+    ${dependencyStatusHTML(result, dependencies)}
+    <button type="button" data-fast-nri-v2-final-apply-selected data-final-result-id="${escAttr(result.finalResultId)}"><i class="fa-solid fa-crosshairs"></i><span>Применить по выбранному</span></button>
+  </section>`;
+}
+
+export function qaV2FinalCardHTML(rawFinalResults, { receipts = [] } = {}) {
+  const allResults = (Array.isArray(rawFinalResults) ? rawFinalResults : [rawFinalResults]).filter(Boolean).map(normalizeFinalResultPackage);
+  const batchId = allResults[0]?.batchId ?? "";
   return `<div class="fast-nri-chat-roll fast-nri-qa-final-card fast-nri-v2-final-card">
-    <div class="fast-nri-chat-roll-title"><i class="fa-solid ${escAttr(finalTypeIcon(finalResult.componentType))}"></i><strong>Final Result · ${esc(finalResult.componentLabel || finalTypeLabel(finalResult.componentType))}</strong></div>
-    <div class="fast-nri-chat-roll-meta"><span>${esc(finalResult.partLabel || finalResult.partId)} · ${esc(finalResult.componentId)}</span><span>Provenance: ${esc(provenanceRecipient)}</span></div>
-    <div class="fast-nri-chat-roll-meta">${resolutionLine}<span>Application: только текущее выделение</span></div>
-    <section class="fast-nri-qa-stage">
-      <div class="fast-nri-qa-final-total">${esc(finalTypeLabel(finalResult.componentType))}: <strong>${esc(amount)}</strong></div>
-      ${finalResult.value.kind === "derived" ? `<div class="fast-nri-qa-warning">Значение вычисляется из текущего FinalResult компонента <strong>${esc(finalResult.value.source.componentId || "источника")}</strong>; его переброс обновляет этот preview без повторного Resolution.</div>` : ""}
-      ${finalPartRows(finalResult)}
-      ${dependencyStatusHTML(finalResult, dependencies)}
-    </section>
-    <div class="fast-nri-damage-actions"><button type="button" data-fast-nri-v2-final-apply><i class="fa-solid fa-check"></i><span>Применить к выделенным</span></button></div>
+    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-list-check"></i><strong>Итог действия</strong></div>
+    <div class="fast-nri-chat-roll-meta"><span>Одна Final/Application Card</span><span>${esc(allResults.length)} индивидуальн. результатов</span></div>
+    ${allResults.map(result => finalResultRowHTML(result, allResults, receipts)).join("")}
+    <div class="fast-nri-damage-actions"><button type="button" data-fast-nri-v2-final-apply-assigned data-batch-id="${escAttr(batchId)}"><i class="fa-solid fa-check-double"></i><span>Применить по назначенным целям</span></button></div>
+    <div class="fast-nri-qa-warning">Массовая кнопка использует явно назначенных в действии получателей. Индивидуальная кнопка применяет только выбранный result stream к текущим controlled Tokens.</div>
   </div>`;
-}
-
-async function persistV2FinalMessage(message, finalResult, { refresh = true } = {}) {
-  const normalized = normalizeFinalResultPackage(finalResult);
-  await message.update({
-    "flags.fast-nri.kind": QA_V2_FINAL_KIND,
-    "flags.fast-nri.qaV2FinalResult": normalized,
-    "flags.fast-nri.qaV2FinalBatchId": normalized.batchId
-  });
-  if (refresh) await refreshFinalBatch(normalized.batchId);
-  return normalized;
 }
 
 async function refreshFinalBatch(batchId) {
   const messages = finalMessagesForBatch(batchId);
   if (!messages.length) return;
-  const finalResults = messages.map(finalResultFromMessage).filter(Boolean);
   const receipts = applicationReceiptsForBatch(batchId);
   for (const message of messages) {
-    const finalResult = finalResultFromMessage(message);
-    if (!finalResult) continue;
-    const content = qaV2FinalCardHTML(finalResult, { finalResults, receipts });
+    const finalResults = finalResultsFromMessage(message);
+    const content = qaV2FinalCardHTML(finalResults, { receipts });
     if (message.content !== content) await message.update({ content });
   }
 }
@@ -971,55 +1059,22 @@ async function finalizeV2Results(element) {
   const batchId = randomId(`final-batch-${state.actionId}`);
   const finalResults = materializeActionFinalResults(state, { batchId });
   if (!finalResults.length) {
-    ui.notifications.warn("QA 0.5.73: нет materialized result streams. Для распределяемого пула сначала назначь хотя бы один куб.");
+    ui.notifications.warn("QA 0.5.76: пока нечего применять. Выполни нужный бросок результата или назначь получателей/кубы.");
     return;
   }
-
-  for (const finalResult of finalResults) {
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker(),
-      content: qaV2FinalCardHTML(finalResult, { finalResults, receipts: [] }),
-      flags: {
-        "fast-nri": {
-          kind: QA_V2_FINAL_KIND,
-          qaV2ResolutionMessageId: message.id,
-          qaV2FinalBatchId: batchId,
-          qaV2FinalResult: finalResult
-        }
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker(),
+    content: qaV2FinalCardHTML(finalResults, { receipts: [] }),
+    flags: {
+      "fast-nri": {
+        kind: QA_V2_FINAL_KIND,
+        qaV2ResolutionMessageId: message.id,
+        qaV2FinalBatchId: batchId,
+        qaV2FinalResults: finalResults
       }
-    });
-  }
-  await message.update({ "flags.fast-nri.qaV2FinalBatchId": batchId });
-  await refreshFinalBatch(batchId);
-}
-
-async function rerollV2FinalDie(element) {
-  const message = rootMessageFromElement(element);
-  const finalResult = finalResultFromMessage(message);
-  if (!message || !finalResult) return;
-  const faces = Math.max(2, Number(element.dataset.faces) || 2);
-  const roll = await evaluatedRoll(`1d${faces}`);
-  const value = rolledDiceParts(roll)[0]?.value;
-  if (!value) return;
-  const next = rerollFinalResultPackagePart(finalResult, { partId: element.dataset.partId, value });
-  await persistV2FinalMessage(message, next);
-}
-
-async function rerollAllV2FinalDice(element) {
-  const message = rootMessageFromElement(element);
-  const finalResult = finalResultFromMessage(message);
-  if (!message || !finalResult) return;
-  const dice = finalResult.value.parts.filter(part => part.kind === "die" && !part.excluded);
-  if (!dice.length) return;
-  const roll = await evaluatedRoll(dice.map(part => `1d${part.faces}`).join(" + "));
-  const rolled = rolledDiceParts(roll);
-  const values = {};
-  dice.forEach((part, index) => {
-    const value = rolled[index]?.value;
-    if (value) values[part.partId] = value;
+    }
   });
-  const next = rerollAllFinalResultPackageDice(finalResult, values);
-  await persistV2FinalMessage(message, next);
+  await message.update({ "flags.fast-nri.qaV2FinalBatchId": batchId });
 }
 
 function uniqueControlledRecipients() {
@@ -1037,7 +1092,7 @@ function qaV2ApplicationCardHTML(receipt, { provenanceName = null } = {}) {
   const type = finalTypeLabel(normalized.componentType);
   return `<div class="fast-nri-chat-roll fast-nri-qa-application-card">
     <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-receipt"></i><strong>${esc(normalized.recipient.name || "Получатель")} · ${esc(type)}</strong></div>
-    <div class="fast-nri-chat-roll-meta"><span>ApplicationReceipt 0.5.73</span><span>Final provenance: ${esc(provenanceName || "—")}</span></div>
+    <div class="fast-nri-chat-roll-meta"><span>ApplicationReceipt 0.5.76</span><span>Final provenance: ${esc(provenanceName || "—")}</span></div>
     <div class="fast-nri-qa-final-total">Запрошено: <strong>${esc(normalized.requestedAmount)}</strong> · применено: <strong>${esc(normalized.appliedAmount)}</strong></div>
     ${normalized.dependencyReceiptIds.length ? `<div class="fast-nri-qa-warning">Использованы dependency receipts: ${esc(normalized.dependencyReceiptIds.join(", "))}</div>` : ""}
     ${normalized.undone ? `<div class="fast-nri-qa-warning">Отменено. Это не выполняет каскадный Undo уже применённых зависимых результатов.</div>` : `<button type="button" data-fast-nri-v2-application-undo><i class="fa-solid fa-rotate-left"></i><span>Отмена</span></button>`}
@@ -1089,63 +1144,106 @@ async function applyPackageToActor(finalResult, actor, amount) {
   return { appliedAmount: 0, before: {}, after: {}, undoPatch: {} };
 }
 
-async function applyV2FinalResult(element) {
+async function createQaApplicationReceiptMessage(finalResult, token, actor, amount, dependencyState, mode) {
+  if (!["damage", "healing", "resource"].includes(finalResult.componentType)) {
+    ui.notifications.warn(`QA 0.5.76: Application adapter для ${finalResult.componentType} ещё не подключён.`);
+    return null;
+  }
+  const application = await applyPackageToActor(finalResult, actor, amount);
+  const receipt = createApplicationReceipt({
+    finalResultId: finalResult.finalResultId,
+    batchId: finalResult.batchId,
+    componentId: finalResult.componentId,
+    componentType: finalResult.componentType,
+    recipient: {
+      tokenUuid: token?.document?.uuid ?? token?.uuid ?? token?.uuid ?? null,
+      actorUuid: actor.uuid,
+      name: token?.name || actor.name || "Получатель"
+    },
+    requestedAmount: amount,
+    appliedAmount: application.appliedAmount,
+    before: application.before,
+    after: application.after,
+    dependencyReceiptIds: dependencyState.qualifyingReceiptIds,
+    metadata: { undoPatch: application.undoPatch, qaV2: true, applicationMode: mode }
+  });
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor, token: token?.document ?? token ?? null }),
+    content: qaV2ApplicationCardHTML(receipt, { provenanceName: finalResult.provenance.recipient.name }),
+    flags: {
+      "fast-nri": {
+        kind: QA_V2_APPLICATION_KIND,
+        qaV2FinalBatchId: finalResult.batchId,
+        qaV2FinalResultId: finalResult.finalResultId,
+        qaV2ApplicationReceipt: receipt,
+        qaV2ProvenanceName: finalResult.provenance.recipient.name
+      }
+    }
+  });
+  return receipt;
+}
+
+async function assignedRecipient(finalResult) {
+  const ref = finalResult?.provenance?.recipient ?? {};
+  if (ref.tokenUuid) {
+    try {
+      const tokenDocument = await fromUuid(ref.tokenUuid);
+      if (tokenDocument?.actor) return { token: tokenDocument.object ?? tokenDocument, actor: tokenDocument.actor };
+    } catch (_error) { /* fall through */ }
+  }
+  if (ref.actorUuid) {
+    try {
+      const actor = await fromUuid(ref.actorUuid);
+      if (actor) return { token: null, actor };
+    } catch (_error) { /* fall through */ }
+  }
+  return null;
+}
+
+async function applyV2FinalResultSelected(element) {
   const message = rootMessageFromElement(element);
-  const finalResult = finalResultFromMessage(message);
+  const finalResult = finalResultFromMessage(message, element.dataset.finalResultId);
   if (!message || !finalResult) return;
-  const finalResults = currentFinalResultsForBatch(finalResult.batchId);
+  const finalResults = finalResultsFromMessage(message);
   const receipts = applicationReceiptsForBatch(finalResult.batchId);
   const dependencyState = evaluateFinalResultDependencies(finalResult, receipts);
-  if (!dependencyState.ready) {
-    ui.notifications.warn("Условие зависимого результата сейчас не выполнено. Soft automation: Application не блокируется.");
-  }
+  if (!dependencyState.ready) ui.notifications.warn("Условие зависимого результата сейчас не выполнено. Soft automation: индивидуальное применение не блокируется.");
   const recipients = uniqueControlledRecipients();
   if (!recipients.length) {
-    ui.notifications.warn("Выдели один или несколько токенов для Application.");
+    ui.notifications.warn("Выдели один или несколько токенов для индивидуального Application.");
     return;
   }
   const amount = resolveFinalResultAmount(finalResult, { finalResults });
-
   for (const token of recipients) {
     const actor = token?.actor;
     if (!actor) continue;
-    if (!["damage", "healing", "resource"].includes(finalResult.componentType)) {
-      ui.notifications.warn(`QA 0.5.73: Application adapter для ${finalResult.componentType} ещё не подключён.`);
-      continue;
-    }
-    const application = await applyPackageToActor(finalResult, actor, amount);
-    const receipt = createApplicationReceipt({
-      finalResultId: finalResult.finalResultId,
-      batchId: finalResult.batchId,
-      componentId: finalResult.componentId,
-      componentType: finalResult.componentType,
-      recipient: {
-        tokenUuid: token?.document?.uuid ?? token?.uuid ?? null,
-        actorUuid: actor.uuid,
-        name: token.name || actor.name || "Получатель"
-      },
-      requestedAmount: amount,
-      appliedAmount: application.appliedAmount,
-      before: application.before,
-      after: application.after,
-      dependencyReceiptIds: dependencyState.qualifyingReceiptIds,
-      metadata: { undoPatch: application.undoPatch, qaV2: true }
-    });
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor, token: token.document ?? token }),
-      content: qaV2ApplicationCardHTML(receipt, { provenanceName: finalResult.provenance.recipient.name }),
-      flags: {
-        "fast-nri": {
-          kind: QA_V2_APPLICATION_KIND,
-          qaV2FinalBatchId: finalResult.batchId,
-          qaV2FinalResultId: finalResult.finalResultId,
-          qaV2ApplicationReceipt: receipt,
-          qaV2ProvenanceName: finalResult.provenance.recipient.name
-        }
-      }
-    });
+    await createQaApplicationReceiptMessage(finalResult, token, actor, amount, dependencyState, "current-controlled");
   }
   await refreshFinalBatch(finalResult.batchId);
+}
+
+async function applyV2FinalResultsAssigned(element) {
+  const message = rootMessageFromElement(element);
+  const finalResults = finalResultsFromMessage(message);
+  if (!message || !finalResults.length) return;
+  const batchId = finalResults[0].batchId;
+  const receipts = applicationReceiptsForBatch(batchId);
+
+  for (const finalResult of finalResults) {
+    const dependencyState = evaluateFinalResultDependencies(finalResult, receipts);
+    if (finalResult.dependencies.length && !dependencyState.ready) {
+      ui.notifications.warn(`Условие зависимого результата «${finalResult.componentLabel || finalTypeLabel(finalResult.componentType)}» сейчас не выполнено. Soft automation: массовое применение по назначенной цели не блокируется.`);
+    }
+    const recipient = await assignedRecipient(finalResult);
+    if (!recipient?.actor) {
+      ui.notifications.warn(`Назначенный получатель «${finalResult.provenance.recipient.name || "—"}» недоступен. Остальные результаты продолжают применяться.`);
+      continue;
+    }
+    const amount = resolveFinalResultAmount(finalResult, { finalResults });
+    const receipt = await createQaApplicationReceiptMessage(finalResult, recipient.token, recipient.actor, amount, dependencyState, "assigned-recipient");
+    if (receipt) receipts.push(receipt);
+  }
+  await refreshFinalBatch(batchId);
 }
 
 async function actorForApplicationReceipt(receipt) {
@@ -1170,7 +1268,7 @@ async function undoV2Application(element) {
   if (receipt.undone) return;
   const actor = await actorForApplicationReceipt(receipt);
   if (!actor) {
-    ui.notifications.error("QA 0.5.73: Actor для Undo не найден.");
+    ui.notifications.error("QA 0.5.76: Actor для Undo не найден.");
     return;
   }
   const undoPatch = receipt.metadata?.undoPatch ?? {};
@@ -1188,16 +1286,19 @@ async function clickHandler(event) {
     ["[data-fast-nri-v2-add-targets]", el => addSelections(el, currentTargetTokens(), "target")],
     ["[data-fast-nri-v2-add-controlled]", el => addSelections(el, currentControlledTokens(), "controlled")],
     ["[data-fast-nri-v2-remove-selection]", removeSelection],
-    ["[data-fast-nri-v2-resolve]", resolveToSecondCard],
+    ["[data-fast-nri-v2-declare]", declareToResolution],
+    ["[data-fast-nri-v2-outcome-roll]", rollOutcomeFromCard],
+    ["[data-fast-nri-v2-outcome-reroll]", rerollOutcomePart],
+    ["[data-fast-nri-v2-outcome-reroll-all]", rerollAllOutcomeParts],
+    ["[data-fast-nri-v2-outcome-toggle]", toggleOutcomePart],
     ["[data-fast-nri-v2-degree-shift]", shiftDegree],
     ["[data-fast-nri-v2-defense]", addDefense],
     ["[data-fast-nri-v2-defense-reroll]", rerollDefense],
     ["[data-fast-nri-v2-defense-undo]", undoDefense],
     ["[data-fast-nri-v2-assign]", assignUnit],
     ["[data-fast-nri-v2-finalize]", finalizeV2Results],
-    ["[data-fast-nri-v2-final-reroll]", rerollV2FinalDie],
-    ["[data-fast-nri-v2-final-reroll-all]", rerollAllV2FinalDice],
-    ["[data-fast-nri-v2-final-apply]", applyV2FinalResult],
+    ["[data-fast-nri-v2-final-apply-selected]", applyV2FinalResultSelected],
+    ["[data-fast-nri-v2-final-apply-assigned]", applyV2FinalResultsAssigned],
     ["[data-fast-nri-v2-application-undo]", undoV2Application]
   ];
   for (const [selector, handler] of handlers) {
@@ -1209,8 +1310,8 @@ async function clickHandler(event) {
     element.dataset.fastNriBusy = "true";
     try { await handler(element); }
     catch (error) {
-      console.error("Быстрая НРИ | QA 0.5.73 multi-stream", error);
-      ui.notifications.error(`QA 0.5.73: ${error?.message || "ошибка"}`);
+      console.error("Быстрая НРИ | QA 0.5.76 target-first", error);
+      ui.notifications.error(`QA 0.5.76: ${error?.message || "ошибка"}`);
     } finally { delete element.dataset.fastNriBusy; }
     return;
   }

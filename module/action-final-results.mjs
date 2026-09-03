@@ -14,7 +14,7 @@ import {
 
 export const FINAL_RESULT_PACKAGE_SCHEMA_VERSION = 1;
 export const APPLICATION_RECEIPT_SCHEMA_VERSION = 1;
-export const FINAL_RESULT_APPLICATION_POLICY = "current-controlled-only";
+export const FINAL_RESULT_APPLICATION_POLICY = "explicit-assigned-or-current-controlled";
 
 export const FINAL_RESULT_VALUE_KINDS = Object.freeze([
   "parts",

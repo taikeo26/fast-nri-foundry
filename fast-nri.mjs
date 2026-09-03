@@ -33,6 +33,7 @@ import {
   registerDataMigrationSettings
 } from "./module/data-migrations.mjs";
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
+import { activateAbilityActionV2Interactions } from "./module/ability-action-v2.mjs";
 import { activateAbilityAreaPlacement } from "./module/area-templates.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
 import { activateUnifiedActionQa } from "./module/qa-action-slice.mjs";
@@ -129,6 +130,7 @@ Hooks.once("ready", async () => {
   activateUnifiedActionQa(document);
   activateMultiPartActionQa(document);
   activateAbilityChatInteractions(document);
+  activateAbilityActionV2Interactions(document);
   activateAbilityAreaPlacement();
   activateHealthChatInteractions(document);
   activatePeriodicDamage(document);

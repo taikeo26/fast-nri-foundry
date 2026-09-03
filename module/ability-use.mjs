@@ -1,3 +1,4 @@
+import { abilityV2AdapterEligibility, startAbilityV2Implementation } from "./ability-action-v2.mjs";
 import { rollAbilityCheck, rollAbilityOutcome } from "./rolls.mjs";
 import { abilityCheckConfig, checkTargetCharacteristicLabel } from "./check-system.mjs";
 import { effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
@@ -210,7 +211,7 @@ function choiceCardHTML(actor, item, implementations, descriptionHTML) {
   const categoryLabel = abilityIsSpell(item) ? "Заклинание" : "Способность";
   return `<div class="fast-nri-ability-use-card fast-nri-ability-choice-card">
     <div class="fast-nri-chat-roll-title"><i class="fa-solid ${abilityIsSpell(item) ? "fa-wand-magic-sparkles" : "fa-bolt"}"></i><strong>${esc(item.name)}</strong></div>
-    <div class="fast-nri-ability-use-meta"><span>${esc(categoryLabel)}</span><span>Выберите реализацию</span></div>
+    <div class="fast-nri-ability-use-meta"><span>${esc(categoryLabel)}</span><span>Карточка 0 · выберите реализацию</span></div>
     ${descriptionHTML ? `<div class="fast-nri-ability-description">${descriptionHTML}</div>` : ""}
     <div class="fast-nri-implementation-choice-actions">
       ${implementations.map(implementation => {
@@ -283,6 +284,15 @@ export async function useAbilityImplementation(actor, item, implementationId, { 
   if (!actor || !item || item.type !== "ability") return null;
   const runtime = abilityImplementationRuntime(item, implementationId);
   if (!runtime?.implementationId) return null;
+
+  // 0.5.75 migration bridge: supported production implementations enter the
+  // ActionState v2 pipeline immediately after phase-0 implementation choice.
+  // Unsupported implementations stay on the legacy path until their resolver
+  // is migrated; this avoids silently losing checks/defenses/profile logic.
+  if (abilityV2AdapterEligibility(runtime).eligible) {
+    return startAbilityV2Implementation(actor, item, runtime.implementationId, { parentMessageId });
+  }
+
   let resource;
   try { resource = await spendImplementationResource(actor, runtime); }
   catch (error) {
@@ -321,7 +331,7 @@ export async function useAbility(actor, item) {
   const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: choiceCardHTML(actor, item, implementations, description),
-    flags: { "fast-nri": { kind: "ability-choice", actorUuid: actor.uuid, itemUuid: item.uuid } }
+    flags: { "fast-nri": { kind: "ability-implementation-choice", actorUuid: actor.uuid, itemUuid: item.uuid, phase: 0 } }
   });
   return { message, actor, item, implementations, choice: true };
 }

@@ -1,6 +1,6 @@
 {
   "_id": "qaV2Drain071AAAA",
-  "name": "QA 0.5.73 — Урон → зависимое лечение",
+  "name": "QA 0.5.76 — Урон → зависимое лечение",
   "type": "script",
   "scope": "global",
   "command": "game.fastNri.qa.startDependentOutcome();",
@@ -13,7 +13,7 @@
   },
   "flags": {
     "fast-nri": {
-      "testFixture": "0.5.73",
+      "testFixture": "0.5.76",
       "qaPurpose": "actionstate-v2-dependent-outcome"
     }
   }
