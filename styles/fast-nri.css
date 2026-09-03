@@ -3628,3 +3628,100 @@ button.fast-nri-property-reference:hover {
   text-decoration: line-through;
   opacity: 0.65;
 }
+
+/* ========================================================= */
+/* v0.5.59 - live QA hotfix: ability card + manual recipients */
+/* ========================================================= */
+
+/* Chat sidebar width is independent from the browser viewport. Make every
+ * rule row intrinsically shrinkable so area presets cannot overlap the rows
+ * below them in a narrow sidebar. */
+.fast-nri-ability-rule-row {
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+}
+
+.fast-nri-ability-rule-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fast-nri-ability-rule-row .fast-nri-area-preset-list {
+  width: 100%;
+  min-width: 0;
+}
+
+.fast-nri-ability-rule-row .fast-nri-area-preset {
+  height: auto !important;
+  min-height: 34px;
+  white-space: normal !important;
+  line-height: 1.2;
+  overflow: visible;
+}
+
+.fast-nri-ability-rule-row .fast-nri-area-preset > span,
+.fast-nri-ability-rule-row .fast-nri-area-preset > div {
+  display: block;
+  min-width: 0;
+}
+
+.fast-nri-ability-rule-row .fast-nri-area-preset strong,
+.fast-nri-ability-rule-row .fast-nri-area-preset-text {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.fast-nri-declared-targets {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 6px;
+  border: 1px solid var(--color-border-light-primary, rgba(0, 0, 0, 0.2));
+  border-radius: 5px;
+}
+
+.fast-nri-declared-targets-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.fast-nri-declared-targets-heading small {
+  opacity: 0.72;
+  line-height: 1.2;
+}
+
+.fast-nri-declared-target-list {
+  display: grid;
+  gap: 3px;
+}
+
+.fast-nri-declared-target-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 2px 3px 2px 7px;
+  border: 1px solid var(--color-border-light-2, rgba(0, 0, 0, 0.16));
+  border-radius: 4px;
+}
+
+.fast-nri-declared-target-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fast-nri-declared-target-row > button {
+  width: 28px;
+  min-width: 28px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.fast-nri-declared-target-add {
+  width: 100%;
+  height: auto !important;
+  min-height: 32px;
+  white-space: normal;
+}

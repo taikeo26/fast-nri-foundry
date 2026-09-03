@@ -19,13 +19,71 @@ import {
   abilityTargetSummary,
   abilityTraitLabels
 } from "./ability-authoring.mjs";
-import { actionContextFromAbility } from "./action-context.mjs";
+import { actionContextFromAbility, deriveActionContext } from "./action-context.mjs";
 import { placeAbilityAreaPreset } from "./area-templates.mjs";
 
 function esc(value) { return foundry.utils.escapeHTML(String(value ?? "")); }
 function escAttr(value) { return esc(value).replaceAll('"', "&quot;"); }
 function messageIdFromElement(element) {
   return element?.closest(".chat-message, .message")?.dataset?.messageId ?? null;
+}
+
+function targetRefFromToken(token) {
+  if (!token?.actor) return null;
+  const tokenUuid = String(token?.document?.uuid ?? token?.uuid ?? "").trim();
+  const actorUuid = String(token.actor?.uuid ?? "").trim();
+  if (!tokenUuid && !actorUuid) return null;
+  return {
+    tokenUuid: tokenUuid || null,
+    actorUuid: actorUuid || null,
+    name: String(token.name || token.actor.name || "Существо")
+  };
+}
+
+function normalizeDeclaredTargets(targets = []) {
+  const seen = new Set();
+  const result = [];
+  for (const target of Array.from(targets ?? [])) {
+    if (!target) continue;
+    const tokenUuid = String(target.tokenUuid ?? "").trim() || null;
+    const actorUuid = String(target.actorUuid ?? "").trim() || null;
+    const key = tokenUuid || actorUuid;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ tokenUuid, actorUuid, name: String(target.name ?? "Существо") });
+  }
+  return result;
+}
+
+function currentFoundryTargetRefs() {
+  return normalizeDeclaredTargets(
+    Array.from(globalThis.game?.user?.targets ?? []).map(targetRefFromToken).filter(Boolean)
+  );
+}
+
+function declaredTargetsHTML(targets = []) {
+  const normalized = normalizeDeclaredTargets(targets);
+  const rows = normalized.map(target => `
+    <div class="fast-nri-declared-target-row">
+      <span>${esc(target.name)}</span>
+      <button type="button" data-fast-nri-implementation-remove-target
+        data-target-uuid="${escAttr(target.tokenUuid ?? "")}" data-actor-uuid="${escAttr(target.actorUuid ?? "")}"
+        title="Убрать существо из списка действия" aria-label="Убрать ${escAttr(target.name)}">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>`).join("");
+  return `
+    <section class="fast-nri-declared-targets">
+      <div class="fast-nri-declared-targets-heading">
+        <strong>Существа действия</strong>
+        <small>Для Resolution; применение результата позже выполняется только к выделенным токенам.</small>
+      </div>
+      <div class="fast-nri-declared-target-list">${rows || `<div class="fast-nri-roll-empty">Существа пока не добавлены.</div>`}</div>
+      <button type="button" class="fast-nri-declared-target-add" data-fast-nri-implementation-add-targets
+        title="Добавить текущие Foundry Targets в список действия">
+        <i class="fa-solid fa-user-plus"></i><span>Добавить существ</span>
+      </button>
+    </section>`;
 }
 
 export function configuredOutcomeKinds(itemOrRuntime, degree = null) {
@@ -165,7 +223,7 @@ function implementationAreasHTML(item, runtime, richData) {
   }).join("")}</div>`;
 }
 
-function implementationCardHTML({ actor, item, runtime, resource, richData, undone = false }) {
+function implementationCardHTML({ actor, item, runtime, resource, richData, declaredTargets = [], undone = false }) {
   const traits = abilityTraitLabels(runtime);
   const check = abilityCheckConfig(runtime);
   const targetSummary = abilityTargetSummary(runtime);
@@ -189,6 +247,7 @@ function implementationCardHTML({ actor, item, runtime, resource, richData, undo
       ${richData.exceptionText ? metaRow("Исключение", richData.exceptionText) : ""}
     </div>
     ${richData.description ? `<div class="fast-nri-ability-description">${richData.description}</div>` : ""}
+    ${declaredTargetsHTML(declaredTargets)}
     ${richData.linkedEffects.length ? `<div class="fast-nri-ability-linked-effects"><small>Эффекты — перетащите на токен:</small>${richData.linkedEffects.join("")}</div>` : ""}
     ${implementationActionsHTML(actor, item, runtime)}
     ${resource.cost > 0 ? `<div class="fast-nri-resource-use ${undone ? "undone" : ""}"><div class="fast-nri-resource-use-text"><span class="fast-nri-resource-label">${esc(resource.label)}</span><strong>−${resource.cost}</strong><small>${resource.before} → ${resource.after}</small>${resource.shortage > 0 ? `<small class="fast-nri-resource-shortage">не хватает ${resource.shortage}</small>` : ""}</div>${undone || resource.spent <= 0 ? "" : `<button type="button" class="fast-nri-undo-resource-button" data-fast-nri-undo-resource data-actor-uuid="${escAttr(actor.uuid)}" data-item-uuid="${escAttr(item.uuid)}" data-spent="${resource.spent}"><i class="fa-solid fa-rotate-left"></i><span>Вернуть</span></button>`}</div>` : ""}
@@ -220,12 +279,16 @@ export async function useAbilityImplementation(actor, item, implementationId, { 
     return null;
   }
 
-  const actionContext = actionContextFromAbility(actor, item, { implementationId: runtime.implementationId });
+  const declaredTargets = currentFoundryTargetRefs();
+  const actionContext = deriveActionContext(
+    actionContextFromAbility(actor, item, { implementationId: runtime.implementationId }),
+    { targets: declaredTargets }
+  );
   const parentMessage = parentMessageId ? globalThis.game?.messages?.get?.(parentMessageId) ?? null : null;
   const periodicRemovalEffectUuid = parentMessage?.getFlag("fast-nri", "periodicRemovalEffectUuid") ?? null;
   const periodicRemovalSourceTickMessageId = parentMessage?.getFlag("fast-nri", "periodicRemovalSourceTickMessageId") ?? null;
   const richData = await enrichedImplementationData(item, runtime);
-  const content = implementationCardHTML({ actor, item, runtime, resource, richData });
+  const content = implementationCardHTML({ actor, item, runtime, resource, richData, declaredTargets: actionContext.targets });
   const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }), content,
     flags: { "fast-nri": {
@@ -249,6 +312,63 @@ export async function useAbility(actor, item) {
     flags: { "fast-nri": { kind: "ability-choice", actorUuid: actor.uuid, itemUuid: item.uuid } }
   });
   return { message, actor, item, implementations, choice: true };
+}
+
+function implementationResourceFromMessage(message) {
+  return {
+    cost: Math.max(0, Number(message?.getFlag("fast-nri", "cost")) || 0),
+    before: Math.max(0, Number(message?.getFlag("fast-nri", "before")) || 0),
+    after: Math.max(0, Number(message?.getFlag("fast-nri", "after")) || 0),
+    spent: Math.max(0, Number(message?.getFlag("fast-nri", "spent")) || 0),
+    shortage: Math.max(0, Number(message?.getFlag("fast-nri", "shortage")) || 0),
+    label: String(message?.getFlag("fast-nri", "label") ?? "Классовый ресурс")
+  };
+}
+
+async function updateImplementationTargets(message, declaredTargets) {
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
+  const actor = await fromUuid(message.getFlag("fast-nri", "actorUuid"));
+  const item = await fromUuid(message.getFlag("fast-nri", "itemUuid"));
+  if (!actor || !item || item.type !== "ability") return null;
+  const runtime = abilityImplementationRuntime(item, message.getFlag("fast-nri", "implementationId") ?? null);
+  const actionContext = deriveActionContext(
+    message.getFlag("fast-nri", "actionContext") ?? actionContextFromAbility(actor, item, { implementationId: runtime.implementationId }),
+    { targets: normalizeDeclaredTargets(declaredTargets) }
+  );
+  const richData = await enrichedImplementationData(item, runtime);
+  const resource = implementationResourceFromMessage(message);
+  const undone = Boolean(message.getFlag("fast-nri", "resourceUndone"));
+  const content = implementationCardHTML({
+    actor, item, runtime, resource, richData, declaredTargets: actionContext.targets, undone
+  });
+  await message.update({
+    content,
+    "flags.fast-nri.actionContext": actionContext
+  });
+  return { message, actionContext };
+}
+
+export async function addImplementationTargetsFromChat(element) {
+  const message = game.messages?.get(messageIdFromElement(element)) ?? null;
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
+  const context = message.getFlag("fast-nri", "actionContext") ?? {};
+  const next = normalizeDeclaredTargets([...(context.targets ?? []), ...currentFoundryTargetRefs()]);
+  if (next.length === Array.from(context.targets ?? []).length) {
+    ui.notifications.info("Новых Foundry Targets для добавления нет.");
+  }
+  return updateImplementationTargets(message, next);
+}
+
+export async function removeImplementationTargetFromChat(element) {
+  const message = game.messages?.get(messageIdFromElement(element)) ?? null;
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
+  const context = message.getFlag("fast-nri", "actionContext") ?? {};
+  const tokenUuid = String(element?.dataset?.targetUuid ?? "");
+  const actorUuid = String(element?.dataset?.actorUuid ?? "");
+  const next = normalizeDeclaredTargets(context.targets ?? []).filter(target =>
+    tokenUuid ? target.tokenUuid !== tokenUuid : actorUuid ? target.actorUuid !== actorUuid : true
+  );
+  return updateImplementationTargets(message, next);
 }
 
 export async function undoAbilityResource(element) {
@@ -302,6 +422,26 @@ export function activateAbilityChatInteractions(root = document) {
       return;
     }
 
+    const addTargetsButton = event.target.closest("[data-fast-nri-implementation-add-targets]");
+    if (addTargetsButton) {
+      event.preventDefault(); event.stopPropagation();
+      if (addTargetsButton.dataset.fastNriBusy === "true") return;
+      addTargetsButton.dataset.fastNriBusy = "true";
+      try { await addImplementationTargetsFromChat(addTargetsButton); }
+      finally { delete addTargetsButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const removeTargetButton = event.target.closest("[data-fast-nri-implementation-remove-target]");
+    if (removeTargetButton) {
+      event.preventDefault(); event.stopPropagation();
+      if (removeTargetButton.dataset.fastNriBusy === "true") return;
+      removeTargetButton.dataset.fastNriBusy = "true";
+      try { await removeImplementationTargetFromChat(removeTargetButton); }
+      finally { delete removeTargetButton.dataset.fastNriBusy; }
+      return;
+    }
+
     const checkButton = event.target.closest("[data-fast-nri-roll-ability-check], [data-fast-nri-roll-ability-attack]");
     if (checkButton) {
       event.preventDefault(); event.stopPropagation();
@@ -316,7 +456,10 @@ export function activateAbilityChatInteractions(root = document) {
           implementationId: checkButton.dataset.implementationId || sourceMessage?.getFlag("fast-nri", "implementationId") || null,
           repeatIndex: Number(checkButton.dataset.repeatIndex) || 0,
           actionContext: sourceMessage?.getFlag("fast-nri", "actionContext") ?? null,
-          parentMessageId: sourceMessage?.id ?? null
+          parentMessageId: sourceMessage?.id ?? null,
+          declaredTargets: sourceMessage?.getFlag("fast-nri", "kind") === "ability-implementation"
+            ? Array.from(sourceMessage?.getFlag("fast-nri", "actionContext")?.targets ?? [])
+            : null
         });
       } finally { delete checkButton.dataset.fastNriBusy; }
       return;

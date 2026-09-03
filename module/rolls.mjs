@@ -1607,11 +1607,11 @@ function damageCardHTML({
           ${applyDisabled ? "disabled" : ""}
           title="${applyDisabled
             ? "Действие полностью отменено"
-            : `Применить этот пул к текущим Targets / выделенным токенам`
+            : `Применить этот пул только к текущим выделенным токенам`
           }"
         >
           <i class="fa-solid fa-heart-crack"></i>
-          <span>${applyDisabled ? "Результат отменён" : applicationHasEffects ? "Применить" : "Нанести"}</span>
+          <span>${applyDisabled ? "Результат отменён" : applicationHasEffects ? "Применить к выделенным" : "Нанести выделенным"}</span>
         </button>
 
         ${allowDouble ? `
@@ -1624,11 +1624,11 @@ function damageCardHTML({
             ${applyDisabled ? "disabled" : ""}
             title="${applyDisabled
               ? "Действие полностью отменено"
-              : `Применить этот пул ×2 к текущим Targets / выделенным токенам`
+              : `Применить этот пул ×2 только к текущим выделенным токенам`
             }"
           >
             <i class="fa-solid fa-xmark"></i>
-            <span>${applyDisabled ? "×2 отменён" : applicationHasEffects ? "Применить ×2" : "Нанести ×2"}</span>
+            <span>${applyDisabled ? "×2 отменён" : applicationHasEffects ? "Применить ×2 к выделенным" : "Нанести ×2 выделенным"}</span>
           </button>
         ` : ""}
       </div>
@@ -1664,7 +1664,7 @@ function effectOnlyApplicationCardHTML({ sourceName, profileLabel = "", targetNa
       ${effectsHTML}
       <div class="fast-nri-damage-actions">
         <button type="button" class="fast-nri-apply-damage-button" data-fast-nri-apply-result>
-          <i class="fa-solid fa-check"></i><span>Применить</span>
+          <i class="fa-solid fa-check"></i><span>Применить к выделенным</span>
         </button>
       </div>
     </div>
@@ -3416,7 +3416,7 @@ async function multiTargetResultContent({ item, runtime, target, degree, damageS
     });
     return `<div class="fast-nri-multitarget-result-card">${damageHTML}${profileHTML}</div>`;
   }
-  return `<div class="fast-nri-chat-roll fast-nri-multitarget-result-card fast-nri-result-application-card">${rollCardHeader(`Результат: ${item.name}`, "fa-wand-magic-sparkles")}${targetHeader}${profileHTML || `<div class="fast-nri-roll-empty">Для этой степени нет автоматического урона или Effect.</div>`}<div class="fast-nri-damage-actions"><button type="button" class="fast-nri-apply-damage-button" data-fast-nri-apply-result><i class="fa-solid fa-check"></i><span>Применить</span></button></div></div>`;
+  return `<div class="fast-nri-chat-roll fast-nri-multitarget-result-card fast-nri-result-application-card">${rollCardHeader(`Результат: ${item.name}`, "fa-wand-magic-sparkles")}${targetHeader}${profileHTML || `<div class="fast-nri-roll-empty">Для этой степени нет автоматического урона или Effect.</div>`}<div class="fast-nri-damage-actions"><button type="button" class="fast-nri-apply-damage-button" data-fast-nri-apply-result><i class="fa-solid fa-check"></i><span>Применить к выделенным</span></button></div></div>`;
 }
 
 export async function multiTargetApplyResultsFromChat(element) {
@@ -3521,7 +3521,7 @@ export async function multiTargetApplyResultsFromChat(element) {
   return created;
 }
 
-export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null, implementationId = null, repeatIndex = 0 } = {}) {
+export async function rollAbilityCheck(actor, item, { actionContext: inheritedActionContext = null, parentMessageId = null, implementationId = null, repeatIndex = 0, declaredTargets = null } = {}) {
   if (!actor || !item || item.type !== "ability") return null;
 
   const runtime = abilityImplementationRuntime(item, implementationId);
@@ -3568,12 +3568,28 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     ui.notifications.warn(`${item.name}: ${sharedDamagePlan.reason} Используется старый пошаговый результат.`);
   }
 
-  const target = multiTargetWorkflow ? null : getSingleTarget();
+  const explicitDeclaredTargets = Array.isArray(declaredTargets);
+  const declaredTargetTokens = [];
+  if (explicitDeclaredTargets) {
+    for (const ref of declaredTargets) {
+      const token = await tokenPlaceableFromUuid(ref?.tokenUuid ?? null);
+      if (token?.actor) declaredTargetTokens.push(token);
+    }
+  }
+
+  const target = multiTargetWorkflow
+    ? null
+    : explicitDeclaredTargets
+      ? (declaredTargetTokens[0] ?? null)
+      : getSingleTarget();
   const previewTarget = resolveAbilityCheckTarget(target, targetCharacteristic, actor);
 
-  if (!multiTargetWorkflow && (game.user?.targets?.size ?? 0) > 1) {
+  const directedTargetCount = explicitDeclaredTargets
+    ? declaredTargetTokens.length
+    : (game.user?.targets?.size ?? 0);
+  if (!multiTargetWorkflow && directedTargetCount > 1) {
     ui.notifications.warn(
-      "Для направленной проверки способности выбери одну цель. Проверка будет выполнена без автоматической степени."
+      "Для направленной проверки в списке несколько существ. Для расчёта степени используется первое; список можно исправить в первой карточке."
     );
   }
 
@@ -3593,9 +3609,12 @@ export async function rollAbilityCheck(actor, item, { actionContext: inheritedAc
     const sharedDamage = await prepareSharedAreaDamage(actor, item, runtime, sharedDamagePlan);
     if (sharedDamage === null) return null;
 
-    // Цели берутся после обоих pre-roll диалогов: пользователь может менять Targets
-    // до публикации общей карточки. Дальше список живёт уже внутри самой карточки.
-    const selectedTargets = Array.from(game.user?.targets ?? []);
+    // Если Check запущен из первой карточки реализации, её видимый список
+    // существ является явным входом Resolution. Прямые/legacy вызовы без
+    // такого списка сохраняют прежний fallback на текущие Foundry Targets.
+    const selectedTargets = explicitDeclaredTargets
+      ? declaredTargetTokens
+      : Array.from(game.user?.targets ?? []);
     const targetEntries = selectedTargets
       .map(token => multiTargetEntryForToken(token, { result, targetCharacteristic, sourceActor: actor }))
       .filter(Boolean);
@@ -5471,13 +5490,14 @@ export async function selfDefenseFromChat(element) {
   return defenseFromChat(element);
 }
 
-export function damageApplicationTargets({ targetedTokens = [], controlledTokens = [] } = {}) {
-  const targeted = Array.from(targetedTokens ?? []).filter(Boolean);
+export function damageApplicationTargets({ controlledTokens = [] } = {}) {
+  // Application намеренно НЕ использует Foundry Targets и не восстанавливает
+  // получателя из ActionContext/resultTargetUuid. Получатель определяется
+  // только текущим ручным выделением Token в момент нажатия Apply.
   const controlled = Array.from(controlledTokens ?? []).filter(Boolean);
-  const source = targeted.length ? targeted : controlled;
   const seen = new Set();
 
-  return source.filter(token => {
+  return controlled.filter(token => {
     const key = token?.document?.uuid ?? token?.uuid ?? token?.id ?? token;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -5487,12 +5507,11 @@ export function damageApplicationTargets({ targetedTokens = [], controlledTokens
 
 function currentDamageApplicationTargets() {
   const tokens = damageApplicationTargets({
-    targetedTokens: game.user?.targets ?? [],
     controlledTokens: canvas?.tokens?.controlled ?? []
   });
 
   if (!tokens.length) {
-    ui.notifications.warn("Выбери одну или несколько целей (Target) либо выдели токены, к которым нужно применить результат.");
+    ui.notifications.warn("Выдели один или несколько токенов, к которым нужно применить результат.");
   }
 
   return tokens;
