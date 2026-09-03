@@ -8,7 +8,8 @@ export const HARD_BLOCK_IDS = Object.freeze({
   heldItems: "HB-01",
   interventionChain: "HB-02",
   masteryRequiresProficiency: "HB-03",
-  weaponCategoryByType: "HB-04"
+  weaponCategoryByType: "HB-04",
+  duplicateTargetSelection: "HB-05"
 });
 
 export const HARD_BLOCK_REGISTRY = Object.freeze({
@@ -51,6 +52,19 @@ export const HARD_BLOCK_REGISTRY = Object.freeze({
     doesNotBlock: "Вид атаки melee/ranged и прочие свойства Weapon.",
     ui: "Смена типа синхронизирует категорию; смена категории выбирает совместимый тип.",
     enforcement: "weapon-taxonomy"
+  }),
+  [HARD_BLOCK_IDS.duplicateTargetSelection]: Object.freeze({
+    id: HARD_BLOCK_IDS.duplicateTargetSelection,
+    key: "duplicate-target-selection",
+    label: "Одна цель не добавляется дважды в один слот",
+    scope: "Штатные команды добавления цели в конкретный ActionPart + TargetSlot, когда slot.allowDuplicates=false и мировая настройка HB-05 включена.",
+    blocks: "Только новую повторную selection того же Token; если Token UUID отсутствует — того же Actor, уже присутствующего в этом TargetSlot.",
+    doesNotBlock: "Ту же цель в другом ActionPart/TargetSlot; slots с allowDuplicates=true; существующие повторы; добавление повтора при выключенной настройке HB-05.",
+    ui: "Повторная цель не добавляется, остальные новые цели добавляются штатно; пользователь получает короткое уведомление HB-05. Настройка мира может отключить этот UX-блок.",
+    enforcement: "target-slot-selection",
+    configurable: true,
+    settingKey: "preventDuplicateTargetSelections",
+    defaultEnabled: true
   })
 });
 
@@ -153,3 +167,82 @@ export function hardBlockDefenseCandidate(sourceActionContext, {
     actionTraits
   });
 }
+
+function targetSelectionIdentity(value = {}) {
+  const tokenUuid = String(value?.tokenUuid ?? "").trim();
+  if (tokenUuid) return `token:${tokenUuid}`;
+  const actorUuid = String(value?.actorUuid ?? "").trim();
+  if (actorUuid) return `actor:${actorUuid}`;
+  return "";
+}
+
+function sameTargetSelection(left = {}, right = {}) {
+  const leftToken = String(left?.tokenUuid ?? "").trim();
+  const rightToken = String(right?.tokenUuid ?? "").trim();
+  if (leftToken && rightToken) return leftToken === rightToken;
+
+  const leftActor = String(left?.actorUuid ?? "").trim();
+  const rightActor = String(right?.actorUuid ?? "").trim();
+  return Boolean(leftActor && rightActor && leftActor === rightActor);
+}
+
+/**
+ * HB-05 is deliberately an operation-level UX block, not a persisted-state
+ * invariant. It prevents accidental duplicate additions while leaving loaded
+ * or manually-authored state untouched.
+ */
+export function evaluateDuplicateTargetSelectionHardBlock({
+  enabled = true,
+  allowDuplicates = false,
+  existingSelections = [],
+  candidate = null
+} = {}) {
+  const rule = HARD_BLOCK_REGISTRY[HARD_BLOCK_IDS.duplicateTargetSelection];
+  const identity = targetSelectionIdentity(candidate);
+  const duplicate = Boolean(identity) && Array.from(existingSelections ?? [])
+    .some(selection => sameTargetSelection(selection, candidate));
+  const blocked = Boolean(enabled) && !Boolean(allowDuplicates) && duplicate;
+
+  return {
+    id: rule.id,
+    key: rule.key,
+    label: rule.label,
+    blocked,
+    enabled: Boolean(enabled),
+    allowDuplicates: Boolean(allowDuplicates),
+    duplicate,
+    identity,
+    message: blocked
+      ? `${rule.id}: «${rule.label}». Эта цель уже есть в данном слоте.`
+      : ""
+  };
+}
+
+export function filterDuplicateTargetSelectionsByHardBlock({
+  enabled = true,
+  allowDuplicates = false,
+  existingSelections = [],
+  candidates = []
+} = {}) {
+  const accepted = [];
+  const blocked = [];
+  const seen = Array.from(existingSelections ?? []);
+
+  for (const candidate of Array.from(candidates ?? [])) {
+    const decision = evaluateDuplicateTargetSelectionHardBlock({
+      enabled,
+      allowDuplicates,
+      existingSelections: seen,
+      candidate
+    });
+    if (decision.blocked) {
+      blocked.push({ candidate, decision });
+      continue;
+    }
+    accepted.push(candidate);
+    seen.push(candidate);
+  }
+
+  return { accepted, blocked };
+}
+

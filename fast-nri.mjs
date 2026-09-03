@@ -37,6 +37,7 @@ import { activateAbilityAreaPlacement } from "./module/area-templates.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
 import { activateUnifiedActionQa } from "./module/qa-action-slice.mjs";
 import { activateMultiPartActionQa } from "./module/qa-action-parts.mjs";
+import { registerFastNriSettings } from "./module/settings.mjs";
 import {
   migrateDefenseAbilitiesOnce,
   registerDefenseActionSettings
@@ -61,6 +62,7 @@ import {
 Hooks.once("init", () => {
   console.log("Быстрая НРИ 6.3 | Инициализация системы");
 
+  registerFastNriSettings();
   registerTokenDefaultSettings();
   registerDataMigrationSettings();
   registerEffectSettings();

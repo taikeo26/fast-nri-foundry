@@ -190,14 +190,17 @@ export function normalizeTargetSlot(value = {}, index = 0) {
     : Math.max(0, integerOr(value.max, min));
   const max = rawMax === null ? null : Math.max(min, rawMax);
   const selections = [];
-  const seen = new Set();
+  const seenSelectionIds = new Set();
 
   for (const raw of Array.from(value?.selections ?? [])) {
-    const selection = normalizeTargetSlotSelection(raw, selections.length);
-    const key = targetSlotSelectionIdentity(selection);
+    let selection = normalizeTargetSlotSelection(raw, selections.length);
     if (!selection.actorUuid && !selection.tokenUuid) continue;
-    if (!Boolean(value?.allowDuplicates) && key && seen.has(key)) continue;
-    if (key) seen.add(key);
+    // Structural identity must stay unique, but choosing the same Actor/Token
+    // more than once is a rules/UI question, not a state-layer hard block.
+    if (seenSelectionIds.has(selection.selectionId)) {
+      selection = { ...selection, selectionId: randomId(`selection-${selections.length}`) };
+    }
+    seenSelectionIds.add(selection.selectionId);
     selections.push(selection);
   }
 
@@ -841,17 +844,16 @@ export function addTargetSlotSelections(
   const part = requireActionPart(next, partId);
   const slot = requireTargetSlot(part, slotId);
   const source = Array.isArray(entries) ? entries : [entries];
-  const existing = new Set(slot.selections.map(targetSlotSelectionIdentity).filter(Boolean));
   let changed = false;
 
   for (const raw of source) {
     const ref = affectedRef(raw);
     if (!ref) continue;
-    const identity = targetSlotSelectionIdentity(ref);
-    if (!slot.allowDuplicates && identity && existing.has(identity)) continue;
+    // `allowDuplicates` is advisory metadata only. The state layer never
+    // rejects a legal user selection merely because the same Actor/Token is
+    // already present in this slot.
     const selection = normalizeTargetSlotSelection({ ...ref, addedFrom });
     slot.selections.push(selection);
-    if (identity) existing.add(identity);
     changed = true;
   }
 
@@ -1280,6 +1282,19 @@ export function validateActionStateV2(actionState) {
       if (slot.max !== null && slot.selections.length > slot.max) {
         // Soft automation: limits are diagnostics, not state mutation/hard blocks.
         push("warning", "target-slot-above-max", { partId: part.partId, slotId: slot.slotId, max: slot.max, count: slot.selections.length });
+      }
+      if (!slot.allowDuplicates) {
+        const duplicateCounts = new Map();
+        for (const selection of slot.selections) {
+          const identity = targetSlotSelectionIdentity(selection);
+          if (!identity) continue;
+          duplicateCounts.set(identity, (duplicateCounts.get(identity) ?? 0) + 1);
+        }
+        for (const [identity, count] of duplicateCounts) {
+          if (count > 1) {
+            push("warning", "target-slot-duplicate-selection", { partId: part.partId, slotId: slot.slotId, identity, count });
+          }
+        }
       }
       if ((slot.selectionMode === "source" || slot.selectionMode === "fixed") && !slot.selections.length) {
         push("warning", "automatic-target-slot-unresolved", { partId: part.partId, slotId: slot.slotId });
