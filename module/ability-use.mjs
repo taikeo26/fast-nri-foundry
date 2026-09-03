@@ -61,6 +61,12 @@ function currentFoundryTargetRefs() {
   );
 }
 
+function currentControlledTokenRefs() {
+  return normalizeDeclaredTargets(
+    Array.from(globalThis.canvas?.tokens?.controlled ?? []).map(targetRefFromToken).filter(Boolean)
+  );
+}
+
 function declaredTargetsHTML(targets = []) {
   const normalized = normalizeDeclaredTargets(targets);
   const rows = normalized.map(target => `
@@ -79,10 +85,16 @@ function declaredTargetsHTML(targets = []) {
         <small>Для Resolution; применение результата позже выполняется только к выделенным токенам.</small>
       </div>
       <div class="fast-nri-declared-target-list">${rows || `<div class="fast-nri-roll-empty">Существа пока не добавлены.</div>`}</div>
-      <button type="button" class="fast-nri-declared-target-add" data-fast-nri-implementation-add-targets
-        title="Добавить текущие Foundry Targets в список действия">
-        <i class="fa-solid fa-user-plus"></i><span>Добавить существ</span>
-      </button>
+      <div class="fast-nri-declared-target-actions">
+        <button type="button" class="fast-nri-declared-target-add" data-fast-nri-implementation-add-targets
+          title="Добавить текущие Foundry Targets в список действия">
+          <i class="fa-solid fa-crosshairs"></i><span>Добавить цели</span>
+        </button>
+        <button type="button" class="fast-nri-declared-target-add" data-fast-nri-implementation-add-controlled
+          title="Добавить текущие выделенные токены в список действия">
+          <i class="fa-solid fa-object-group"></i><span>Добавить выделенное</span>
+        </button>
+      </div>
     </section>`;
 }
 
@@ -359,6 +371,17 @@ export async function addImplementationTargetsFromChat(element) {
   return updateImplementationTargets(message, next);
 }
 
+export async function addImplementationControlledFromChat(element) {
+  const message = game.messages?.get(messageIdFromElement(element)) ?? null;
+  if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
+  const context = message.getFlag("fast-nri", "actionContext") ?? {};
+  const next = normalizeDeclaredTargets([...(context.targets ?? []), ...currentControlledTokenRefs()]);
+  if (next.length === Array.from(context.targets ?? []).length) {
+    ui.notifications.info("Новых выделенных токенов для добавления нет.");
+  }
+  return updateImplementationTargets(message, next);
+}
+
 export async function removeImplementationTargetFromChat(element) {
   const message = game.messages?.get(messageIdFromElement(element)) ?? null;
   if (!message || message.getFlag("fast-nri", "kind") !== "ability-implementation") return null;
@@ -429,6 +452,16 @@ export function activateAbilityChatInteractions(root = document) {
       addTargetsButton.dataset.fastNriBusy = "true";
       try { await addImplementationTargetsFromChat(addTargetsButton); }
       finally { delete addTargetsButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const addControlledButton = event.target.closest("[data-fast-nri-implementation-add-controlled]");
+    if (addControlledButton) {
+      event.preventDefault(); event.stopPropagation();
+      if (addControlledButton.dataset.fastNriBusy === "true") return;
+      addControlledButton.dataset.fastNriBusy = "true";
+      try { await addImplementationControlledFromChat(addControlledButton); }
+      finally { delete addControlledButton.dataset.fastNriBusy; }
       return;
     }
 

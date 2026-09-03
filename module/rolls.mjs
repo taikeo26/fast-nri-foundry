@@ -1400,14 +1400,14 @@ function damagePartsHTML(state, { editable = true, title = "Кубы урона"
             title="Вернуть ранее исключённый вручную куб с тем же результатом"
             aria-label="Вернуть куб урона"
           ><i class="fa-solid fa-rotate-left"></i></button>
-          ${state?.allowTargetedReroll ? `<button
+          <button
             type="button"
             class="fast-nri-damage-edit-button"
             data-fast-nri-damage-reroll-die
             ${rerollableDice ? "" : "disabled"}
             title="Перебросить выбранный активный куб"
             aria-label="Перебросить куб урона"
-          ><i class="fa-solid fa-dice"></i></button>` : ""}
+          ><i class="fa-solid fa-dice"></i></button>
           <button
             type="button"
             class="fast-nri-damage-edit-button"
@@ -1488,36 +1488,52 @@ function defenseResultLabel(result) {
   return "";
 }
 
-function defenseSummaryHTML(state) {
-  const defense = state?.defense;
-  if (!defense) return "";
+function resolutionEntryId(prefix = "resolution") {
+  const random = globalThis.foundry?.utils?.randomID?.(12)
+    ?? Math.random().toString(36).slice(2, 14);
+  return `${prefix}-${Date.now()}-${random}`;
+}
 
-  const actionName = defense.actionName || "Самозащита";
+function defenseResolutionEntryHTML(defense, { pending = false, controls = false, targetUuid = null } = {}) {
+  if (!defense) return "";
+  const actionName = defense.actionName || "Защита";
   const removedParts = Array.isArray(defense.removedParts)
     ? defense.removedParts
     : defense.removedPart
       ? [defense.removedPart]
       : [];
-  const beforeDegree = defense.effectDegreeBefore;
-  const afterDegree = defense.effectDegreeAfter;
+  const beforeDegree = defense.effectDegreeBefore ?? defense.degreeBefore ?? null;
+  const afterDegree = defense.effectDegreeAfter ?? defense.degreeAfter ?? null;
+  const defenderName = defense.defenderTokenName ?? defense.tokenName ?? "Защитник";
   const protectedName = defense.protectedTokenName ?? null;
+  const isAlly = defense.kind === "ally-defense" || (
+    protectedName && protectedName !== defenderName
+  );
+  const rollFormula = String(defense.formula ?? "").trim();
+  const natural = Number(defense.naturalD20);
+  const resource = defense.resource ?? null;
+  const undone = defense.status === "undone" || defense.undone === true;
+  const targetAttr = targetUuid ? ` data-target-uuid="${escAttr(targetUuid)}"` : "";
 
   return `
-    <section class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)}">
+    <section class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)} ${undone ? "is-undone" : ""}" data-defense-entry-id="${escAttr(defense.id ?? "")}">
       <div class="fast-nri-self-defense-heading">
         <i class="fa-solid fa-shield-halved"></i>
-        <strong>${esc(actionName)} — ${esc(defenseResultLabel(defense.result))}</strong>
+        <strong>${esc(actionName)} — ${undone ? "Отменена" : esc(defenseResultLabel(defense.result))}</strong>
+        ${pending && !undone ? `<small>брошено · ожидает применения</small>` : ""}
+        ${controls ? `<span class="fast-nri-defense-step-actions">
+          <button type="button" data-fast-nri-defense-step-reroll data-defense-id="${escAttr(defense.id ?? "")}"${targetAttr} ${undone ? "disabled" : ""} title="Перебросить эту Защиту"><i class="fa-solid fa-dice-d20"></i><span>Переброс</span></button>
+          <button type="button" data-fast-nri-defense-step-undo data-defense-id="${escAttr(defense.id ?? "")}"${targetAttr} ${undone ? "disabled" : ""} title="Отменить эту Защиту"><i class="fa-solid fa-rotate-left"></i><span>Отмена</span></button>
+        </span>` : ""}
       </div>
 
       <small>
-        ${esc(defense.tokenName)}:
-        ${esc(defense.total)}
+        ${esc(defenderName)}:
+        ${rollFormula ? `${esc(rollFormula)} = ` : ""}<strong>${esc(defense.total)}</strong>
+        ${Number.isFinite(natural) ? ` · d20: ${esc(natural)}` : ""}
         против исходного результата
-        ${esc(defense.attackTotal)}
-        ${defense.kind === "ally-defense" && protectedName
-          ? `· защищает ${esc(protectedName)}`
-          : ""
-        }
+        <strong>${esc(defense.attackTotal)}</strong>
+        ${isAlly && protectedName ? ` · защищает ${esc(protectedName)}` : ""}
       </small>
 
       ${removedParts.length ? `
@@ -1529,7 +1545,7 @@ function defenseSummaryHTML(state) {
 
       ${beforeDegree && afterDegree && beforeDegree !== afterDegree ? `
         <div>
-          Степень Эффекта:
+          Степень:
           <strong>${esc(DEGREE_LABELS[beforeDegree] ?? beforeDegree)}</strong>
           →
           <strong>${esc(DEGREE_LABELS[afterDegree] ?? afterDegree)}</strong>
@@ -1539,8 +1555,22 @@ function defenseSummaryHTML(state) {
       ${defense.result === "full-cancel" ? `
         <div><strong>Исходное действие против защищаемой цели считается Провалом.</strong></div>
       ` : ""}
+
+      ${resource ? defenseResourceHTML(resource, Boolean(defense.resourceUndone), { inlineDefenseId: defense.id }) : ""}
+      ${defense.sourcesHTML ? `<details class="fast-nri-defense-inline-sources"><summary>Модификаторы Защиты</summary>${defense.sourcesHTML}</details>` : ""}
     </section>
   `;
+}
+
+function defenseHistoryHTML(history = [], { pending = false, controls = false, targetUuid = null } = {}) {
+  return Array.from(history ?? []).map(defense => defenseResolutionEntryHTML(defense, { pending, controls, targetUuid })).join("");
+}
+
+function defenseSummaryHTML(state) {
+  const history = Array.from(state?.defenseHistory ?? []);
+  if (!history.length && state?.defense) history.push(state.defense);
+  if (!history.length) return "";
+  return `<div class="fast-nri-defense-inline-history">${defenseHistoryHTML(history)}</div>`;
 }
 
 function damageCardHTML({
@@ -2070,11 +2100,10 @@ async function damageCardPresentationFromMessage(message, state) {
   };
 }
 
-async function derivedDamageMessageData(message, state, operation) {
+async function damageMessageDataForUpdate(message, state, operation, { applicationEffectUuids = null } = {}) {
   const presentation = await damageCardPresentationFromMessage(message, state);
-  const actionContext = deriveActionContext(
-    presentation.actionContext ?? normalizeActionContext({}),
-    { parentMessageId: message?.id ?? null }
+  const actionContext = normalizeActionContext(
+    presentation.actionContext ?? normalizeActionContext({})
   );
   const baseFlags = foundry.utils.deepClone(message?.flags?.["fast-nri"] ?? {});
   const revision = Math.max(0, Number(baseFlags.damageRevision) || 0) + 1;
@@ -2086,7 +2115,12 @@ async function derivedDamageMessageData(message, state, operation) {
     allowDouble: presentation.allowDouble
   };
 
-  const applicationEffects = await applicationEffectsFromUuids(baseFlags.applicationEffectUuids ?? []);
+  const effectUuids = applicationEffectUuids === null
+    ? Array.from(baseFlags.applicationEffectUuids ?? [])
+    : Array.from(applicationEffectUuids ?? []);
+  const applicationEffects = applicationEffectUuids === null
+    ? await applicationEffectsFromUuids(baseFlags.applicationEffectUuids ?? [])
+    : await applicationEffectsFromUuids(effectUuids);
   const flavor = damageCardHTML({
     sourceName: presentation.sourceName,
     profileLabel: presentation.profileLabel,
@@ -2104,8 +2138,6 @@ async function derivedDamageMessageData(message, state, operation) {
     flags: {
       ...baseFlags,
       kind: "damage",
-      sourceDamageMessageId: message?.id ?? null,
-      parentDamageMessageId: message?.id ?? null,
       damageRevision: revision,
       damageEditOperation: foundry.utils.deepClone(operation ?? null),
       finalTotal: state.currentTotal,
@@ -2113,18 +2145,20 @@ async function derivedDamageMessageData(message, state, operation) {
       actionTraits: actionContext.traits,
       targetCharacteristic: actionContext.check.targetCharacteristic || baseFlags.targetCharacteristic || null,
       damageCardMeta,
+      applicationEffectUuids: effectUuids,
       damageState: state
     }
   };
 }
 
-async function markDamageMessageSuperseded(message, derivedMessage) {
-  if (!message?.setFlag || !derivedMessage?.id) return;
-  try {
-    await message.setFlag("fast-nri", "supersededByDamageMessageId", derivedMessage.id);
-  } catch (error) {
-    console.warn("Быстрая НРИ | Не удалось отметить старую Damage-card как устаревшую", error);
-  }
+async function updateDamageMessageInPlace(message, state, operation, options = {}) {
+  const data = await damageMessageDataForUpdate(message, state, operation, options);
+  const cardField = Array.from(message?.rolls ?? []).length ? "flavor" : "content";
+  await message.update({
+    [cardField]: data.flavor,
+    "flags.fast-nri": data.flags
+  });
+  return { message, data };
 }
 
 export async function removeDamageDieFromChat(element) {
@@ -2143,20 +2177,13 @@ export async function removeDamageDieFromChat(element) {
   if (!next) return null;
 
   const removedPart = (state.parts ?? []).find(part => part.id === partId) ?? null;
-  const data = await derivedDamageMessageData(message, next, {
+  await updateDamageMessageInPlace(message, next, {
     kind: "removeDie",
     partId,
     faces: removedPart?.faces ?? null,
     value: removedPart?.currentValue ?? removedPart?.value ?? null
   });
-
-  const derivedMessage = await ChatMessage.create({
-    speaker: message.speaker,
-    content: data.flavor,
-    flags: { "fast-nri": data.flags }
-  });
-  await markDamageMessageSuperseded(message, derivedMessage);
-  return { message: derivedMessage, sourceMessage: message, damageState: next };
+  return { message, sourceMessage: message, damageState: next };
 }
 
 export async function restoreDamageDieFromChat(element) {
@@ -2169,27 +2196,21 @@ export async function restoreDamageDieFromChat(element) {
   const next = restoreManualDamageDieInState(state, partId);
   if (!next) return null;
   const restoredPart = (next.parts ?? []).find(part => part.id === partId) ?? null;
-  const data = await derivedDamageMessageData(message, next, {
+  await updateDamageMessageInPlace(message, next, {
     kind: "restoreDie",
     partId,
     faces: restoredPart?.faces ?? null,
     value: restoredPart?.currentValue ?? restoredPart?.value ?? null
   });
-  const derivedMessage = await ChatMessage.create({
-    speaker: message.speaker,
-    content: data.flavor,
-    flags: { "fast-nri": data.flags }
-  });
-  await markDamageMessageSuperseded(message, derivedMessage);
-  return { message: derivedMessage, sourceMessage: message, damageState: next };
+  return { message, sourceMessage: message, damageState: next };
 }
 
 export async function rerollDamageDieFromChat(element) {
   const message = chatMessageFromElement(element);
   if (!message) return null;
   const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState"));
-  if (!state?.supported || !state.allowTargetedReroll) {
-    ui.notifications.warn("Таргетный переброс для этой карточки не разрешён текущим правилом.");
+  if (!state?.supported) {
+    ui.notifications.warn("Эта карточка не поддерживает безопасный таргетный переброс кубов.");
     return null;
   }
   const partId = await chooseRerollableDamageDie(state);
@@ -2201,7 +2222,7 @@ export async function rerollDamageDieFromChat(element) {
   const phase = message.getFlag("fast-nri", "applicationPhase") === "final" ? "application" : "resolution";
   const next = rerollDamageDieInState(state, partId, value, { phase });
   if (!next) return null;
-  const data = await derivedDamageMessageData(message, next, {
+  await updateDamageMessageInPlace(message, next, {
     kind: "rerollDie",
     partId,
     faces: part.faces,
@@ -2209,13 +2230,7 @@ export async function rerollDamageDieFromChat(element) {
     value,
     phase
   });
-  const derivedMessage = await roll.toMessage({
-    speaker: message.speaker,
-    flavor: data.flavor,
-    flags: { "fast-nri": data.flags }
-  });
-  await markDamageMessageSuperseded(message, derivedMessage);
-  return { message: derivedMessage, sourceMessage: message, roll, damageState: next };
+  return { message, sourceMessage: message, roll, damageState: next };
 }
 
 export async function addDamageFromChat(element) {
@@ -2251,21 +2266,14 @@ export async function addDamageFromChat(element) {
 
   const next = appendManualDamageState(state, added, selected);
   if (!next) return null;
-  const data = await derivedDamageMessageData(message, next, {
+  await updateDamageMessageInPlace(message, next, {
     kind: "addDamage",
     formula: selected.formula,
     damageType: selected.damageType,
     traitIds: selected.traitIds,
     rolledTotal: roll.total
   });
-
-  const derivedMessage = await roll.toMessage({
-    speaker: message.speaker,
-    flavor: data.flavor,
-    flags: { "fast-nri": data.flags }
-  });
-  await markDamageMessageSuperseded(message, derivedMessage);
-  return { message: derivedMessage, sourceMessage: message, roll, damageState: next };
+  return { message, sourceMessage: message, roll, damageState: next };
 }
 
 async function chooseDamagePart(parts, mode = "largest", actionName = "Защита") {
@@ -2989,31 +2997,76 @@ export function multiTargetFinalDegree(target = {}) {
   return manual ?? defended ?? base;
 }
 
-export function applyPendingMultiTargetDefenses(target = {}) {
-  const next = foundry.utils.deepClone(target ?? {});
-  let degree = MULTI_TARGET_DEGREE_ORDER.includes(next.defendedDegree)
-    ? next.defendedDegree
-    : MULTI_TARGET_DEGREE_ORDER.includes(next.baseDegree)
-      ? next.baseDegree
-      : null;
-  let lastOutcome = next.lastDefenseOutcome ?? null;
+function multiTargetDefenseChain(target = {}) {
+  return [
+    ...(target?.appliedDefenseHistory ?? []),
+    ...(target?.pendingDefenses ?? [])
+  ];
+}
 
-  for (const defense of Array.from(next.pendingDefenses ?? [])) {
-    lastOutcome = defense?.result ?? lastOutcome;
-    if (defense?.result !== "success") continue;
-    if (!degree) continue;
-    if (Number(defense?.naturalD20) === 20) degree = "failure";
-    else degree = lowerDegree(degree, Math.max(1, Number(defense?.degreeReduction) || 1));
+/**
+ * 0.5.62 live-QA bridge toward TargetResult.steps[].
+ * Each defense is a chronological step inside the target row. The current
+ * degree is always rebuilt from baseDegree + active defense steps; reroll and
+ * undo therefore never require a new root ChatMessage.
+ */
+export function recalculateMultiTargetDefenseChain(target = {}) {
+  const next = foundry.utils.deepClone(target ?? {});
+  const chain = multiTargetDefenseChain(next).map(entry => foundry.utils.deepClone(entry));
+  let degree = MULTI_TARGET_DEGREE_ORDER.includes(next.baseDegree) ? next.baseDegree : null;
+  let lastOutcome = null;
+
+  for (const defense of chain) {
+    const undone = defense?.status === "undone" || defense?.undone === true;
+    if (undone) continue;
+
+    const requestedDegreeReduction = Math.max(
+      1,
+      Number(defense?.requestedDegreeReduction ?? defense?.degreeReduction ?? 1) || 1
+    );
+    const hasStoredTotals = finiteNumberOrNull(defense?.total) !== null
+      && finiteNumberOrNull(defense?.attackTotal) !== null;
+    const resolved = hasStoredTotals
+      ? resolveCheckDefenseResult({
+          degreeBefore: degree,
+          defenseTotal: defense?.total,
+          attackTotal: defense?.attackTotal,
+          naturalD20: defense?.naturalD20,
+          degreeReduction: requestedDegreeReduction
+        })
+      : (() => {
+          const storedResult = defense?.result === "success" ? "success" : "failure";
+          const degreeAfter = storedResult === "success"
+            ? (Number(defense?.naturalD20) === 20 ? "failure" : lowerDegree(degree, requestedDegreeReduction))
+            : degree;
+          return {
+            result: storedResult,
+            degreeBefore: degree,
+            degreeAfter,
+            degreeReduction: storedResult === "success" ? requestedDegreeReduction : 0
+          };
+        })();
+    defense.result = resolved.result;
+    defense.degreeBefore = resolved.degreeBefore;
+    defense.degreeAfter = resolved.degreeAfter;
+    defense.degreeReduction = resolved.degreeReduction;
+    defense.requestedDegreeReduction = requestedDegreeReduction;
+    degree = resolved.degreeAfter ?? degree;
+    lastOutcome = resolved.result;
   }
 
   next.defendedDegree = degree;
   next.lastDefenseOutcome = lastOutcome;
-  next.appliedDefenseHistory = [
-    ...(next.appliedDefenseHistory ?? []),
-    ...(next.pendingDefenses ?? [])
-  ];
+  next.appliedDefenseHistory = chain;
   next.pendingDefenses = [];
   return next;
+}
+
+export function applyPendingMultiTargetDefenses(target = {}) {
+  // Compatibility alias for 0.5.61 cards. In 0.5.62 every defense step is
+  // applied immediately inside its target row, so pending entries are simply
+  // folded into the chronological chain and recalculated.
+  return recalculateMultiTargetDefenseChain(target);
 }
 
 function multiTargetDegreeLabel(target) {
@@ -3030,23 +3083,27 @@ function multiTargetManualMarker(target) {
 function multiTargetRowsHTML(state, actionContext) {
   const allowDefense = ["counteraction", "dodge"].some(procedure => actionHasDefenseProcedure(actionContext, procedure));
   const targetLabel = checkTargetCharacteristicLabel(state?.targetCharacteristic);
-  return Array.from(state?.targets ?? []).map(target => `
-    <div class="fast-nri-multitarget-row" data-target-uuid="${escAttr(target.tokenUuid ?? "")}">
-      <div class="fast-nri-multitarget-target">
-        <strong>${esc(target.name)}</strong>
-        ${Number.isFinite(target.defenseValue) ? `<small>${esc(targetLabel)} ${esc(target.defenseValue)}</small>` : ""}
+  return Array.from(state?.targets ?? []).map(target => {
+    const defenseChain = multiTargetDefenseChain(target);
+    return `
+      <div class="fast-nri-multitarget-row" data-target-uuid="${escAttr(target.tokenUuid ?? "")}">
+        <div class="fast-nri-multitarget-target">
+          <strong>${esc(target.name)}</strong>
+          ${Number.isFinite(target.defenseValue) ? `<small>${esc(targetLabel)} ${esc(target.defenseValue)}</small>` : ""}
+        </div>
+        <div class="fast-nri-multitarget-degree">
+          <span>${esc(multiTargetDegreeLabel(target))}</span>
+          ${multiTargetManualMarker(target)}
+        </div>
+        <div class="fast-nri-multitarget-row-actions">
+          ${allowDefense ? `<button type="button" class="fast-nri-multitarget-defense-button" data-fast-nri-multitarget-defense data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Бросить Защиту этой цели"><i class="fa-solid fa-shield-halved"></i><span>Защита</span></button>` : ""}
+          <button type="button" class="fast-nri-multitarget-menu-button" data-fast-nri-multitarget-degree-menu data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Вручную изменить итоговую степень"><i class="fa-solid fa-ellipsis"></i></button>
+          <button type="button" class="fast-nri-multitarget-remove-button" data-fast-nri-multitarget-remove-target data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Убрать цель из этой карточки"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        ${defenseChain.length ? `<div class="fast-nri-multitarget-defense-history"><div class="fast-nri-defense-chain-label">Цепочка Защит</div>${defenseHistoryHTML(defenseChain, { controls: true, targetUuid: target.tokenUuid })}</div>` : ""}
       </div>
-      <div class="fast-nri-multitarget-degree">
-        <span>${esc(multiTargetDegreeLabel(target))}</span>
-        ${multiTargetManualMarker(target)}
-      </div>
-      <div class="fast-nri-multitarget-row-actions">
-        ${allowDefense ? `<button type="button" class="fast-nri-multitarget-defense-button" data-fast-nri-multitarget-defense data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Бросить Защиту этой цели"><i class="fa-solid fa-shield-halved"></i><span>Защита</span></button>` : ""}
-        <button type="button" class="fast-nri-multitarget-menu-button" data-fast-nri-multitarget-degree-menu data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Вручную изменить итоговую степень"><i class="fa-solid fa-ellipsis"></i></button>
-        <button type="button" class="fast-nri-multitarget-remove-button" data-fast-nri-multitarget-remove-target data-target-uuid="${escAttr(target.tokenUuid ?? "")}" title="Убрать цель из этой карточки"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function multiTargetAbilityCardHTML({ item, runtime, state, sharedDamageState = null, modifiersHTML = "", actionContext }) {
@@ -3069,10 +3126,10 @@ function multiTargetAbilityCardHTML({ item, runtime, state, sharedDamageState = 
         </div>
       </section>
       <div class="fast-nri-multitarget-target-actions">
-        <button type="button" data-fast-nri-multitarget-add-targets title="Добавить текущие Foundry Targets"><i class="fa-solid fa-user-plus"></i><span>Добавить выбранные цели</span></button>
+        <button type="button" data-fast-nri-multitarget-add-targets title="Добавить текущие Foundry Targets"><i class="fa-solid fa-crosshairs"></i><span>Добавить цели</span></button>
+        <button type="button" data-fast-nri-multitarget-add-controlled title="Добавить текущие выделенные токены"><i class="fa-solid fa-object-group"></i><span>Добавить выделенное</span></button>
       </div>
       <div class="fast-nri-multitarget-main-actions">
-        <button type="button" data-fast-nri-multitarget-apply-defenses><i class="fa-solid fa-shield"></i><span>Применить брошенные защиты</span></button>
         <button type="button" data-fast-nri-multitarget-apply-results ${targetCount ? "" : "disabled"}><i class="fa-solid fa-burst"></i><span>Применить результаты</span></button>
       </div>
       ${state.lastResultsAppliedAt ? `<small class="fast-nri-multitarget-applied-note">Результаты уже создавались. Повторное применение разрешено после ручной проверки степеней.</small>` : ""}
@@ -3211,29 +3268,42 @@ export async function multiTargetAddTargetsFromChat(element) {
   return updateMultiTargetMessage(message, { state, actionContext: nextContext });
 }
 
+export async function multiTargetAddControlledFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const sourceActor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
+  const rollStub = { roll: { total: state.checkTotal }, naturalD20: state.naturalD20 };
+  const existing = new Set(Array.from(state.targets ?? []).map(entry => entry.tokenUuid));
+  for (const token of Array.from(canvas?.tokens?.controlled ?? [])) {
+    const uuid = tokenDocumentUuid(token);
+    if (!uuid || existing.has(uuid)) continue;
+    const entry = multiTargetEntryForToken(token, {
+      result: rollStub,
+      targetCharacteristic: state.targetCharacteristic,
+      sourceActor
+    });
+    if (entry) {
+      state.targets.push(entry);
+      existing.add(uuid);
+    }
+  }
+  const context = actionContextFromMessage(message);
+  const targetTokens = [];
+  for (const entry of state.targets ?? []) {
+    const token = await tokenPlaceableFromUuid(entry.tokenUuid);
+    if (token) targetTokens.push(token);
+  }
+  const nextContext = deriveActionContext(context, { targets: targetTokens });
+  return updateMultiTargetMessage(message, { state, actionContext: nextContext });
+}
+
 export async function multiTargetApplyDefensesFromChat(element) {
   const message = chatMessageFromElement(element);
   if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
   const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
   state.targets = Array.from(state.targets ?? []).map(target => applyPendingMultiTargetDefenses(target));
   return updateMultiTargetMessage(message, { state });
-}
-
-function multiTargetDefenseFlavorHTML({ method, token, characteristic, attackTotal, result, resource }) {
-  return `
-    <div class="fast-nri-chat-roll fast-nri-defense-roll-card fast-nri-check-defense-roll-card">
-      ${rollCardHeader(`${method.actionName}: ${token.name}`, "fa-shield-halved")}
-      <div class="fast-nri-defense-roll-result">
-        <span>Характеристика: <strong>${esc(checkTargetCharacteristicLabel(characteristic))}</strong></span>
-        <span>Исходный результат: <strong>${esc(attackTotal)}</strong></span>
-        <span>Защита: <strong>${esc(result.roll.total)}</strong></span>
-        <span>Результат: <strong>${esc(defenseResultLabel(result.resolvedResult))}</strong></span>
-      </div>
-      <small>Степень в общей карточке не меняется, пока не нажато «Применить брошенные защиты».</small>
-      ${defenseResourceHTML(resource, false)}
-      ${rollSourcesHTML(result)}
-    </div>
-  `;
 }
 
 export async function multiTargetDefenseFromChat(element) {
@@ -3244,12 +3314,15 @@ export async function multiTargetDefenseFromChat(element) {
   const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
   const target = Array.from(state.targets ?? []).find(entry => entry.tokenUuid === element?.dataset?.targetUuid);
   if (!target) return null;
-  const token = await tokenPlaceableFromUuid(target.tokenUuid);
-  if (!token?.actor) {
+  const protectedToken = await tokenPlaceableFromUuid(target.tokenUuid);
+  if (!protectedToken?.actor) {
     ui.notifications.error("Не удалось найти токен цели для Защиты.");
     return null;
   }
-  const defender = token.actor;
+  const defenderToken = controlledSingleDefenderToken();
+  if (!defenderToken?.actor) return null;
+  const defender = defenderToken.actor;
+  const role = sameTokenOrActor(defenderToken, protectedToken) ? "self" : "ally";
   const procedures = ["counteraction", "dodge"].filter(procedure => actionHasDefenseProcedure(actionContext, procedure));
   if (!procedures.length) {
     ui.notifications.info("Для этой многоцелевой проверки нет доступной стандартной Защиты.");
@@ -3261,9 +3334,9 @@ export async function multiTargetDefenseFromChat(element) {
   ];
   const method = await chooseDefenseMethod({
     actor: defender,
-    defenderToken: token,
-    protectedToken: token,
-    role: "self",
+    defenderToken,
+    protectedToken,
+    role,
     defenseHistory,
     actionContext,
     procedures
@@ -3287,13 +3360,13 @@ export async function multiTargetDefenseFromChat(element) {
   }
   const sourceActor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
   const sourceItem = message.getFlag("fast-nri", "itemUuid") ? await fromUuid(message.getFlag("fast-nri", "itemUuid")) : null;
-  const characteristicState = effectiveDefenseCharacteristicForAction(token, characteristic, sourceActor);
+  const characteristicState = effectiveDefenseCharacteristicForAction(defenderToken, characteristic, sourceActor);
   const characteristicValue = finiteNumberOrNull(characteristicState.value);
   if (characteristicValue === null) {
     ui.notifications.error(`У цели нет корректного значения «${checkTargetCharacteristicLabel(characteristic)}».`);
     return null;
   }
-  const combatSource = defenseCombatTerm(defender, method.item, "self");
+  const combatSource = defenseCombatTerm(defender, method.item, role);
   const baseFormula = combatSource?.formula
     ? `1d20 + ${characteristicValue} + ${combatSource.formula}`
     : `1d20 + ${characteristicValue}`;
@@ -3303,7 +3376,7 @@ export async function multiTargetDefenseFromChat(element) {
     .filter(modifier => modifier.id !== "weapon-deadly");
   const result = await prepareRoll({
     actor: defender,
-    label: `${method.actionName}: ${token.name}`,
+    label: `${method.actionName}: ${defenderToken.name}`,
     baseFormula,
     baseSources: [
       { formula: "1d20", label: "Базовый d20", reason: method.actionName },
@@ -3330,74 +3403,153 @@ export async function multiTargetDefenseFromChat(element) {
   });
   result.resolvedResult = resolved.result;
   const resource = await spendDefenseClassResource(defender, method.item, selectedClassResourceCost);
-  const defenseEntry = {
-    kind: "multi-target-check-defense",
-    procedure,
-    actionName: method.actionName,
-    abilityUuid: method.item?.uuid ?? null,
-    actorUuid: defender.uuid,
-    defenderTokenUuid: tokenDocumentUuid(token),
-    protectedTokenUuid: tokenDocumentUuid(token),
-    protectedActorUuid: defender.uuid,
-    protectedTokenName: token.name || defender.name,
-    characteristic,
-    attackTotal,
-    total: result.roll.total,
-    naturalD20: result.naturalD20,
-    result: resolved.result,
-    degreeReduction: resolved.degreeReduction || degreeReduction,
-    dodgeMovement,
-    interventionCost: Math.max(0, Number(method.config.interventionCost) || 0)
-  };
-  target.pendingDefenses = [...(target.pendingDefenses ?? []), defenseEntry];
-
   const defenseActionContext = actionContextForDefenseAction(actionContext, {
     actor: defender,
     item: method.item,
-    defenderToken: token,
-    protectedToken: token,
+    defenderToken,
+    protectedToken,
     actionName: method.actionName,
     procedure,
     total: result.roll.total,
     naturalD20: result.naturalD20,
     parentMessageId: message.id
   });
-  const flavor = multiTargetDefenseFlavorHTML({ method, token, characteristic, attackTotal, result, resource });
-  const defenseMessage = await result.roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor: defender, token: token.document }),
-    flavor,
-    flags: {
-      "fast-nri": {
-        kind: "defense-roll",
-        multiTargetSourceMessageId: message.id,
-        sourceCheckMessageId: message.id,
-        defenderActorUuid: defender.uuid,
-        defenderTokenUuid: tokenDocumentUuid(token),
-        protectedTokenUuid: target.tokenUuid,
-        result: resolved.result,
-        actionContext: defenseActionContext,
-        defenseDisplay: {
-          actionName: method.actionName,
-          defenderTokenName: token.name || defender.name,
-          protectedTokenName: token.name || defender.name,
-          role: "self",
-          attackTotal,
-          defenseTotal: result.roll.total,
-          defenseResult: resolved.result,
-          sourcesHTML: rollSourcesHTML(result)
-        },
-        resourceCost: resource.cost,
-        resourceLabel: resource.label,
-        resourceBefore: resource.before,
-        resourceAfter: resource.after,
-        resourceSpent: resource.spent,
-        resourceShortage: resource.shortage,
-        resourceUndone: false
-      }
-    }
-  });
-  await message.update({ "flags.fast-nri.multiTargetState": state });
-  return { message, defenseMessage, defense: defenseEntry };
+  const defenseEntry = {
+    id: resolutionEntryId("defense"),
+    kind: "multi-target-check-defense",
+    procedure,
+    actionName: method.actionName,
+    abilityUuid: method.item?.uuid ?? null,
+    actorUuid: defender.uuid,
+    role,
+    defenderTokenUuid: tokenDocumentUuid(defenderToken),
+    defenderTokenName: defenderToken.name || defender.name,
+    protectedTokenUuid: tokenDocumentUuid(protectedToken),
+    protectedActorUuid: protectedToken.actor?.uuid ?? null,
+    protectedTokenName: protectedToken.name || protectedToken.actor?.name || target.name,
+    characteristic,
+    formula: result.formula,
+    attackTotal,
+    total: result.roll.total,
+    naturalD20: result.naturalD20,
+    result: resolved.result,
+    degreeBefore: multiTargetFinalDegree(target),
+    degreeAfter: resolved.degreeAfter,
+    degreeReduction: resolved.degreeReduction || degreeReduction,
+    requestedDegreeReduction: degreeReduction,
+    dodgeMovement,
+    interventionCost: Math.max(0, Number(method.config.interventionCost) || 0),
+    resource: foundry.utils.deepClone(resource),
+    resourceUndone: false,
+    sourcesHTML: rollSourcesHTML(result),
+    actionContext: defenseActionContext
+  };
+  target.appliedDefenseHistory = [
+    ...(target.appliedDefenseHistory ?? []),
+    ...(target.pendingDefenses ?? []),
+    defenseEntry
+  ];
+  target.pendingDefenses = [];
+  Object.assign(target, recalculateMultiTargetDefenseChain(target));
+
+  await updateMultiTargetMessage(message, { state });
+  return { message, defenseMessage: null, defense: defenseEntry, roll: result.roll };
+}
+
+function multiTargetDefenseStep(state, targetUuid, defenseId) {
+  const target = Array.from(state?.targets ?? []).find(entry => entry?.tokenUuid === targetUuid) ?? null;
+  if (!target) return { target: null, defense: null };
+  const defense = multiTargetDefenseChain(target).find(entry => entry?.id === defenseId) ?? null;
+  return { target, defense };
+}
+
+async function restoreDefenseStepResource(defense) {
+  if (!defense || defense.resourceUndone) return null;
+  const resource = defense.resource ?? {};
+  const spent = Math.max(0, Number(resource.spent) || 0);
+  if (!(spent > 0)) {
+    defense.resourceUndone = true;
+    return null;
+  }
+  const actorUuid = defense.actorUuid ?? defense.defenderActorUuid ?? null;
+  const actor = actorUuid ? await fromUuid(actorUuid) : null;
+  if (!actor) {
+    ui.notifications.warn("Не удалось автоматически вернуть классовый ресурс отменённой Защиты.");
+    return null;
+  }
+  const current = Math.max(0, Number(actor.system?.classResource?.value) || 0);
+  const restored = current + spent;
+  await actor.update({ "system.classResource.value": restored });
+  defense.resourceUndone = true;
+  defense.resourceRestoredTo = restored;
+  return { actor, restored, restoredAmount: spent };
+}
+
+export async function multiTargetDefenseStepUndoFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const targetUuid = String(element?.dataset?.targetUuid ?? "").trim();
+  const defenseId = String(element?.dataset?.defenseId ?? "").trim();
+  if (!targetUuid || !defenseId) return null;
+
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const { target, defense } = multiTargetDefenseStep(state, targetUuid, defenseId);
+  if (!target || !defense) {
+    ui.notifications.error("Не удалось найти этот шаг Защиты в строке цели.");
+    return null;
+  }
+  if (defense.status === "undone" || defense.undone === true) return null;
+
+  await restoreDefenseStepResource(defense);
+  defense.status = "undone";
+  defense.undone = true;
+  defense.undoneAt = Date.now();
+  Object.assign(target, recalculateMultiTargetDefenseChain(target));
+  await updateMultiTargetMessage(message, { state });
+  return { message, target, defense };
+}
+
+export async function multiTargetDefenseStepRerollFromChat(element) {
+  const message = chatMessageFromElement(element);
+  if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
+  const targetUuid = String(element?.dataset?.targetUuid ?? "").trim();
+  const defenseId = String(element?.dataset?.defenseId ?? "").trim();
+  if (!targetUuid || !defenseId) return null;
+
+  const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  const { target, defense } = multiTargetDefenseStep(state, targetUuid, defenseId);
+  if (!target || !defense) {
+    ui.notifications.error("Не удалось найти этот шаг Защиты в строке цели.");
+    return null;
+  }
+  if (defense.status === "undone" || defense.undone === true) {
+    ui.notifications.info("Отменённую Защиту сначала нельзя перебрасывать: выполните новую Защиту этой цели.");
+    return null;
+  }
+  const formula = String(defense.formula ?? "").trim();
+  if (!formula) {
+    ui.notifications.error("Для этой Защиты не сохранена формула переброса.");
+    return null;
+  }
+
+  let roll;
+  try {
+    roll = await new Roll(formula).evaluate();
+  } catch (error) {
+    console.error("Быстрая НРИ | Ошибка переброса шага Защиты", error);
+    ui.notifications.error(`Некорректная сохранённая формула Защиты: ${formula}`);
+    return null;
+  }
+  defense.previousRolls = [
+    ...(defense.previousRolls ?? []),
+    { total: defense.total, naturalD20: defense.naturalD20, rerolledAt: Date.now() }
+  ];
+  defense.total = roll.total;
+  defense.naturalD20 = getNaturalD20(roll);
+  defense.rerollCount = Math.max(0, Number(defense.rerollCount) || 0) + 1;
+  Object.assign(target, recalculateMultiTargetDefenseChain(target));
+  await updateMultiTargetMessage(message, { state });
+  return { message, target, defense, roll };
 }
 
 async function multiTargetResultContent({ item, runtime, target, degree, damageState = null, critical = false, profileHTML = "", hasApplicationEffects = false }) {
@@ -3423,6 +3575,7 @@ export async function multiTargetApplyResultsFromChat(element) {
   const message = chatMessageFromElement(element);
   if (!message || message.getFlag("fast-nri", "kind") !== MULTI_TARGET_ABILITY_KIND) return null;
   const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+  state.targets = Array.from(state.targets ?? []).map(target => recalculateMultiTargetDefenseChain(target));
   const actor = message.getFlag("fast-nri", "actorUuid") ? await fromUuid(message.getFlag("fast-nri", "actorUuid")) : null;
   const item = message.getFlag("fast-nri", "itemUuid") ? await fromUuid(message.getFlag("fast-nri", "itemUuid")) : null;
   if (!actor || !item || item.type !== "ability") return null;
@@ -3430,16 +3583,6 @@ export async function multiTargetApplyResultsFromChat(element) {
   const sharedDamageState = message.getFlag("fast-nri", "sharedDamageState") ?? null;
   const baseContext = actionContextFromMessage(message);
   const created = [];
-  const unappliedDefenseCount = Array.from(state.targets ?? []).reduce(
-    (sum, target) => sum + Array.from(target?.pendingDefenses ?? []).length,
-    0
-  );
-  if (unappliedDefenseCount > 0) {
-    ui.notifications.warn(
-      `Есть неприменённые броски Защит: ${unappliedDefenseCount}. Результаты создаются по текущим степеням; сначала нажмите «Применить брошенные защиты», если хотите их учесть.`
-    );
-  }
-
   for (const target of Array.from(state.targets ?? [])) {
     const degree = multiTargetFinalDegree(target);
     if (!degree) {
@@ -4385,8 +4528,11 @@ async function spendDefenseClassResource(actor, item, selectedCost = null) {
   };
 }
 
-function defenseResourceHTML(resource, undone = false) {
+function defenseResourceHTML(resource, undone = false, { inlineDefenseId = null } = {}) {
   if (!(Number(resource?.cost) > 0)) return "";
+  const undoAttribute = inlineDefenseId
+    ? `data-fast-nri-undo-inline-defense-resource data-defense-id="${escAttr(inlineDefenseId)}"`
+    : "data-fast-nri-undo-defense-resource";
 
   return `
     <div class="fast-nri-resource-use ${undone ? "undone" : ""}">
@@ -4404,7 +4550,7 @@ function defenseResourceHTML(resource, undone = false) {
         <button
           type="button"
           class="fast-nri-undo-resource-button"
-          data-fast-nri-undo-defense-resource
+          ${undoAttribute}
           title="Вернуть списанный классовый ресурс"
         >
           <i class="fa-solid fa-rotate-left"></i>
@@ -4498,6 +4644,99 @@ export async function undoDefenseResource(element) {
     "flags.fast-nri.resourceRestoredTo": restored
   });
 
+  return { actor, restored, restoredAmount: spent };
+}
+
+
+async function undoInlineDefenseResource(element) {
+  const message = chatMessageFromElement(element);
+  const defenseId = String(element?.dataset?.defenseId ?? "").trim();
+  if (!message || !defenseId) {
+    ui.notifications.error("Не удалось найти встроенный результат Защиты.");
+    return null;
+  }
+
+  const kind = message.getFlag("fast-nri", "kind");
+  let entry = null;
+  let commit = null;
+
+  if (kind === "damage") {
+    const state = foundry.utils.deepClone(message.getFlag("fast-nri", "damageState") ?? {});
+    entry = Array.from(state.defenseHistory ?? []).find(candidate => candidate?.id === defenseId) ?? null;
+    if (entry) {
+      commit = async () => {
+        if (state.defense?.id === defenseId) state.defense = foundry.utils.deepClone(entry);
+        await updateDamageMessageInPlace(message, state, { kind: "undoDefenseResource", defenseId });
+      };
+    }
+  } else if (kind === "ability-check") {
+    const history = foundry.utils.deepClone(message.getFlag("fast-nri", "defenseHistory") ?? []);
+    entry = history.find(candidate => candidate?.id === defenseId) ?? null;
+    if (entry) {
+      commit = async () => {
+        const context = actionContextFromMessage(message);
+        const sourceActor = context?.source?.actorUuid ? await fromUuid(context.source.actorUuid) : null;
+        const sourceItem = context?.source?.itemUuid ? await fromUuid(context.source.itemUuid) : null;
+        const profileHTML = sourceItem?.type === "ability" && context?.check?.degree
+          ? await enrichAbilityProfileHTML(sourceItem, context.check.degree)
+          : "";
+        await message.update({
+          flavor: checkAfterDefenseCardHTML({
+            sourceActor,
+            sourceItem,
+            actionContext: context,
+            defense: history.at(-1) ?? null,
+            defenseHistory: history,
+            profileHTML
+          }),
+          "flags.fast-nri.defenseHistory": history
+        });
+      };
+    }
+  } else if (kind === MULTI_TARGET_ABILITY_KIND) {
+    const state = foundry.utils.deepClone(message.getFlag("fast-nri", "multiTargetState") ?? {});
+    for (const target of Array.from(state.targets ?? [])) {
+      const histories = [target.appliedDefenseHistory ?? [], target.pendingDefenses ?? []];
+      for (const history of histories) {
+        const found = Array.from(history).find(candidate => candidate?.id === defenseId);
+        if (found) {
+          entry = found;
+          break;
+        }
+      }
+      if (entry) break;
+    }
+    if (entry) commit = async () => updateMultiTargetMessage(message, { state });
+  }
+
+  if (!entry || !commit) {
+    ui.notifications.error("В этой карточке не найден сохранённый шаг Защиты.");
+    return null;
+  }
+  if (entry.resourceUndone) {
+    ui.notifications.info("Ресурс этой Защиты уже возвращён.");
+    return null;
+  }
+
+  const resource = entry.resource ?? {};
+  const spent = Math.max(0, Number(resource.spent) || 0);
+  if (!(spent > 0)) {
+    ui.notifications.info("Для этой Защиты ресурс фактически не списывался.");
+    return null;
+  }
+  const actorUuid = entry.actorUuid ?? entry.defenderActorUuid ?? null;
+  const actor = actorUuid ? await fromUuid(actorUuid) : null;
+  if (!actor) {
+    ui.notifications.error("Не удалось найти защищавшего персонажа.");
+    return null;
+  }
+
+  const current = Math.max(0, Number(actor.system?.classResource?.value) || 0);
+  const restored = current + spent;
+  await actor.update({ "system.classResource.value": restored });
+  entry.resourceUndone = true;
+  entry.resourceRestoredTo = restored;
+  await commit();
   return { actor, restored, restoredAmount: spent };
 }
 
@@ -4674,33 +4913,29 @@ function checkDefenseRollFlavorHTML({
   `;
 }
 
-function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, defense, profileHTML = "" }) {
+function checkAfterDefenseCardHTML({ sourceActor, sourceItem, actionContext, defense = null, defenseHistory = [], profileHTML = "" }) {
   const context = normalizeActionContext(actionContext);
   const targetLabel = checkTargetCharacteristicLabel(context.check.targetCharacteristic);
   const targetName = context.targets?.[0]?.name ?? "";
   const traitsLabel = actionTraitsLabel(context.traits);
+  const history = Array.from(defenseHistory ?? []);
+  if (!history.length && defense) history.push(defense);
+  const latest = defense ?? history.at(-1) ?? null;
   const followup = sourceActor && sourceItem?.type === "ability" && context.check.degree
     ? abilityAttackFollowupHTML(sourceActor, sourceItem, context.check.degree, context.source?.implementationId ?? null)
     : "";
 
   return `
     <div class="fast-nri-chat-roll fast-nri-attack-card fast-nri-ability-check-card fast-nri-check-after-defense-card">
-      ${rollCardHeader(`Проверка после защиты: ${sourceItem?.name ?? context.source?.name ?? "Действие"}`, "fa-shield-halved")}
+      ${rollCardHeader(`Проверка: ${sourceItem?.name ?? context.source?.name ?? "Действие"}`, "fa-shield-halved")}
       <div class="fast-nri-attack-summary">
         <span>Исходный результат: <strong>${esc(context.check.total)}</strong></span>
         <span>Против: <strong>${esc(targetLabel)}</strong></span>
         ${targetName ? `<span>Цель: <strong>${esc(targetName)}</strong></span>` : ""}
       </div>
-      <div class="fast-nri-self-defense-summary fast-nri-self-defense-${escAttr(defense.result)}">
-        <strong>${esc(defense.actionName)} — ${esc(defenseResultLabel(defense.result))}</strong>
-        <small>${esc(defense.defenderTokenName)}: ${esc(defense.total)} против ${esc(defense.attackTotal)}</small>
-        ${defense.degreeBefore ? `
-          <div>Степень: <strong>${esc(DEGREE_LABELS[defense.degreeBefore] ?? defense.degreeBefore)}</strong> → <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
-          <div>Итоговая степень для цели: <strong>${esc(DEGREE_LABELS[defense.degreeAfter] ?? defense.degreeAfter)}</strong></div>
-        ` : `
-          <div>Итог Защиты для цели: <strong>${esc(defenseResultLabel(defense.result))}</strong></div>
-        `}
-      </div>
+      ${history.length ? `<div class="fast-nri-defense-inline-history">${defenseHistoryHTML(history)}</div>` : ""}
+      ${latest?.degreeAfter ? `<div class="fast-nri-attack-summary"><span>Итоговая степень для цели: <strong>${esc(DEGREE_LABELS[latest.degreeAfter] ?? latest.degreeAfter)}</strong></span></div>` : ""}
+      ${latest && !latest.degreeAfter ? `<div class="fast-nri-attack-summary"><span>Итог Защиты для цели: <strong>${esc(defenseResultLabel(latest.result))}</strong></span></div>` : ""}
       <div class="fast-nri-attack-type"><small>Признаки действия: <strong>${esc(traitsLabel)}</strong></small></div>
       ${degreeHTML(context.check.degree)}
       ${profileHTML}
@@ -4894,14 +5129,12 @@ export async function checkDefenseFromChat(element) {
     dodgeMovement,
     interventionCost: Math.max(0, Number(method.config.interventionCost) || 0)
   };
-  const nextHistory = [...defenseHistory, defenseEntry];
   const nextContext = deriveActionContext(actionContext, {
     targets: [protectedToken],
     check: {
       ...actionContext.check,
       degree: degreeAfter
-    },
-    parentMessageId: message.id
+    }
   });
   const defenseActionContext = actionContextForDefenseAction(actionContext, {
     actor: defender,
@@ -4914,107 +5147,57 @@ export async function checkDefenseFromChat(element) {
     naturalD20: result.naturalD20,
     parentMessageId: message.id
   });
-
-  const defenseFlavor = checkDefenseRollFlavorHTML({
-    actionName: method.actionName,
-    procedure,
-    defenderTokenName: defenderToken.name,
-    protectedTokenName: protectedToken.name || protectedToken.actor?.name,
-    role,
-    characteristic,
-    attackTotal,
-    defenseTotal: result.roll.total,
-    defenseResult,
-    degreeBefore,
-    degreeAfter,
-    dodgeMovement,
-    result,
-    resource
+  Object.assign(defenseEntry, {
+    id: resolutionEntryId("defense"),
+    formula: result.formula,
+    resource: foundry.utils.deepClone(resource),
+    resourceUndone: false,
+    sourcesHTML: rollSourcesHTML(result),
+    actionContext: defenseActionContext
   });
-
-  const defenseMessage = await result.roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor: defender, token: defenderToken.document }),
-    flavor: defenseFlavor,
-    flags: {
-      "fast-nri": {
-        kind: "defense-roll",
-        actionName: method.actionName,
-        procedure,
-        role,
-        abilityUuid: method.item?.uuid ?? null,
-        sourceCheckMessageId: message.id,
-        defenderTokenUuid: defenderToken.document?.uuid ?? null,
-        defenderActorUuid: defender.uuid,
-        protectedTokenUuid: protectedToken.document?.uuid ?? null,
-        protectedActorUuid: protectedToken.actor?.uuid ?? null,
-        result: defenseResult,
-        attackTotal,
-        naturalD20: result.naturalD20,
-        resourceCost: resource.cost,
-        resourceLabel: resource.label,
-        resourceBefore: resource.before,
-        resourceAfter: resource.after,
-        resourceSpent: resource.spent,
-        resourceShortage: resource.shortage,
-        resourceUndone: false,
-        actionContext: defenseActionContext,
-        sourceActionContext: nextContext,
-        defenseDisplay: {
-          actionName: method.actionName,
-          defenderTokenName: defenderToken.name,
-          protectedTokenName: protectedToken.name || protectedToken.actor?.name,
-          role,
-          attackTotal,
-          defenseTotal: result.roll.total,
-          defenseResult,
-          sourcesHTML: rollSourcesHTML(result)
-        }
-      }
-    }
-  });
+  const nextHistory = [...defenseHistory, defenseEntry];
 
   const derivedProfileHTML = sourceItem?.type === "ability" && nextContext.check.degree
     ? await enrichAbilityProfileHTML(sourceItem, nextContext.check.degree)
     : "";
 
-  const derivedMessage = await ChatMessage.create({
-    speaker: message.speaker,
-    content: checkAfterDefenseCardHTML({
-      sourceActor,
-      sourceItem,
+  const flavor = checkAfterDefenseCardHTML({
+    sourceActor,
+    sourceItem,
+    actionContext: nextContext,
+    defense: defenseEntry,
+    defenseHistory: nextHistory,
+    profileHTML: derivedProfileHTML
+  });
+  const baseFlags = foundry.utils.deepClone(message?.flags?.["fast-nri"] ?? {});
+  await message.update({
+    flavor,
+    "flags.fast-nri": {
+      ...baseFlags,
+      kind: "ability-check",
+      actorUuid: actionContext.source.actorUuid,
+      itemUuid: actionContext.source.itemUuid,
+      targetUuid: nextContext.targets?.[0]?.tokenUuid ?? null,
+      degree: degreeAfter,
+      originalDegree: baseFlags.originalDegree ?? baseFlags.degree ?? degreeBefore,
+      critical: Boolean(nextContext.check.critical),
+      rollTotal: nextContext.check.total,
+      naturalD20: nextContext.check.naturalD20,
+      targetCharacteristic: nextContext.check.targetCharacteristic,
+      actionTraits: nextContext.traits,
       actionContext: nextContext,
-      defense: defenseEntry,
-      profileHTML: derivedProfileHTML
-    }),
-    flags: {
-      "fast-nri": {
-        kind: "ability-check",
-        actorUuid: actionContext.source.actorUuid,
-        itemUuid: actionContext.source.itemUuid,
-        targetUuid: nextContext.targets?.[0]?.tokenUuid ?? null,
-        degree: degreeAfter,
-        originalDegree: message.getFlag("fast-nri", "originalDegree")
-          ?? message.getFlag("fast-nri", "degree")
-          ?? degreeBefore,
-        critical: Boolean(nextContext.check.critical),
-        rollTotal: nextContext.check.total,
-        naturalD20: nextContext.check.naturalD20,
-        targetCharacteristic: nextContext.check.targetCharacteristic,
-        actionTraits: nextContext.traits,
-        actionContext: nextContext,
-        defenseHistory: nextHistory,
-        attackType: directedAttackTypeFromActionContext(nextContext),
-        area: Boolean(nextContext.traits.area),
-        directedDefense: Boolean(nextContext.defenseProcedures.directed),
-        sourceCheckMessageId: message.id
-      }
+      defenseHistory: nextHistory,
+      attackType: directedAttackTypeFromActionContext(nextContext),
+      area: Boolean(nextContext.traits.area),
+      directedDefense: Boolean(nextContext.defenseProcedures.directed)
     }
   });
 
   return {
     sourceMessage: message,
-    defenseMessage,
-    message: derivedMessage,
+    defenseMessage: null,
+    message,
+    roll: result.roll,
     actionContext: nextContext,
     defense: defenseEntry
   };
@@ -5343,33 +5526,6 @@ export async function defenseFromChat(element) {
     effectDegreeAfter
   };
 
-  damageState.defenseHistory = [
-    ...(damageState.defenseHistory ?? []),
-    foundry.utils.deepClone(damageState.defense)
-  ];
-
-  damageState = recalculateDamageState(damageState);
-
-  const profile = message.getFlag("fast-nri", "profile");
-  const critical = Boolean(message.getFlag("fast-nri", "critical"));
-  const modifiersHTML = message.getFlag("fast-nri", "modifierNotesHTML") ?? "";
-  const labels = {
-    partial: "Частичный",
-    success: "Успех",
-    great: "Большой"
-  };
-
-  const defenseDisplay = {
-    actionName,
-    defenderTokenName: defenderToken.name,
-    protectedTokenName: protectedToken?.name || protectedToken?.actor?.name || defender.name,
-    role,
-    attackTotal,
-    defenseTotal: result.roll.total,
-    defenseResult,
-    sourcesHTML: rollSourcesHTML(result)
-  };
-
   const defenseActionContext = actionContextForDefenseAction(actionContext, {
     actor: defender,
     item: actionRuntime,
@@ -5381,48 +5537,19 @@ export async function defenseFromChat(element) {
     naturalD20: result.naturalD20,
     parentMessageId: message.id
   });
-
-  const defenseFlavor = defenseRollFlavorHTML({
-    ...defenseDisplay,
-    result,
-    resource,
-    resourceUndone: false
+  Object.assign(damageState.defense, {
+    id: resolutionEntryId("defense"),
+    defenderTokenName: defenderToken.name || defender.name || "Защитник",
+    resource: foundry.utils.deepClone(resource),
+    resourceUndone: false,
+    sourcesHTML: rollSourcesHTML(result),
+    actionContext: defenseActionContext
   });
-
-  const defenseMessage = await result.roll.toMessage({
-    speaker: ChatMessage.getSpeaker({
-      actor: defender,
-      token: defenderToken.document
-    }),
-    flavor: defenseFlavor,
-    flags: {
-      "fast-nri": {
-        kind: "defense-roll",
-        actionName,
-        role,
-        abilityUuid: actionItem?.uuid ?? null,
-        implementationId: actionImplementationId,
-        sourceDamageMessageId: message.id,
-        defenderTokenUuid: defenderToken.document?.uuid ?? null,
-        defenderActorUuid: defender.uuid,
-        protectedTokenUuid: protectedToken?.document?.uuid ?? null,
-        protectedActorUuid: protectedToken?.actor?.uuid ?? null,
-        result: defenseResult,
-        attackTotal,
-        naturalD20: result.naturalD20,
-        resourceCost: resource.cost,
-        resourceLabel: resource.label,
-        resourceBefore: resource.before,
-        resourceAfter: resource.after,
-        resourceSpent: resource.spent,
-        resourceShortage: resource.shortage,
-        resourceUndone: false,
-        actionContext: defenseActionContext,
-        sourceActionContext: deriveActionContext(actionContext, { parentMessageId: message.id }),
-        defenseDisplay
-      }
-    }
-  });
+  damageState.defenseHistory = [
+    ...(damageState.defenseHistory ?? []),
+    foundry.utils.deepClone(damageState.defense)
+  ];
+  damageState = recalculateDamageState(damageState);
 
   const sourceRuntime = sourceItem?.type === "ability"
     ? abilityImplementationRuntime(sourceItem, message.getFlag("fast-nri", "implementationId") ?? null)
@@ -5431,50 +5558,22 @@ export async function defenseFromChat(element) {
     ? await abilityApplicationEffects(sourceRuntime, damageState.effectDegree)
     : { uuids: [], html: "" };
 
-  const flavor = damageCardHTML({
-    weaponName: sourceItem?.name ?? "Урон",
-    profileLabel: labels[profile] ?? profile ?? "",
-    critical,
-    state: damageState,
-    modifiersHTML,
-    applicationEffectsHTML: applicationEffects.html
-  });
-
-  const derivedMessage = await ChatMessage.create({
-    speaker: message.speaker,
-    content: flavor,
-    flags: {
-      "fast-nri": {
-        kind: "damage",
-        actorUuid: message.getFlag("fast-nri", "actorUuid"),
-        itemUuid: message.getFlag("fast-nri", "itemUuid"),
-        profile,
-        critical,
-        attackTotal: message.getFlag("fast-nri", "attackTotal"),
-        attackNaturalD20: message.getFlag("fast-nri", "attackNaturalD20"),
-        attackDegree: damageState.effectDegree,
-        automaticAttackDegree: message.getFlag("fast-nri", "automaticAttackDegree"),
-        originalTargetUuid: message.getFlag("fast-nri", "originalTargetUuid"),
-        sourceAttackMessageId: message.getFlag("fast-nri", "sourceAttackMessageId"),
-        sourceDamageMessageId: message.id,
-        rolledTotal: message.getFlag("fast-nri", "rolledTotal"),
-        finalTotal: damageState.currentTotal,
-        modifierNotesHTML: modifiersHTML,
-        actionContext: deriveActionContext(actionContext, { parentMessageId: message.id }),
-        actionTraits: actionContext.traits,
-        targetCharacteristic: actionContext.check.targetCharacteristic,
-        attackType,
-        applicationPhase: "final",
-        applicationEffectUuids: applicationEffects.uuids,
-        damageState
-      }
-    }
+  await updateDamageMessageInPlace(
+    message,
+    damageState,
+    { kind: "defense", defenseId: damageState.defense.id },
+    { applicationEffectUuids: applicationEffects.uuids }
+  );
+  await message.update({
+    "flags.fast-nri.attackDegree": damageState.effectDegree,
+    "flags.fast-nri.attackType": attackType,
+    "flags.fast-nri.applicationPhase": "final"
   });
 
   return {
-    message: derivedMessage,
+    message,
     sourceMessage: message,
-    defenseMessage,
+    defenseMessage: null,
     defenderToken,
     protectedToken,
     actionItem,
@@ -6183,6 +6282,23 @@ export function activateChatInteractions(root = document) {
       return;
     }
 
+    const undoInlineDefenseResourceButton = event.target.closest("[data-fast-nri-undo-inline-defense-resource]");
+    if (undoInlineDefenseResourceButton) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (undoInlineDefenseResourceButton.dataset.fastNriBusy === "true") return;
+      undoInlineDefenseResourceButton.dataset.fastNriBusy = "true";
+
+      try {
+        await undoInlineDefenseResource(undoInlineDefenseResourceButton);
+      } finally {
+        delete undoInlineDefenseResourceButton.dataset.fastNriBusy;
+      }
+
+      return;
+    }
+
     const undoDefenseResourceButton = event.target.closest("[data-fast-nri-undo-defense-resource]");
     if (undoDefenseResourceButton) {
       event.preventDefault();
@@ -6197,6 +6313,28 @@ export function activateChatInteractions(root = document) {
         delete undoDefenseResourceButton.dataset.fastNriBusy;
       }
 
+      return;
+    }
+
+    const defenseStepRerollButton = event.target.closest("[data-fast-nri-defense-step-reroll]");
+    if (defenseStepRerollButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (defenseStepRerollButton.dataset.fastNriBusy === "true") return;
+      defenseStepRerollButton.dataset.fastNriBusy = "true";
+      try { await multiTargetDefenseStepRerollFromChat(defenseStepRerollButton); }
+      finally { delete defenseStepRerollButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const defenseStepUndoButton = event.target.closest("[data-fast-nri-defense-step-undo]");
+    if (defenseStepUndoButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (defenseStepUndoButton.dataset.fastNriBusy === "true") return;
+      defenseStepUndoButton.dataset.fastNriBusy = "true";
+      try { await multiTargetDefenseStepUndoFromChat(defenseStepUndoButton); }
+      finally { delete defenseStepUndoButton.dataset.fastNriBusy; }
       return;
     }
 
@@ -6241,6 +6379,17 @@ export function activateChatInteractions(root = document) {
       multiTargetAddButton.dataset.fastNriBusy = "true";
       try { await multiTargetAddTargetsFromChat(multiTargetAddButton); }
       finally { delete multiTargetAddButton.dataset.fastNriBusy; }
+      return;
+    }
+
+    const multiTargetAddControlledButton = event.target.closest("[data-fast-nri-multitarget-add-controlled]");
+    if (multiTargetAddControlledButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (multiTargetAddControlledButton.dataset.fastNriBusy === "true") return;
+      multiTargetAddControlledButton.dataset.fastNriBusy = "true";
+      try { await multiTargetAddControlledFromChat(multiTargetAddControlledButton); }
+      finally { delete multiTargetAddControlledButton.dataset.fastNriBusy; }
       return;
     }
 
