@@ -1,17 +1,17 @@
 import { normalizeActionContext } from "./action-context.mjs";
 
 /**
- * Fast NRI 0.5.65 — Unified ActionState foundation.
+ * Fast NRI 0.5.70 — Unified ActionState v2 foundation.
  *
  * This module is deliberately UI-agnostic and Foundry-light. It defines the
  * serializable state contract and pure state transitions for the future
  * Weapon / Ability / Spell / Maneuver / Skill unified pipeline.
  *
- * Legacy workflows are NOT switched to ActionState in 0.5.65.
+ * Legacy workflows are NOT switched to ActionState v2 in 0.5.70. The 0.5.69 QA slice continues through the v1-root compatibility fields until the multi-part UI is proven.
  */
 
-export const ACTION_STATE_SCHEMA_VERSION = 1;
-export const ACTION_DEFINITION_SCHEMA_VERSION = 1;
+export const ACTION_STATE_SCHEMA_VERSION = 2;
+export const ACTION_DEFINITION_SCHEMA_VERSION = 2;
 export const ACTION_STATE_FLAG_SCOPE = "fast-nri";
 export const ACTION_STATE_FLAG_KEY = "actionState";
 
@@ -21,6 +21,26 @@ export const ACTION_DECLARATION_ROLL_MODES = Object.freeze(["none", "attack", "c
 export const ACTION_OUTCOME_ROLL_MODES = Object.freeze(["none", "shared", "perAffected"]);
 export const ACTION_OUTCOME_PROJECTION_STAGES = Object.freeze(["beforeDefense", "afterDefense"]);
 export const RESOLUTION_STEP_STATUSES = Object.freeze(["active", "invalidated", "needs-reresolution"]);
+
+// ActionState v2: one application may contain several independently resolved
+// parts, several named recipient/target slots, and several outcome components.
+// These are data contracts, not rule-name-specific workflows.
+export const ACTION_TARGET_SLOT_ROLES = Object.freeze(["resolution", "recipient"]);
+export const ACTION_TARGET_SLOT_SELECTION_MODES = Object.freeze(["manual", "source", "fixed"]);
+export const ACTION_OUTCOME_COMPONENT_TIMINGS = Object.freeze([
+  "beforeDefense",
+  "resolution",
+  "afterDefense",
+  "application"
+]);
+export const ACTION_OUTCOME_RECIPIENT_TYPES = Object.freeze(["targetSlot", "source", "fixed", "none"]);
+export const ACTION_OUTCOME_ALLOCATION_MODES = Object.freeze([
+  "none",
+  "unitsToTargets",
+  "rolledPartsToTargets"
+]);
+export const ACTION_OUTCOME_DELIVERY_MODES = Object.freeze(["independent", "combineByRecipient"]);
+export const ACTION_REGISTERED_ROLL_KINDS = Object.freeze(["declaration", "outcome", "auxiliary"]);
 
 function text(value) {
   return String(value ?? "").trim();
@@ -137,6 +157,299 @@ function invalidateDownstreamFromDegrees(state) {
   staleFinalization(state);
 }
 
+function normalizeTargetSlotSelection(value = {}, index = 0) {
+  const ref = affectedRef(value) ?? {
+    tokenUuid: text(value?.tokenUuid) || null,
+    actorUuid: text(value?.actorUuid) || null,
+    name: text(value?.name) || null
+  };
+
+  return {
+    selectionId: text(value?.selectionId) || randomId(`selection-${index}`),
+    tokenUuid: ref.tokenUuid,
+    actorUuid: ref.actorUuid,
+    name: ref.name,
+    addedFrom: ["target", "controlled", "manual", "system", "source", "fixed"].includes(value?.addedFrom)
+      ? value.addedFrom
+      : "manual",
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function targetSlotSelectionIdentity(value = {}) {
+  return text(value?.tokenUuid) || text(value?.actorUuid) || text(value?.selectionId);
+}
+
+export function normalizeTargetSlot(value = {}, index = 0) {
+  const roles = uniqueTextList(value?.roles ?? ["resolution", "recipient"])
+    .filter(role => ACTION_TARGET_SLOT_ROLES.includes(role));
+  const selectionMode = enumValue(value?.selectionMode, ACTION_TARGET_SLOT_SELECTION_MODES, "manual");
+  const min = Math.max(0, integerOr(value?.min, 0));
+  const rawMax = value?.max === null || value?.max === undefined || value?.max === ""
+    ? null
+    : Math.max(0, integerOr(value.max, min));
+  const max = rawMax === null ? null : Math.max(min, rawMax);
+  const selections = [];
+  const seen = new Set();
+
+  for (const raw of Array.from(value?.selections ?? [])) {
+    const selection = normalizeTargetSlotSelection(raw, selections.length);
+    const key = targetSlotSelectionIdentity(selection);
+    if (!selection.actorUuid && !selection.tokenUuid) continue;
+    if (!Boolean(value?.allowDuplicates) && key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    selections.push(selection);
+  }
+
+  return {
+    slotId: text(value?.slotId ?? value?.id) || `slot-${index}`,
+    label: text(value?.label) || `Цель ${index + 1}`,
+    roles: roles.length ? roles : ["recipient"],
+    selectionMode,
+    min,
+    max,
+    allowDuplicates: Boolean(value?.allowDuplicates),
+    selections,
+    fixedRef: selectionMode === "fixed" ? affectedRef(value?.fixedRef ?? {}) : null,
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizeOutcomeDependency(value = {}) {
+  return {
+    componentId: text(value?.componentId) || null,
+    condition: text(value?.condition) || "component-resolved",
+    params: jsonClone(value?.params ?? {}, {})
+  };
+}
+
+function normalizeOutcomeRecipient(value = {}) {
+  const type = enumValue(value?.type, ACTION_OUTCOME_RECIPIENT_TYPES, "none");
+  return {
+    type,
+    targetSlotId: type === "targetSlot" ? (text(value?.targetSlotId) || null) : null,
+    fixedRef: type === "fixed" ? affectedRef(value?.fixedRef ?? value?.ref ?? {}) : null
+  };
+}
+
+function normalizeOutcomeValueSource(value = {}) {
+  return {
+    type: text(value?.type) || "none",
+    componentId: text(value?.componentId) || null,
+    rollId: text(value?.rollId) || null,
+    poolId: text(value?.poolId) || null,
+    partId: text(value?.partId) || null,
+    value: finiteNumberOrNull(value?.value),
+    table: jsonClone(value?.table ?? null, null),
+    params: jsonClone(value?.params ?? {}, {})
+  };
+}
+
+function normalizeOutcomeDegreeSource(value = {}) {
+  return {
+    type: text(value?.type) || "none",
+    targetSlotId: text(value?.targetSlotId) || null,
+    resolverId: text(value?.resolverId) || null,
+    params: jsonClone(value?.params ?? {}, {})
+  };
+}
+
+function normalizeOutcomeDelivery(value = {}) {
+  return {
+    mode: enumValue(value?.mode, ACTION_OUTCOME_DELIVERY_MODES, "independent"),
+    key: text(value?.key) || null
+  };
+}
+
+export function normalizeOutcomeComponent(value = {}, index = 0) {
+  return {
+    componentId: text(value?.componentId ?? value?.id) || `component-${index}`,
+    type: text(value?.type ?? value?.kind) || "manual",
+    label: text(value?.label) || null,
+    recipient: normalizeOutcomeRecipient(value?.recipient ?? {}),
+    timing: enumValue(value?.timing, ACTION_OUTCOME_COMPONENT_TIMINGS, "resolution"),
+    degreeSource: normalizeOutcomeDegreeSource(value?.degreeSource ?? {}),
+    valueSource: normalizeOutcomeValueSource(value?.valueSource ?? {}),
+    dependsOn: Array.from(value?.dependsOn ?? []).map(normalizeOutcomeDependency),
+    poolRefs: uniqueTextList(value?.poolRefs ?? []),
+    delivery: normalizeOutcomeDelivery(value?.delivery ?? {}),
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizePartTargetResult(value = {}, index = 0) {
+  return {
+    resultId: text(value?.resultId) || `part-result-${index}`,
+    targetSlotId: text(value?.targetSlotId) || null,
+    selectionId: text(value?.selectionId) || null,
+    tokenUuid: text(value?.tokenUuid) || null,
+    actorUuid: text(value?.actorUuid) || null,
+    name: text(value?.name) || null,
+    degreeState: normalizeDegreeState(value?.degreeState ?? {}),
+    targetResult: value?.targetResult ? normalizeTargetResult(value.targetResult) : null,
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+export function normalizeActionPart(value = {}, index = 0) {
+  const targetSlots = [];
+  const slotIds = new Set();
+  for (const raw of Array.from(value?.targetSlots ?? [])) {
+    const slot = normalizeTargetSlot(raw, targetSlots.length);
+    if (slotIds.has(slot.slotId)) continue;
+    slotIds.add(slot.slotId);
+    targetSlots.push(slot);
+  }
+
+  const outcomeComponents = [];
+  const componentIds = new Set();
+  for (const raw of Array.from(value?.outcomeComponents ?? value?.components ?? [])) {
+    const component = normalizeOutcomeComponent(raw, outcomeComponents.length);
+    if (componentIds.has(component.componentId)) continue;
+    componentIds.add(component.componentId);
+    outcomeComponents.push(component);
+  }
+
+  const declaration = value?.declaration ?? {};
+  return {
+    partId: text(value?.partId ?? value?.id) || `part-${index}`,
+    templateId: text(value?.templateId) || text(value?.partId ?? value?.id) || `part-${index}`,
+    label: text(value?.label) || `Часть ${index + 1}`,
+    order: Math.max(0, integerOr(value?.order, index)),
+    repeatIndex: Math.max(1, integerOr(value?.repeatIndex, 1)),
+    targetSlots,
+    declaration: {
+      rollMode: enumValue(declaration?.rollMode, ACTION_DECLARATION_ROLL_MODES, "none"),
+      formula: text(declaration?.formula) || null,
+      label: text(declaration?.label) || null,
+      degreeResolverId: text(declaration?.degreeResolverId) || null,
+      targetCharacteristic: text(declaration?.targetCharacteristic) || null,
+      rollRefs: uniqueTextList(declaration?.rollRefs ?? [])
+    },
+    outcomeComponents,
+    defenseProcedureIds: uniqueTextList(value?.defenseProcedureIds ?? []),
+    targetResults: Array.from(value?.targetResults ?? []).map(normalizePartTargetResult),
+    revision: Math.max(0, integerOr(value?.revision, 0)),
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizeActionPartTemplate(value = {}, index = 0) {
+  const part = normalizeActionPart(value, index);
+  return {
+    ...part,
+    repeat: {
+      count: Math.max(1, integerOr(value?.repeat?.count ?? value?.repeat, 1))
+    },
+    targetSlots: part.targetSlots.map(slot => ({ ...slot, selections: [] })),
+    targetResults: []
+  };
+}
+
+export function expandActionPartTemplates(templates = []) {
+  const result = [];
+  for (const [templateIndex, raw] of Array.from(templates ?? []).entries()) {
+    const template = normalizeActionPartTemplate(raw, templateIndex);
+    const count = template.repeat.count;
+    for (let repeatIndex = 1; repeatIndex <= count; repeatIndex += 1) {
+      const suffix = count > 1 ? `-${repeatIndex}` : "";
+      const label = count > 1 ? `${template.label} ${repeatIndex}` : template.label;
+      result.push(normalizeActionPart({
+        ...template,
+        partId: `${template.partId}${suffix}`,
+        templateId: template.templateId || template.partId,
+        label,
+        order: result.length,
+        repeatIndex,
+        repeat: undefined
+      }, result.length));
+    }
+  }
+  return result;
+}
+
+function sourceSelectionFromContext(actionContext = {}) {
+  const context = normalizeActionContext(actionContext);
+  const tokenUuid = text(context?.initiator?.tokenUuid);
+  const actorUuid = text(context?.initiator?.actorUuid ?? context?.source?.actorUuid);
+  if (!tokenUuid && !actorUuid) return null;
+  return normalizeTargetSlotSelection({
+    selectionId: "source",
+    tokenUuid: tokenUuid || null,
+    actorUuid: actorUuid || null,
+    name: null,
+    addedFrom: "source"
+  });
+}
+
+function bindAutomaticTargetSlots(parts = [], actionContext = {}) {
+  const sourceSelection = sourceSelectionFromContext(actionContext);
+  return Array.from(parts ?? []).map(rawPart => {
+    const part = normalizeActionPart(rawPart);
+    part.targetSlots = part.targetSlots.map(slot => {
+      if (slot.selectionMode === "source") {
+        return { ...slot, selections: sourceSelection ? [sourceSelection] : [] };
+      }
+      if (slot.selectionMode === "fixed") {
+        const fixed = slot.fixedRef ? normalizeTargetSlotSelection({ ...slot.fixedRef, selectionId: "fixed", addedFrom: "fixed" }) : null;
+        return { ...slot, selections: fixed ? [fixed] : [] };
+      }
+      return slot;
+    });
+    return part;
+  });
+}
+
+export function normalizeRegisteredRoll(value = {}, index = 0) {
+  return {
+    rollId: text(value?.rollId ?? value?.id) || `roll-${index}`,
+    partId: text(value?.partId) || null,
+    kind: enumValue(value?.kind, ACTION_REGISTERED_ROLL_KINDS, "auxiliary"),
+    label: text(value?.label) || null,
+    roll: normalizeRollState(value?.roll ?? value),
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizeOutcomeUnit(value = {}, index = 0) {
+  return {
+    unitId: text(value?.unitId ?? value?.id) || `unit-${index}`,
+    label: text(value?.label) || null,
+    parts: Array.from(value?.parts ?? []).map(normalizeOutcomePart),
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizeAllocationAssignment(value = {}, index = 0) {
+  return {
+    assignmentId: text(value?.assignmentId) || `assignment-${index}`,
+    unitId: text(value?.unitId ?? value?.partId) || null,
+    targetSlotId: text(value?.targetSlotId) || null,
+    selectionId: text(value?.selectionId) || null,
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
+function normalizeOutcomeAllocation(value = {}) {
+  return {
+    mode: enumValue(value?.mode, ACTION_OUTCOME_ALLOCATION_MODES, "none"),
+    assignments: Array.from(value?.assignments ?? []).map(normalizeAllocationAssignment)
+  };
+}
+
+export function normalizeRegisteredPool(value = {}, index = 0) {
+  return {
+    poolId: text(value?.poolId ?? value?.id) || `registered-pool-${index}`,
+    partId: text(value?.partId) || null,
+    componentId: text(value?.componentId) || null,
+    formula: text(value?.formula) || null,
+    parts: Array.from(value?.parts ?? []).map(normalizeOutcomePart),
+    units: Array.from(value?.units ?? []).map(normalizeOutcomeUnit),
+    allocation: normalizeOutcomeAllocation(value?.allocation ?? {}),
+    metadata: jsonClone(value?.metadata ?? {}, {})
+  };
+}
+
 export function normalizeActionDefinitionSnapshot(value = {}) {
   const declaration = value?.declaration ?? {};
   const outcome = value?.outcome ?? {};
@@ -171,6 +484,7 @@ export function normalizeActionDefinitionSnapshot(value = {}) {
       componentKinds: uniqueTextList(outcome?.componentKinds ?? [])
     },
     defenseProcedureIds: uniqueTextList(value?.defenseProcedureIds ?? []),
+    parts: Array.from(value?.parts ?? value?.partTemplates ?? []).map(normalizeActionPartTemplate),
     metadata: jsonClone(value?.metadata ?? {}, {})
   };
 }
@@ -458,6 +772,10 @@ export function normalizeActionState(value = {}) {
     rootMessageId: text(value?.rootMessageId ?? actionContext.rootMessageId) || null,
     actionContext,
     definition,
+    parts: Array.from(value?.parts ?? []).map(normalizeActionPart),
+    rollRegistry: Array.from(value?.rollRegistry ?? []).map(normalizeRegisteredRoll),
+    poolRegistry: Array.from(value?.poolRegistry ?? []).map(normalizeRegisteredPool),
+    // v1-root compatibility fields remain until the 0.5.69 QA UI is replaced.
     declarationRoll: normalizeRollState(value?.declarationRoll ?? {}),
     affected,
     degreeResolution: normalizeDegreeResolution(value?.degreeResolution ?? {}),
@@ -475,11 +793,16 @@ export function createActionState({
   metadata = {}
 } = {}) {
   const context = normalizeActionContext(actionContext);
+  const definitionSnapshot = normalizeActionDefinitionSnapshot(definition);
+  const parts = bindAutomaticTargetSlots(expandActionPartTemplates(definitionSnapshot.parts), context);
   return normalizeActionState({
     actionId: context.actionId,
     rootMessageId,
     actionContext: context,
-    definition,
+    definition: definitionSnapshot,
+    parts,
+    rollRegistry: [],
+    poolRegistry: [],
     declarationRoll: { status: "empty" },
     affected: [],
     degreeResolution: { status: "empty" },
@@ -493,6 +816,547 @@ export function createActionState({
     revisions: {},
     metadata
   });
+}
+
+function requireActionPart(state, partId) {
+  const part = state.parts.find(entry => entry.partId === text(partId));
+  if (!part) throw new Error(`unknown-action-part:${text(partId) || "missing"}`);
+  return part;
+}
+
+function requireTargetSlot(part, slotId) {
+  const slot = part.targetSlots.find(entry => entry.slotId === text(slotId));
+  if (!slot) throw new Error(`unknown-target-slot:${part.partId}:${text(slotId) || "missing"}`);
+  return slot;
+}
+
+export function addTargetSlotSelections(
+  actionState,
+  partId,
+  slotId,
+  entries,
+  { addedFrom = "manual" } = {}
+) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const slot = requireTargetSlot(part, slotId);
+  const source = Array.isArray(entries) ? entries : [entries];
+  const existing = new Set(slot.selections.map(targetSlotSelectionIdentity).filter(Boolean));
+  let changed = false;
+
+  for (const raw of source) {
+    const ref = affectedRef(raw);
+    if (!ref) continue;
+    const identity = targetSlotSelectionIdentity(ref);
+    if (!slot.allowDuplicates && identity && existing.has(identity)) continue;
+    const selection = normalizeTargetSlotSelection({ ...ref, addedFrom });
+    slot.selections.push(selection);
+    if (identity) existing.add(identity);
+    changed = true;
+  }
+
+  if (changed) {
+    part.revision += 1;
+    bump(next, ["roster"]);
+    staleFinalization(next);
+  }
+  return normalizeActionState(next);
+}
+
+export function removeTargetSlotSelection(actionState, partId, slotId, selectionIdOrRef) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const slot = requireTargetSlot(part, slotId);
+  const key = typeof selectionIdOrRef === "string"
+    ? text(selectionIdOrRef)
+    : targetSlotSelectionIdentity(selectionIdOrRef ?? {});
+  const before = slot.selections.length;
+  slot.selections = slot.selections.filter(selection => {
+    if (selection.selectionId === key) return false;
+    if (selection.tokenUuid && selection.tokenUuid === key) return false;
+    if (selection.actorUuid && selection.actorUuid === key) return false;
+    return true;
+  });
+  if (slot.selections.length !== before) {
+    // A TargetSlot selection is the identity anchor for its per-target result
+    // and for allocation assignments. Removing the selection must not leave
+    // hidden resolution/application state behind.
+    part.targetResults = part.targetResults.filter(result => !(
+      result.targetSlotId === slot.slotId && (
+        result.selectionId === key
+        || result.tokenUuid === key
+        || result.actorUuid === key
+      )
+    ));
+    for (const pool of next.poolRegistry) {
+      if (pool.partId !== part.partId) continue;
+      pool.allocation.assignments = pool.allocation.assignments.filter(assignment => !(
+        assignment.targetSlotId === slot.slotId && assignment.selectionId === key
+      ));
+    }
+    part.revision += 1;
+    bump(next, ["roster", "resolution"]);
+    staleFinalization(next);
+  }
+  return normalizeActionState(next);
+}
+
+export function registerActionRoll(actionState, rollEntry, { attach = true } = {}) {
+  const next = normalizeActionState(actionState);
+  const entry = normalizeRegisteredRoll(rollEntry, next.rollRegistry.length);
+  if (!entry.rollId) throw new Error("registered-roll-id-required");
+  if (entry.partId) requireActionPart(next, entry.partId);
+
+  const index = next.rollRegistry.findIndex(existing => existing.rollId === entry.rollId);
+  if (index >= 0) next.rollRegistry[index] = entry;
+  else next.rollRegistry.push(entry);
+
+  if (attach && entry.kind === "declaration" && entry.partId) {
+    const part = requireActionPart(next, entry.partId);
+    part.declaration.rollRefs = uniqueTextList([...part.declaration.rollRefs, entry.rollId]);
+    part.revision += 1;
+    bump(next, ["declaration"]);
+  } else {
+    bump(next, entry.kind === "outcome" ? ["outcome"] : []);
+  }
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function registerOutcomePool(actionState, poolEntry, { attach = true } = {}) {
+  const next = normalizeActionState(actionState);
+  const entry = normalizeRegisteredPool(poolEntry, next.poolRegistry.length);
+  if (entry.partId) requireActionPart(next, entry.partId);
+
+  const index = next.poolRegistry.findIndex(existing => existing.poolId === entry.poolId);
+  if (index >= 0) next.poolRegistry[index] = entry;
+  else next.poolRegistry.push(entry);
+
+  if (attach && entry.partId && entry.componentId) {
+    const part = requireActionPart(next, entry.partId);
+    const component = part.outcomeComponents.find(item => item.componentId === entry.componentId);
+    if (!component) throw new Error(`unknown-outcome-component:${entry.partId}:${entry.componentId}`);
+    component.poolRefs = uniqueTextList([...component.poolRefs, entry.poolId]);
+    part.revision += 1;
+  }
+
+  bump(next, ["outcome"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function assignOutcomeUnitToTarget(actionState, {
+  poolId,
+  unitId,
+  targetSlotId,
+  selectionId
+} = {}) {
+  const next = normalizeActionState(actionState);
+  const pool = next.poolRegistry.find(entry => entry.poolId === text(poolId));
+  if (!pool) throw new Error(`unknown-outcome-pool:${text(poolId) || "missing"}`);
+  const part = requireActionPart(next, pool.partId);
+  const slot = requireTargetSlot(part, targetSlotId);
+  const selection = slot.selections.find(entry => entry.selectionId === text(selectionId));
+  if (!selection) throw new Error(`unknown-target-selection:${part.partId}:${slot.slotId}:${text(selectionId) || "missing"}`);
+  const normalizedUnitId = text(unitId);
+  if (!normalizedUnitId) throw new Error("allocation-unit-id-required");
+  if (pool.allocation.mode === "rolledPartsToTargets" && !pool.parts.some(entry => entry.partId === normalizedUnitId)) {
+    throw new Error(`unknown-allocation-part:${pool.poolId}:${normalizedUnitId}`);
+  }
+  if (pool.allocation.mode === "unitsToTargets" && !pool.units.some(entry => entry.unitId === normalizedUnitId)) {
+    throw new Error(`unknown-allocation-unit:${pool.poolId}:${normalizedUnitId}`);
+  }
+  if (pool.allocation.mode === "none") {
+    throw new Error(`outcome-pool-not-allocatable:${pool.poolId}`);
+  }
+
+  // One concrete rolled part/charge can be assigned to only one recipient at a time.
+  pool.allocation.assignments = pool.allocation.assignments
+    .filter(assignment => assignment.unitId !== normalizedUnitId);
+  pool.allocation.assignments.push(normalizeAllocationAssignment({
+    unitId: normalizedUnitId,
+    targetSlotId: slot.slotId,
+    selectionId: selection.selectionId
+  }, pool.allocation.assignments.length));
+  bump(next, ["outcome"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function upsertPartTargetResult(actionState, partId, value = {}) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const normalized = normalizePartTargetResult(value, part.targetResults.length);
+  if (!normalized.targetSlotId || !normalized.selectionId) {
+    throw new Error("part-target-result-needs-slot-and-selection");
+  }
+  requireTargetSlot(part, normalized.targetSlotId);
+  const key = `${normalized.targetSlotId}:${normalized.selectionId}`;
+  const index = part.targetResults.findIndex(result => `${result.targetSlotId}:${result.selectionId}` === key);
+  if (index >= 0) part.targetResults[index] = normalized;
+  else part.targetResults.push(normalized);
+  part.revision += 1;
+  bump(next, ["resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+
+/** Resolve one concrete resolution TargetSlot selection from the declaration
+ * roll already registered on its ActionPart. The resolver is pure and MUST NOT
+ * roll dice. This is the v2 equivalent of resolveAffectedDegree(). */
+export function resolvePartTargetSelectionDegree(
+  actionState,
+  partId,
+  slotId,
+  selectionId,
+  resolver
+) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const slot = requireTargetSlot(part, slotId);
+  if (!slot.roles.includes("resolution")) return next;
+  const selection = slot.selections.find(entry => entry.selectionId === text(selectionId));
+  if (!selection) throw new Error(`unknown-target-selection:${part.partId}:${slot.slotId}:${text(selectionId) || "missing"}`);
+
+  const rollEntry = part.declaration.rollRefs
+    .map(rollId => next.rollRegistry.find(entry => entry.rollId === rollId))
+    .find(Boolean) ?? null;
+  const declarationRoll = rollEntry?.roll ?? normalizeRollState({ status: "empty", formula: part.declaration.formula });
+  let resolved;
+  try {
+    resolved = typeof resolver === "function"
+      ? resolver({
+          part: jsonClone(part, {}),
+          targetSlot: jsonClone(slot, {}),
+          selection: jsonClone(selection, {}),
+          declarationRoll: jsonClone(declarationRoll, {}),
+          definition: jsonClone(next.definition, {}),
+          actionContext: jsonClone(next.actionContext, {}),
+          actionState: jsonClone(next, {})
+        })
+      : { error: "missing-degree-resolver" };
+  } catch (error) {
+    resolved = { error: error?.message || "degree-resolver-threw" };
+  }
+
+  const degree = normalizeDegree(resolved?.degree ?? resolved?.baseDegree);
+  const key = `${slot.slotId}:${selection.selectionId}`;
+  const resultIndex = part.targetResults.findIndex(result => `${result.targetSlotId}:${result.selectionId}` === key);
+  const previous = resultIndex >= 0 ? part.targetResults[resultIndex] : null;
+  const resultId = previous?.resultId || randomId(`part-result-${part.partId}`);
+
+  let partResult;
+  if (!degree) {
+    partResult = normalizePartTargetResult({
+      resultId,
+      targetSlotId: slot.slotId,
+      selectionId: selection.selectionId,
+      tokenUuid: selection.tokenUuid,
+      actorUuid: selection.actorUuid,
+      name: selection.name,
+      degreeState: {
+        status: "error",
+        resolverId: text(resolved?.resolverId) || part.declaration.degreeResolverId,
+        input: resolved?.input ?? null,
+        declarationTotal: declarationRoll.total,
+        naturalD20: declarationRoll.naturalD20,
+        basedOnDeclarationRevision: next.revisions.declaration,
+        basedOnRosterRevision: next.revisions.roster,
+        error: resolved?.error || "missing-or-invalid-target-threshold"
+      },
+      targetResult: null,
+      metadata: previous?.metadata ?? {}
+    });
+  } else {
+    const degreeState = normalizeDegreeState({
+      status: "resolved",
+      resolverId: text(resolved?.resolverId) || part.declaration.degreeResolverId,
+      baseDegree: degree,
+      calculatedDegree: degree,
+      manualAdjusted: false,
+      input: resolved?.input ?? null,
+      declarationTotal: declarationRoll.total,
+      naturalD20: declarationRoll.naturalD20,
+      basedOnDeclarationRevision: next.revisions.declaration,
+      basedOnRosterRevision: next.revisions.roster
+    });
+    const oldTarget = previous?.targetResult ? normalizeTargetResult(previous.targetResult) : null;
+    const targetResult = normalizeTargetResult({
+      affectedId: resultId,
+      base: oldTarget?.base ?? { degree, effectDegree: degree, outcomeViews: [], components: [] },
+      steps: oldTarget?.steps ?? [],
+      current: oldTarget?.current ?? { degree, effectDegree: degree, outcomeViews: [], components: [] },
+      revision: oldTarget?.revision ?? 0,
+      stale: false
+    });
+    targetResult.base.degree = degree;
+    targetResult.base.effectDegree = degree;
+    partResult = normalizePartTargetResult({
+      resultId,
+      targetSlotId: slot.slotId,
+      selectionId: selection.selectionId,
+      tokenUuid: selection.tokenUuid,
+      actorUuid: selection.actorUuid,
+      name: selection.name,
+      degreeState,
+      targetResult: recalculateTargetResult(targetResult),
+      metadata: previous?.metadata ?? {}
+    });
+  }
+
+  if (resultIndex >= 0) part.targetResults[resultIndex] = partResult;
+  else part.targetResults.push(partResult);
+  part.revision += 1;
+  bump(next, ["degrees", "resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+/** Resolve all current selections in all resolution-role TargetSlots. */
+export function resolveAllPartTargetDegrees(actionState, resolver) {
+  let next = normalizeActionState(actionState);
+  const identities = [];
+  for (const part of next.parts) {
+    for (const slot of part.targetSlots) {
+      if (!slot.roles.includes("resolution")) continue;
+      for (const selection of slot.selections) {
+        identities.push([part.partId, slot.slotId, selection.selectionId]);
+      }
+    }
+  }
+  for (const [partId, slotId, selectionId] of identities) {
+    next = resolvePartTargetSelectionDegree(next, partId, slotId, selectionId, resolver);
+  }
+  return normalizeActionState(next);
+}
+
+export function setPartTargetDegree(actionState, partId, slotId, selectionId, degree) {
+  const normalizedDegree = normalizeDegree(degree);
+  const next = normalizeActionState(actionState);
+  if (!normalizedDegree) return next;
+  const part = requireActionPart(next, partId);
+  requireTargetSlot(part, slotId);
+  const result = part.targetResults.find(entry => entry.targetSlotId === text(slotId) && entry.selectionId === text(selectionId));
+  if (!result || result.degreeState?.status !== "resolved" || !result.targetResult) return next;
+
+  const calculatedDegree = normalizeDegree(result.degreeState.calculatedDegree ?? result.degreeState.baseDegree) ?? normalizedDegree;
+  result.degreeState = normalizeDegreeState({
+    ...result.degreeState,
+    baseDegree: normalizedDegree,
+    calculatedDegree,
+    manualAdjusted: normalizedDegree !== calculatedDegree,
+    error: null
+  });
+  const target = normalizeTargetResult(result.targetResult);
+  target.base.degree = normalizedDegree;
+  target.base.effectDegree = normalizedDegree;
+  result.targetResult = recalculateTargetResult(target);
+  part.revision += 1;
+  bump(next, ["degrees", "resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function shiftPartTargetDegree(actionState, partId, slotId, selectionId, delta = 0) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const result = part.targetResults.find(entry => entry.targetSlotId === text(slotId) && entry.selectionId === text(selectionId));
+  const current = normalizeDegree(result?.degreeState?.baseDegree);
+  if (!current) return next;
+  const index = ACTION_DEGREES.indexOf(current);
+  const targetIndex = Math.max(0, Math.min(ACTION_DEGREES.length - 1, index + integerOr(delta, 0)));
+  if (targetIndex === index) return next;
+  return setPartTargetDegree(next, partId, slotId, selectionId, ACTION_DEGREES[targetIndex]);
+}
+
+export function setPartTargetResultBase(actionState, partId, slotId, selectionId, snapshot, { preserveSteps = true } = {}) {
+  const next = normalizeActionState(actionState);
+  const part = requireActionPart(next, partId);
+  const result = part.targetResults.find(entry => entry.targetSlotId === text(slotId) && entry.selectionId === text(selectionId));
+  if (!result?.targetResult) return next;
+  const target = normalizeTargetResult(result.targetResult);
+  target.base = normalizeResultSnapshot(snapshot);
+  if (!preserveSteps) target.steps = [];
+  target.stale = false;
+  result.targetResult = recalculateTargetResult(target);
+  part.revision += 1;
+  bump(next, ["resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+function requirePartTargetResult(state, partId, slotId, selectionId) {
+  const part = requireActionPart(state, partId);
+  requireTargetSlot(part, slotId);
+  const result = part.targetResults.find(entry => entry.targetSlotId === text(slotId) && entry.selectionId === text(selectionId));
+  if (!result?.targetResult) throw new Error(`unknown-part-target-result:${part.partId}:${text(slotId)}:${text(selectionId)}`);
+  return { part, result };
+}
+
+export function appendPartResolutionStep(actionState, partId, slotId, selectionId, step, options = {}) {
+  const next = normalizeActionState(actionState);
+  const { part, result } = requirePartTargetResult(next, partId, slotId, selectionId);
+  const target = normalizeTargetResult(result.targetResult);
+  target.steps.push(normalizeResolutionStep({ ...step, affectedId: target.affectedId }));
+  target.revision += 1;
+  target.stale = false;
+  result.targetResult = recalculateTargetResult(target, options);
+  part.revision += 1;
+  bump(next, ["resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function rerollPartResolutionStep(actionState, partId, slotId, selectionId, stepId, rollState, {
+  deriveOperation = null,
+  operationResolvers = {}
+} = {}) {
+  const next = normalizeActionState(actionState);
+  const { part, result } = requirePartTargetResult(next, partId, slotId, selectionId);
+  const target = normalizeTargetResult(result.targetResult);
+  const index = target.steps.findIndex(step => step.stepId === text(stepId));
+  if (index < 0) return next;
+  const previous = target.steps[index];
+  const rerolled = normalizeResolutionStep({ ...previous, roll: normalizeRollState(rollState), wasRerolled: true });
+  target.steps[index] = rerolled;
+  if (typeof deriveOperation === "function") {
+    const before = recalculateTargetResult({ ...target, steps: target.steps.slice(0, index) }, { operationResolvers });
+    const operation = deriveOperation({
+      step: jsonClone(rerolled, {}),
+      targetResult: jsonClone(target, {}),
+      before: jsonClone(before, {})
+    });
+    target.steps[index] = normalizeResolutionStep({ ...rerolled, operation });
+  }
+  target.revision += 1;
+  target.stale = false;
+  result.targetResult = recalculateTargetResult(target, { operationResolvers });
+  part.revision += 1;
+  bump(next, ["resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function removePartResolutionStep(actionState, partId, slotId, selectionId, stepId, options = {}) {
+  const next = normalizeActionState(actionState);
+  const { part, result } = requirePartTargetResult(next, partId, slotId, selectionId);
+  const target = normalizeTargetResult(result.targetResult);
+  const before = target.steps.length;
+  target.steps = target.steps.filter(step => step.stepId !== text(stepId));
+  if (target.steps.length === before) return next;
+  target.revision += 1;
+  target.stale = false;
+  result.targetResult = recalculateTargetResult(target, options);
+  part.revision += 1;
+  bump(next, ["resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function validateActionStateV2(actionState) {
+  const state = normalizeActionState(actionState);
+  const diagnostics = [];
+  const partIds = new Set(state.parts.map(part => part.partId));
+  const rollIds = new Set(state.rollRegistry.map(entry => entry.rollId));
+  const poolIds = new Set(state.poolRegistry.map(entry => entry.poolId));
+
+  const push = (level, code, detail = {}) => diagnostics.push({ level, code, ...detail });
+
+  for (const roll of state.rollRegistry) {
+    if (roll.partId && !partIds.has(roll.partId)) {
+      push("error", "roll-unknown-part", { rollId: roll.rollId, partId: roll.partId });
+    }
+  }
+
+  for (const part of state.parts) {
+    const slots = new Map(part.targetSlots.map(slot => [slot.slotId, slot]));
+    const components = new Map(part.outcomeComponents.map(component => [component.componentId, component]));
+
+    for (const slot of part.targetSlots) {
+      if (slot.selections.length < slot.min) {
+        push("warning", "target-slot-below-min", { partId: part.partId, slotId: slot.slotId, min: slot.min, count: slot.selections.length });
+      }
+      if (slot.max !== null && slot.selections.length > slot.max) {
+        // Soft automation: limits are diagnostics, not state mutation/hard blocks.
+        push("warning", "target-slot-above-max", { partId: part.partId, slotId: slot.slotId, max: slot.max, count: slot.selections.length });
+      }
+      if ((slot.selectionMode === "source" || slot.selectionMode === "fixed") && !slot.selections.length) {
+        push("warning", "automatic-target-slot-unresolved", { partId: part.partId, slotId: slot.slotId });
+      }
+    }
+
+    for (const rollRef of part.declaration.rollRefs) {
+      if (!rollIds.has(rollRef)) {
+        push("error", "part-missing-roll-ref", { partId: part.partId, rollId: rollRef });
+      }
+    }
+
+    for (const component of part.outcomeComponents) {
+      if (component.recipient.type === "targetSlot" && !slots.has(component.recipient.targetSlotId)) {
+        push("error", "component-unknown-target-slot", {
+          partId: part.partId,
+          componentId: component.componentId,
+          slotId: component.recipient.targetSlotId
+        });
+      }
+      for (const dependency of component.dependsOn) {
+        if (dependency.componentId && !components.has(dependency.componentId)) {
+          push("error", "component-unknown-dependency", {
+            partId: part.partId,
+            componentId: component.componentId,
+            dependencyId: dependency.componentId
+          });
+        }
+      }
+      for (const poolRef of component.poolRefs) {
+        if (!poolIds.has(poolRef)) {
+          push("error", "component-missing-pool-ref", {
+            partId: part.partId,
+            componentId: component.componentId,
+            poolId: poolRef
+          });
+        }
+      }
+    }
+  }
+
+  for (const pool of state.poolRegistry) {
+    if (pool.partId && !partIds.has(pool.partId)) {
+      push("error", "pool-unknown-part", { poolId: pool.poolId, partId: pool.partId });
+      continue;
+    }
+    if (!pool.partId) continue;
+    const part = state.parts.find(entry => entry.partId === pool.partId);
+    const component = pool.componentId
+      ? part.outcomeComponents.find(entry => entry.componentId === pool.componentId)
+      : null;
+    if (pool.componentId && !component) {
+      push("error", "pool-unknown-component", { poolId: pool.poolId, partId: pool.partId, componentId: pool.componentId });
+    }
+
+    const slots = new Map(part.targetSlots.map(slot => [slot.slotId, slot]));
+    const validRolledParts = new Set(pool.parts.map(entry => entry.partId));
+    const validUnits = new Set(pool.units.map(entry => entry.unitId));
+    for (const assignment of pool.allocation.assignments) {
+      const slot = slots.get(assignment.targetSlotId);
+      if (!slot) {
+        push("error", "allocation-unknown-target-slot", { poolId: pool.poolId, targetSlotId: assignment.targetSlotId });
+        continue;
+      }
+      if (!slot.selections.some(entry => entry.selectionId === assignment.selectionId)) {
+        push("error", "allocation-unknown-selection", { poolId: pool.poolId, targetSlotId: assignment.targetSlotId, selectionId: assignment.selectionId });
+      }
+      if (pool.allocation.mode === "rolledPartsToTargets" && !validRolledParts.has(assignment.unitId)) {
+        push("error", "allocation-unknown-rolled-part", { poolId: pool.poolId, unitId: assignment.unitId });
+      }
+      if (pool.allocation.mode === "unitsToTargets" && !validUnits.has(assignment.unitId)) {
+        push("error", "allocation-unknown-unit", { poolId: pool.poolId, unitId: assignment.unitId });
+      }
+    }
+  }
+
+  return diagnostics;
 }
 
 export function setDeclarationRoll(actionState, rollState) {

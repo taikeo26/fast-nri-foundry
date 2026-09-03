@@ -1,6 +1,6 @@
 {
   "_id": "qaUnified066Macr",
-  "name": "QA 0.5.69 — Unified ActionState",
+  "name": "QA 0.5.69 — Unified ActionState (legacy bridge)",
   "type": "script",
   "scope": "global",
   "command": "game.fastNri.qa.startUnifiedAction();",
@@ -14,7 +14,7 @@
   "flags": {
     "fast-nri": {
       "testFixture": "0.5.69",
-      "qaPurpose": "unified-actionstate-vertical-slice"
+      "qaPurpose": "unified-actionstate-v1-bridge"
     }
   }
 }

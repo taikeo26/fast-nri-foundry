@@ -3,7 +3,7 @@
   "id": "fast-nri",
   "title": "Быстрая НРИ 6.3",
   "description": "Базовая система «Быстрая НРИ 6.3» для Foundry VTT 14.",
-  "version": "0.5.69",
+  "version": "0.5.71",
   "compatibility": {
     "minimum": 14,
     "verified": 14
@@ -29,7 +29,7 @@
     },
     {
       "name": "qa-unified-action",
-      "label": "Быстрая НРИ — QA Unified ActionState 0.5.69",
+      "label": "Быстрая НРИ — QA ActionState v2 0.5.71",
       "system": "fast-nri",
       "path": "packs/qa-unified-action",
       "type": "Macro"
@@ -116,5 +116,5 @@
   "media": [],
   "url": "https://github.com/taikeo26/fast-nri-foundry",
   "manifest": "https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json",
-  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.69/fast-nri.zip"
+  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.71/fast-nri.zip"
 }

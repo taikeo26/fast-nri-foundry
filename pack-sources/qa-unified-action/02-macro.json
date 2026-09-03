@@ -1,0 +1,20 @@
+{
+  "_id": "qaV2Arrows071AAA",
+  "name": "QA 0.5.71 — 3 независимые атаки",
+  "type": "script",
+  "scope": "global",
+  "command": "game.fastNri.qa.startMultiAttack();",
+  "img": "icons/svg/d20.svg",
+  "author": null,
+  "folder": null,
+  "sort": 10,
+  "ownership": {
+    "default": 0
+  },
+  "flags": {
+    "fast-nri": {
+      "testFixture": "0.5.71",
+      "qaPurpose": "actionstate-v2-multi-attack"
+    }
+  }
+}

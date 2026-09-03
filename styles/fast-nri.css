@@ -3940,3 +3940,37 @@ button.fast-nri-property-reference:hover {
   min-width: 1.8rem;
   padding-inline: 0.35rem;
 }
+
+/* 0.5.71 — ActionState v2 multi-part QA */
+.fast-nri-v2-card .fast-nri-v2-part {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fast-nri-v2-part-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px solid var(--color-border-light-primary, #8886);
+}
+
+.fast-nri-v2-part-title code {
+  opacity: 0.65;
+  font-size: 0.75em;
+}
+
+.fast-nri-v2-slot {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+  padding: 0.45rem;
+  border: 1px solid var(--color-border-light-primary, #8886);
+  border-radius: 4px;
+}
+
+.fast-nri-v2-slot .fast-nri-qa-stage-title small {
+  opacity: 0.65;
+  font-weight: 400;
+}
