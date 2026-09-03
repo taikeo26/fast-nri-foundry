@@ -35,6 +35,7 @@ import {
 import { activateAbilityChatInteractions } from "./module/ability-use.mjs";
 import { activateAbilityAreaPlacement } from "./module/area-templates.mjs";
 import { activateChatInteractions } from "./module/rolls.mjs";
+import { activateUnifiedActionQa } from "./module/qa-action-slice.mjs";
 import {
   migrateDefenseAbilitiesOnce,
   registerDefenseActionSettings
@@ -122,6 +123,7 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
   console.log("Быстрая НРИ 6.3 | Система готова");
   activateChatInteractions(document);
+  activateUnifiedActionQa(document);
   activateAbilityChatInteractions(document);
   activateAbilityAreaPlacement();
   activateHealthChatInteractions(document);
