@@ -12,18 +12,20 @@ import {
   recalculateTargetResult,
   removeAffected,
   removeResolutionStep,
+  resolveAffectedDegree,
   rerollAllFinalResultDice,
   rerollFinalResultDie,
   rerollResolutionStep,
   resolveDegrees,
   setDeclarationRoll,
   setOutcomeResolution,
-  setTargetResultBase
+  setTargetResultBase,
+  shiftAffectedDegree
 } from "./action-state.mjs";
 import { HP_FEEDBACK_SUPPRESS_OPTION } from "./hp-feedback.mjs";
 
 /**
- * Fast NRI 0.5.66 — isolated live-QA vertical slice for Unified ActionState.
+ * Fast NRI 0.5.68 — reusable-declaration two-card isolated live-QA vertical slice for Unified ActionState.
  *
  * This is deliberately NOT a Weapon/Ability/Spell/Maneuver adapter. It exposes
  * one artificial ActionDefinition through game.fastNri.qa and a QA Macro pack,
@@ -31,7 +33,9 @@ import { HP_FEEDBACK_SUPPRESS_OPTION } from "./hp-feedback.mjs";
  * runtime paths.
  */
 
-export const QA_UNIFIED_KIND = "qa-unified-action";
+export const QA_DECLARATION_KIND = "qa-unified-declaration";
+export const QA_RESOLUTION_KIND = "qa-unified-resolution";
+export const QA_UNIFIED_KIND = QA_RESOLUTION_KIND;
 export const QA_FINAL_KIND = "qa-unified-final-result";
 export const QA_APPLICATION_KIND = "qa-unified-application";
 export const QA_DECLARATION_FORMULA = "1d20 + 1d8";
@@ -138,7 +142,7 @@ async function showInPlaceRollDice(roll, { synchronize = true } = {}) {
   try {
     return Boolean(await dice3d.showForRoll(roll, game.user, Boolean(synchronize), null, false));
   } catch (error) {
-    console.warn("Быстрая НРИ | QA 0.5.66: не удалось показать 3D бросок", error);
+    console.warn("Быстрая НРИ | QA 0.5.68: не удалось показать 3D бросок", error);
     return false;
   }
 }
@@ -155,8 +159,8 @@ function qaDefinition() {
     sourceRef: {
       actorUuid: null,
       itemUuid: null,
-      name: "QA 0.5.66 — Unified ActionState",
-      implementationId: "qa-unified-066"
+      name: "QA 0.5.68 — Unified ActionState",
+      implementationId: "qa-unified-067"
     },
     traits: ["attack", "area", "qa"],
     declaration: {
@@ -175,7 +179,7 @@ function qaDefinition() {
     },
     defenseProcedureIds: ["qa-defense"],
     metadata: {
-      qaFixture: "0.5.66",
+      qaFixture: "0.5.68",
       profiles: { ...QA_PROFILE_ACTIVE_DICE },
       defenseDc: QA_DEFENSE_DC
     }
@@ -190,7 +194,7 @@ function qaContext() {
       actorUuid: null,
       itemUuid: null,
       itemType: "ability",
-      name: "QA 0.5.66 — Unified ActionState"
+      name: "QA 0.5.68 — Unified ActionState"
     },
     initiator: { actorUuid: null, tokenUuid: null },
     targets: [],
@@ -341,7 +345,7 @@ function degreeStateHTML(entry) {
     const threshold = armor
       ? `КЗ ${armor.partial ?? "—"}/${armor.success ?? "—"}/${armor.great ?? "—"}`
       : "КЗ —";
-    return `<span class="fast-nri-qa-degree">${esc(threshold)} · <strong>${esc(DEGREE_LABELS[state.baseDegree] ?? state.baseDegree)}</strong></span>`;
+    return `<span class="fast-nri-qa-degree">${esc(threshold)} · <strong>${esc(DEGREE_LABELS[state.baseDegree] ?? state.baseDegree)}</strong>${state.manualAdjusted ? " · ручная правка" : ""}</span>`;
   }
   if (state.status === "error") {
     return `<span class="fast-nri-qa-degree fast-nri-qa-error">Степень не определена · ${esc(state.error || "ошибка порога")}</span>`;
@@ -378,22 +382,20 @@ function defenseRowsHTML(entry) {
   }).join("")}</div>`;
 }
 
-export function qaActionCardHTML(rawState) {
+function degreeControlsHTML(entry) {
+  if (entry.degreeState?.status !== "resolved") return "";
+  return `<span class="fast-nri-qa-degree-actions">
+    <button type="button" data-fast-nri-qa-degree-shift data-delta="-1" data-affected-id="${escAttr(entry.affectedId)}" title="Снизить степень"><i class="fa-solid fa-minus"></i></button>
+    <button type="button" data-fast-nri-qa-degree-shift data-delta="1" data-affected-id="${escAttr(entry.affectedId)}" title="Повысить степень"><i class="fa-solid fa-plus"></i></button>
+  </span>`;
+}
+
+export function qaDeclarationCardHTML(rawState, { resolutionMessageId = null } = {}) {
   const state = normalizeActionState(rawState);
   const roll = state.declarationRoll;
-  const rosterStale = state.degreeResolution.status === "stale";
-  const outcomeReady = ["resolved", "resolved-with-errors"].includes(state.degreeResolution.status)
-    && state.degreeResolution.resolvedCount > 0
-    && !rosterStale;
-  const finalizationCurrent = state.finalization.status === "resolved"
-    && state.finalization.basedOnResolutionRevision === state.revisions.resolution;
-  const canFinalize = state.outcome.status === "resolved"
-    && state.affected.some(entry => entry.targetResult && !entry.targetResult.stale)
-    && !finalizationCurrent;
-
-  return `<div class="fast-nri-chat-roll fast-nri-qa-action-card">
-    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-flask"></i><strong>QA 0.5.66 — единый ActionState</strong></div>
-    <div class="fast-nri-chat-roll-meta"><span>Искусственный ActionDefinition</span><span>legacy workflow не используется</span></div>
+  return `<div class="fast-nri-chat-roll fast-nri-qa-action-card fast-nri-qa-declaration-card">
+    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-bullhorn"></i><strong>QA 0.5.68 — Объявление действия</strong></div>
+    <div class="fast-nri-chat-roll-meta"><span>Искусственный ActionDefinition</span><span>Карточка 1/2 · остаётся активной</span></div>
 
     <section class="fast-nri-qa-stage">
       <div class="fast-nri-qa-stage-title">Объявление</div>
@@ -401,7 +403,7 @@ export function qaActionCardHTML(rawState) {
     </section>
 
     <section class="fast-nri-qa-stage">
-      <div class="fast-nri-qa-stage-title">Затронутые существа</div>
+      <div class="fast-nri-qa-stage-title">Цели</div>
       <div class="fast-nri-qa-target-actions">
         <button type="button" data-fast-nri-qa-add-targets><i class="fa-solid fa-crosshairs"></i><span>Добавить цели</span></button>
         <button type="button" data-fast-nri-qa-add-controlled><i class="fa-solid fa-object-group"></i><span>Добавить выделенное</span></button>
@@ -409,15 +411,48 @@ export function qaActionCardHTML(rawState) {
       ${state.affected.length ? `<div class="fast-nri-qa-roster">${state.affected.map(entry => `
         <div class="fast-nri-qa-target-row">
           <div class="fast-nri-qa-target-head">
-            <span><strong>${esc(entry.name || "Существо")}</strong> ${degreeStateHTML(entry)}</span>
+            <span><strong>${esc(entry.name || "Существо")}</strong></span>
+            <button type="button" data-fast-nri-qa-remove-affected data-affected-id="${escAttr(entry.affectedId)}" title="Удалить из списка"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>`).join("")}</div>` : `<div class="fast-nri-roll-empty">Добавь существ вручную кнопками выше.</div>`}
+      <button type="button" data-fast-nri-qa-resolve-degrees ${state.affected.length ? "" : "disabled"}><i class="fa-solid fa-scale-balanced"></i><span>Рассчитать степени</span></button>
+      ${resolutionMessageId ? `<div class="fast-nri-qa-warning">Карточка объявления остаётся активной. Последняя созданная карточка обработки: ${esc(resolutionMessageId)}. Её можно удалить и позже снова рассчитать степени из этой карточки.</div>` : ""}
+    </section>
+  </div>`;
+}
+
+export function qaResolutionCardHTML(rawState) {
+  const state = normalizeActionState(rawState);
+  const roll = state.declarationRoll;
+  const resolvedCount = state.affected.filter(entry => entry.degreeState?.status === "resolved").length;
+  const outcomeReady = resolvedCount > 0;
+  const finalizationCurrent = state.finalization.status === "resolved"
+    && state.finalization.basedOnResolutionRevision === state.revisions.resolution;
+  const canFinalize = state.outcome.status === "resolved"
+    && state.affected.some(entry => entry.targetResult && !entry.targetResult.stale)
+    && !finalizationCurrent;
+
+  return `<div class="fast-nri-chat-roll fast-nri-qa-action-card fast-nri-qa-resolution-card">
+    <div class="fast-nri-chat-roll-title"><i class="fa-solid fa-gears"></i><strong>QA 0.5.68 — Обработка действия</strong></div>
+    <div class="fast-nri-chat-roll-meta"><span>Карточка 2/2</span><span>Атака сохранена: ${esc(roll.total ?? "—")}</span></div>
+
+    <section class="fast-nri-qa-stage">
+      <div class="fast-nri-qa-stage-title">Цели и степени</div>
+      <div class="fast-nri-qa-target-actions">
+        <button type="button" data-fast-nri-qa-add-targets><i class="fa-solid fa-crosshairs"></i><span>Добавить цели</span></button>
+        <button type="button" data-fast-nri-qa-add-controlled><i class="fa-solid fa-object-group"></i><span>Добавить выделенное</span></button>
+      </div>
+      ${state.affected.length ? `<div class="fast-nri-qa-roster">${state.affected.map(entry => `
+        <div class="fast-nri-qa-target-row">
+          <div class="fast-nri-qa-target-head">
+            <span><strong>${esc(entry.name || "Существо")}</strong> ${degreeStateHTML(entry)} ${degreeControlsHTML(entry)}</span>
             <button type="button" data-fast-nri-qa-remove-affected data-affected-id="${escAttr(entry.affectedId)}" title="Удалить из списка"><i class="fa-solid fa-trash"></i></button>
           </div>
           ${resultPartsHTML(entry.targetResult)}
           ${defenseRowsHTML(entry)}
           ${entry.targetResult?.current?.outcomeViews?.length ? `<button type="button" data-fast-nri-qa-defense data-affected-id="${escAttr(entry.affectedId)}"><i class="fa-solid fa-shield-halved"></i><span>Защита</span></button>` : ""}
-        </div>`).join("")}</div>` : `<div class="fast-nri-roll-empty">Добавь существ вручную кнопками выше.</div>`}
-      ${rosterStale ? `<div class="fast-nri-qa-warning">Список изменён: сохранённая атака не перебрасывается, но степени нужно определить заново.</div>` : ""}
-      <button type="button" data-fast-nri-qa-resolve-degrees ${state.affected.length ? "" : "disabled"}><i class="fa-solid fa-scale-balanced"></i><span>Определить степени</span></button>
+        </div>`).join("")}</div>` : `<div class="fast-nri-roll-empty">В обработке пока нет целей.</div>`}
+      <div class="fast-nri-qa-warning">Добавление новой цели использует уже сохранённую атаку и рассчитывает степень без нового броска. Существующие степени и Защиты не сбрасываются.</div>
     </section>
 
     <section class="fast-nri-qa-stage">
@@ -430,26 +465,50 @@ export function qaActionCardHTML(rawState) {
 
     <section class="fast-nri-qa-stage">
       <div class="fast-nri-qa-stage-title">Финализация</div>
-      ${state.finalization.status === "stale" ? `<div class="fast-nri-qa-warning">Ранее сформированные результаты устарели после изменения Resolution.</div>` : ""}
+      ${state.finalization.status === "stale" ? `<div class="fast-nri-qa-warning">Ранее сформированные результаты устарели после изменения обработки.</div>` : ""}
       ${finalizationCurrent ? `<div class="fast-nri-qa-warning">Текущая ревизия FinalResult уже сформирована.</div>` : ""}
       <button type="button" data-fast-nri-qa-finalize ${canFinalize ? "" : "disabled"}><i class="fa-solid fa-file-circle-check"></i><span>Сформировать результаты</span></button>
     </section>
   </div>`;
 }
 
-async function persistRootMessage(message, state) {
+// Compatibility export for tests/tools that referenced the old single-card renderer.
+export function qaActionCardHTML(rawState) {
+  return qaResolutionCardHTML(rawState);
+}
+
+function messageKind(message) {
+  return message?.getFlag?.("fast-nri", "kind") ?? null;
+}
+
+async function persistDeclarationMessage(message, state, { resolutionMessageId = undefined } = {}) {
   if (!message) return null;
-  const next = normalizeActionState({ ...state, rootMessageId: message.id });
+  const linkedResolutionMessageId = resolutionMessageId === undefined
+    ? (message.getFlag?.("fast-nri", "qaResolutionMessageId") ?? null)
+    : resolutionMessageId;
+  const next = normalizeActionState({ ...state, rootMessageId: state?.rootMessageId || message.id });
   await message.update({
-    content: qaActionCardHTML(next),
+    content: qaDeclarationCardHTML(next, { resolutionMessageId: linkedResolutionMessageId }),
     ...actionStateFlagUpdate(next),
-    "flags.fast-nri.kind": QA_UNIFIED_KIND
+    "flags.fast-nri.kind": QA_DECLARATION_KIND,
+    "flags.fast-nri.qaResolutionMessageId": linkedResolutionMessageId
+  });
+  return next;
+}
+
+async function persistResolutionMessage(message, state) {
+  if (!message) return null;
+  const next = normalizeActionState({ ...state, rootMessageId: state?.rootMessageId || message.id });
+  await message.update({
+    content: qaResolutionCardHTML(next),
+    ...actionStateFlagUpdate(next),
+    "flags.fast-nri.kind": QA_RESOLUTION_KIND
   });
   return next;
 }
 
 export async function startUnifiedActionQa() {
-  let state = createActionState({ actionContext: qaContext(), definition: qaDefinition(), metadata: { qaFixture: "0.5.66" } });
+  let state = createActionState({ actionContext: qaContext(), definition: qaDefinition(), metadata: { qaFixture: "0.5.68" } });
   const roll = await evaluatedRoll(QA_DECLARATION_FORMULA);
   state = setDeclarationRoll(state, {
     status: "rolled",
@@ -461,44 +520,106 @@ export async function startUnifiedActionQa() {
 
   const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker(),
-    content: qaActionCardHTML(state),
+    content: qaDeclarationCardHTML(state),
     flags: {
       "fast-nri": {
-        kind: QA_UNIFIED_KIND,
+        kind: QA_DECLARATION_KIND,
         actionState: state
       }
     }
   });
-  await persistRootMessage(message, state);
+  await persistDeclarationMessage(message, state);
   return message;
+}
+
+function newlyAddedAffectedIds(beforeState, afterState) {
+  const before = new Set(beforeState.affected.map(entry => entry.affectedId));
+  return afterState.affected.filter(entry => !before.has(entry.affectedId)).map(entry => entry.affectedId);
+}
+
+function bindExistingOutcomeForAffected(state, affectedId) {
+  let next = normalizeActionState(state);
+  if (next.outcome.status !== "resolved") return next;
+  const affected = next.affected.find(entry => entry.affectedId === affectedId);
+  if (!affected?.targetResult || affected.degreeState?.status !== "resolved") return next;
+  const pool = next.outcome.pools.find(entry => entry.scope === "shared") ?? null;
+  if (!pool) return next;
+  next = bindOutcomePoolToAffected(next, affectedId, { poolId: pool.poolId });
+  const rebound = next.affected.find(entry => entry.affectedId === affectedId);
+  if (!rebound?.targetResult) return next;
+  return setTargetResultBase(next, affectedId, qaProfileProjectedSnapshot(rebound.targetResult), { preserveSteps: true });
 }
 
 async function addRosterFromTokens(element, tokens, addedFrom) {
   const { message, state } = stateFromRootElement(element);
   if (!message || !state) return;
   const refs = tokens.map(tokenRef).filter(Boolean);
-  const next = addAffected(state, refs, { addedFrom });
-  await persistRootMessage(message, next);
+  const kind = messageKind(message);
+  if (kind === QA_DECLARATION_KIND) {
+    await persistDeclarationMessage(message, addAffected(state, refs, { addedFrom }));
+    return;
+  }
+  if (kind !== QA_RESOLUTION_KIND) return;
+
+  let next = addAffected(state, refs, { addedFrom, preserveResolved: true });
+  const addedIds = newlyAddedAffectedIds(state, next);
+  for (const affectedId of addedIds) {
+    next = resolveAffectedDegree(next, affectedId, qaDegreeResolver);
+    next = bindExistingOutcomeForAffected(next, affectedId);
+  }
+  await persistResolutionMessage(message, next);
 }
 
 async function removeRosterEntry(element) {
   const { message, state } = stateFromRootElement(element);
   if (!message || !state) return;
-  await persistRootMessage(message, removeAffected(state, element.dataset.affectedId));
+  const kind = messageKind(message);
+  if (kind === QA_DECLARATION_KIND) {
+    await persistDeclarationMessage(message, removeAffected(state, element.dataset.affectedId));
+    return;
+  }
+  if (kind === QA_RESOLUTION_KIND) {
+    await persistResolutionMessage(message, removeAffected(state, element.dataset.affectedId, { preserveResolved: true }));
+  }
 }
 
 async function resolveRosterDegrees(element) {
   const { message, state } = stateFromRootElement(element);
-  if (!message || !state) return;
-  const next = resolveDegrees(state, qaDegreeResolver);
-  await persistRootMessage(message, next);
+  if (!message || !state || messageKind(message) !== QA_DECLARATION_KIND) return;
+  const resolved = resolveDegrees(state, qaDegreeResolver);
+  const resolutionMessage = await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker(),
+    content: qaResolutionCardHTML(resolved),
+    flags: {
+      "fast-nri": {
+        kind: QA_RESOLUTION_KIND,
+        qaDeclarationMessageId: message.id,
+        actionState: resolved
+      }
+    }
+  });
+  await persistResolutionMessage(resolutionMessage, resolved);
+  // Declaration Card remains an independent, reusable source. Resolution is a
+  // derived snapshot: deleting it must not disable or mutate the declaration.
+  await persistDeclarationMessage(message, state, { resolutionMessageId: resolutionMessage.id });
+}
+
+async function adjustQaDegree(element) {
+  const { message, state } = stateFromRootElement(element);
+  if (!message || !state || messageKind(message) !== QA_RESOLUTION_KIND) return;
+  const affectedId = element.dataset.affectedId;
+  const delta = Number(element.dataset.delta) || 0;
+  let next = shiftAffectedDegree(state, affectedId, delta);
+  next = bindExistingOutcomeForAffected(next, affectedId);
+  await persistResolutionMessage(message, next);
 }
 
 async function rollQaOutcome(element) {
   const { message, state } = stateFromRootElement(element);
-  if (!message || !state) return;
-  if (!["resolved", "resolved-with-errors"].includes(state.degreeResolution.status)) {
-    ui.notifications.warn("Сначала нажми «Определить степени». ");
+  if (!message || !state || messageKind(message) !== QA_RESOLUTION_KIND) return;
+  const resolvedCount = state.affected.filter(entry => entry.degreeState?.status === "resolved").length;
+  if (!resolvedCount) {
+    ui.notifications.warn("Нет целей с рассчитанной степенью.");
     return;
   }
 
@@ -534,7 +655,7 @@ async function rollQaOutcome(element) {
     });
   }
 
-  await persistRootMessage(message, next);
+  await persistResolutionMessage(message, next);
 }
 
 function exactlyOneControlledDefender() {
@@ -589,7 +710,7 @@ async function addQaDefense(element) {
     roll: rollState,
     operation
   });
-  await persistRootMessage(message, next);
+  await persistResolutionMessage(message, next);
 }
 
 async function rerollQaDefense(element) {
@@ -609,14 +730,14 @@ async function rerollQaDefense(element) {
       ? smallestActiveDieOperation(targetResult, rerolledStep.stepId)
       : { resolverId: "noop", params: {} }
   });
-  await persistRootMessage(message, next);
+  await persistResolutionMessage(message, next);
 }
 
 async function undoQaDefense(element) {
   const { message, state } = stateFromRootElement(element);
   if (!message || !state) return;
   const next = removeResolutionStep(state, element.dataset.affectedId, element.dataset.stepId);
-  await persistRootMessage(message, next);
+  await persistResolutionMessage(message, next);
 }
 
 function finalDice(finalResult) {
@@ -655,7 +776,7 @@ async function finalizeQaResults(element) {
   const { message, state } = stateFromRootElement(element);
   if (!message || !state) return;
   const next = finalizeAllTargetResults(state);
-  await persistRootMessage(message, next);
+  await persistResolutionMessage(message, next);
   if (!next.finalization.results.length) {
     ui.notifications.warn("Нет готовых TargetResult для финализации.");
     return;
@@ -829,6 +950,7 @@ async function clickHandler(event) {
     ["[data-fast-nri-qa-add-controlled]", el => addRosterFromTokens(el, currentControlledTokens(), "controlled")],
     ["[data-fast-nri-qa-remove-affected]", removeRosterEntry],
     ["[data-fast-nri-qa-resolve-degrees]", resolveRosterDegrees],
+    ["[data-fast-nri-qa-degree-shift]", adjustQaDegree],
     ["[data-fast-nri-qa-roll-outcome]", rollQaOutcome],
     ["[data-fast-nri-qa-defense]", addQaDefense],
     ["[data-fast-nri-qa-defense-reroll]", rerollQaDefense],
@@ -849,8 +971,8 @@ async function clickHandler(event) {
     element.dataset.fastNriBusy = "true";
     try { await handler(element); }
     catch (error) {
-      console.error("Быстрая НРИ | QA 0.5.66 vertical slice", error);
-      ui.notifications.error(`QA 0.5.66: ${error?.message || "ошибка"}`);
+      console.error("Быстрая НРИ | QA 0.5.68 vertical slice", error);
+      ui.notifications.error(`QA 0.5.68: ${error?.message || "ошибка"}`);
     } finally {
       delete element.dataset.fastNriBusy;
     }

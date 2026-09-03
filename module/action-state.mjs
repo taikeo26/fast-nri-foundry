@@ -206,10 +206,15 @@ function normalizeDegreeState(value = {}) {
       : "empty";
   const baseDegree = normalizeDegree(value?.baseDegree ?? value?.degree);
 
+  const calculatedDegree = normalizeDegree(value?.calculatedDegree ?? value?.baseDegree ?? value?.degree);
+  const manualAdjusted = Boolean(value?.manualAdjusted) && Boolean(baseDegree);
+
   return {
     status: status === "resolved" && !baseDegree ? "error" : status,
     resolverId: text(value?.resolverId) || null,
     baseDegree,
+    calculatedDegree,
+    manualAdjusted,
     input: jsonClone(value?.input ?? null, null),
     declarationTotal: finiteNumberOrNull(value?.declarationTotal),
     naturalD20: finiteNumberOrNull(value?.naturalD20),
@@ -505,7 +510,7 @@ function markRosterChanged(state) {
   invalidateDownstreamFromDegrees(state);
 }
 
-export function addAffected(actionState, entries, { addedFrom = "manual" } = {}) {
+export function addAffected(actionState, entries, { addedFrom = "manual", preserveResolved = false } = {}) {
   const next = normalizeActionState(actionState);
   const source = Array.isArray(entries) ? entries : [entries];
   const existing = new Set(next.affected.map(affectedIdentity).filter(Boolean));
@@ -525,11 +530,23 @@ export function addAffected(actionState, entries, { addedFrom = "manual" } = {})
     changed = true;
   }
 
-  if (changed) markRosterChanged(next);
+  if (changed) {
+    if (preserveResolved) {
+      bump(next, ["roster"]);
+      next.degreeResolution = {
+        ...next.degreeResolution,
+        status: "stale",
+        basedOnRosterRevision: next.degreeResolution?.basedOnRosterRevision ?? null
+      };
+      staleFinalization(next);
+    } else {
+      markRosterChanged(next);
+    }
+  }
   return normalizeActionState(next);
 }
 
-export function removeAffected(actionState, affectedIdOrRef) {
+export function removeAffected(actionState, affectedIdOrRef, { preserveResolved = false } = {}) {
   const next = normalizeActionState(actionState);
   const lookup = typeof affectedIdOrRef === "string"
     ? text(affectedIdOrRef)
@@ -549,7 +566,22 @@ export function removeAffected(actionState, affectedIdOrRef) {
     pool.scope !== "affected" || !removedIds.has(pool.affectedId)
   );
   next.finalization.results = next.finalization.results.filter(result => !removedIds.has(result.affectedId));
-  markRosterChanged(next);
+  if (preserveResolved) {
+    bump(next, ["roster"]);
+    const resolvedCount = next.affected.filter(entry => entry.degreeState?.status === "resolved").length;
+    const errorCount = next.affected.filter(entry => entry.degreeState?.status === "error").length;
+    const unresolvedCount = next.affected.length - resolvedCount - errorCount;
+    next.degreeResolution = {
+      status: unresolvedCount ? "stale" : errorCount ? "resolved-with-errors" : next.affected.length ? "resolved" : "empty",
+      basedOnDeclarationRevision: next.revisions.declaration,
+      basedOnRosterRevision: unresolvedCount ? next.degreeResolution?.basedOnRosterRevision ?? null : next.revisions.roster,
+      resolvedCount,
+      errorCount
+    };
+    staleFinalization(next);
+  } else {
+    markRosterChanged(next);
+  }
   return normalizeActionState(next);
 }
 
@@ -615,6 +647,8 @@ export function resolveDegrees(actionState, resolver) {
       status: "resolved",
       resolverId: text(resolved?.resolverId) || resolverId,
       baseDegree: degree,
+      calculatedDegree: degree,
+      manualAdjusted: false,
       input: resolved?.input ?? null,
       declarationTotal: declaration.total,
       naturalD20: declaration.naturalD20,
@@ -658,6 +692,116 @@ export function resolveDegrees(actionState, resolver) {
   };
   staleFinalization(next);
   return normalizeActionState(next);
+}
+
+
+/** Resolve or refresh exactly one affected entry from the stored declaration roll. */
+export function resolveAffectedDegree(actionState, affectedId, resolver) {
+  const next = normalizeActionState(actionState);
+  const affected = next.affected.find(entry => entry.affectedId === text(affectedId));
+  if (!affected) return next;
+  const declaration = next.declarationRoll;
+  const resolverId = next.definition.declaration.degreeResolverId;
+  let resolved;
+  try {
+    resolved = typeof resolver === "function"
+      ? resolver({
+          affected: jsonClone(affected, {}),
+          declarationRoll: jsonClone(declaration, {}),
+          definition: jsonClone(next.definition, {}),
+          actionContext: jsonClone(next.actionContext, {}),
+          actionState: jsonClone(next, {})
+        })
+      : { error: "missing-degree-resolver" };
+  } catch (error) {
+    resolved = { error: error?.message || "degree-resolver-threw" };
+  }
+
+  const degree = normalizeDegree(resolved?.degree ?? resolved?.baseDegree);
+  if (!degree) {
+    affected.degreeState = degreeErrorState({
+      resolverId: text(resolved?.resolverId) || resolverId,
+      declarationRoll: declaration,
+      revisions: next.revisions,
+      error: resolved?.error || "missing-or-invalid-target-threshold",
+      input: resolved?.input ?? null
+    });
+    affected.targetResult = null;
+  } else {
+    affected.degreeState = normalizeDegreeState({
+      status: "resolved",
+      resolverId: text(resolved?.resolverId) || resolverId,
+      baseDegree: degree,
+      calculatedDegree: degree,
+      manualAdjusted: false,
+      input: resolved?.input ?? null,
+      declarationTotal: declaration.total,
+      naturalD20: declaration.naturalD20,
+      basedOnDeclarationRevision: next.revisions.declaration,
+      basedOnRosterRevision: next.revisions.roster
+    });
+    affected.targetResult = normalizeTargetResult({
+      affectedId: affected.affectedId,
+      base: { degree, effectDegree: degree, outcomeViews: [], components: [] },
+      steps: [],
+      current: { degree, effectDegree: degree, outcomeViews: [], components: [] },
+      revision: 0,
+      stale: false
+    });
+  }
+
+  bump(next, ["degrees", "resolution"]);
+  const resolvedCount = next.affected.filter(entry => entry.degreeState?.status === "resolved").length;
+  const errorCount = next.affected.filter(entry => entry.degreeState?.status === "error").length;
+  const unresolvedCount = next.affected.length - resolvedCount - errorCount;
+  next.degreeResolution = {
+    status: unresolvedCount ? "stale" : errorCount ? "resolved-with-errors" : next.affected.length ? "resolved" : "empty",
+    basedOnDeclarationRevision: next.revisions.declaration,
+    basedOnRosterRevision: unresolvedCount ? next.degreeResolution?.basedOnRosterRevision ?? null : next.revisions.roster,
+    resolvedCount,
+    errorCount
+  };
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+/** Manually replace the working degree of one affected entry without rerolling declaration dice. */
+export function setAffectedDegree(actionState, affectedId, degree) {
+  const normalizedDegree = normalizeDegree(degree);
+  const next = normalizeActionState(actionState);
+  if (!normalizedDegree) return next;
+  const affected = next.affected.find(entry => entry.affectedId === text(affectedId));
+  if (!affected || affected.degreeState?.status !== "resolved" || !affected.targetResult) return next;
+
+  const calculatedDegree = normalizeDegree(affected.degreeState.calculatedDegree ?? affected.degreeState.baseDegree) ?? normalizedDegree;
+  affected.degreeState = normalizeDegreeState({
+    ...affected.degreeState,
+    status: "resolved",
+    baseDegree: normalizedDegree,
+    calculatedDegree,
+    manualAdjusted: normalizedDegree !== calculatedDegree,
+    error: null
+  });
+
+  const target = normalizeTargetResult(affected.targetResult);
+  target.base.degree = normalizedDegree;
+  target.base.effectDegree = normalizedDegree;
+  affected.targetResult = recalculateTargetResult(target);
+  bump(next, ["degrees", "resolution"]);
+  staleFinalization(next);
+  return normalizeActionState(next);
+}
+
+export function shiftAffectedDegree(actionState, affectedId, delta = 0) {
+  const next = normalizeActionState(actionState);
+  const affected = next.affected.find(entry => entry.affectedId === text(affectedId));
+  const current = normalizeDegree(affected?.degreeState?.baseDegree);
+  if (!current) return next;
+  const index = ACTION_DEGREES.indexOf(current);
+  const shift = integerOr(delta, 0);
+  const targetIndex = Math.max(0, Math.min(ACTION_DEGREES.length - 1, index + shift));
+  if (targetIndex === index) return next;
+  return setAffectedDegree(next, affectedId, ACTION_DEGREES[targetIndex]);
 }
 
 /** Set a resolved outcome without coupling it to legacy damageState. */
