@@ -446,6 +446,34 @@ async function prepareRoll({
   };
 }
 
+/**
+ * Show the physical dice animation for a roll which is stored back into an
+ * existing ChatMessage instead of being sent with Roll#toMessage().
+ *
+ * Dice So Nice normally hooks into chat roll creation. In-place Resolution
+ * edits intentionally do not create a new ChatMessage, so they must call the
+ * module API directly. The module remains optional: without game.dice3d the
+ * roll still resolves and the existing card is updated normally.
+ */
+async function showInPlaceRollDice(roll, { synchronize = true } = {}) {
+  if (!roll) return false;
+  const dice3d = globalThis.game?.dice3d ?? null;
+  if (!dice3d || typeof dice3d.showForRoll !== "function") return false;
+
+  try {
+    return Boolean(await dice3d.showForRoll(
+      roll,
+      game.user,
+      Boolean(synchronize),
+      null,
+      false
+    ));
+  } catch (error) {
+    console.warn("Быстрая НРИ | Не удалось показать 3D-анимацию in-place броска", error);
+    return false;
+  }
+}
+
 function degreeHTML(degree) {
   if (!degree) return "";
 
@@ -2218,6 +2246,7 @@ export async function rerollDamageDieFromChat(element) {
   const part = (state.parts ?? []).find(candidate => candidate.id === partId);
   if (!part || !damagePartCanBeEdited(part)) return null;
   const roll = await new Roll(`1d${Number(part.faces) || 6}`).evaluate();
+  await showInPlaceRollDice(roll);
   const value = Number(roll.total) || 0;
   const phase = message.getFlag("fast-nri", "applicationPhase") === "final" ? "application" : "resolution";
   const next = rerollDamageDieInState(state, partId, value, { phase });
@@ -2254,6 +2283,7 @@ export async function addDamageFromChat(element) {
     ui.notifications.error(`Некорректная формула урона: ${selected.formula}`);
     return null;
   }
+  await showInPlaceRollDice(roll);
 
   const added = buildDamageState(roll, {
     damageType: selected.damageType,
@@ -3387,6 +3417,7 @@ export async function multiTargetDefenseFromChat(element) {
     additionalModifiers: contextualModifiers
   });
   if (!result) return null;
+  await showInPlaceRollDice(result.roll);
   const attackTotal = finiteNumberOrNull(state.checkTotal);
   if (attackTotal === null) return null;
   let degreeReduction = Math.max(1, Number(method.config.effectDegreeReduction) || 1);
@@ -3540,6 +3571,7 @@ export async function multiTargetDefenseStepRerollFromChat(element) {
     ui.notifications.error(`Некорректная сохранённая формула Защиты: ${formula}`);
     return null;
   }
+  await showInPlaceRollDice(roll);
   defense.previousRolls = [
     ...(defense.previousRolls ?? []),
     { total: defense.total, naturalD20: defense.naturalD20, rerolledAt: Date.now() }
@@ -5079,6 +5111,7 @@ export async function checkDefenseFromChat(element) {
     `
   });
   if (!result) return null;
+  await showInPlaceRollDice(result.roll);
 
   const attackTotal = finiteNumberOrNull(actionContext.check.total);
   if (attackTotal === null) {
@@ -5448,6 +5481,7 @@ export async function defenseFromChat(element) {
   });
 
   if (!result) return null;
+  await showInPlaceRollDice(result.roll);
 
   let defenseResult = "failure";
   if (result.naturalD20 === 1) {
