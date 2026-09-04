@@ -1,0 +1,230 @@
+{
+  "_id": "RB64000000000013",
+  "name": "Взрыв",
+  "type": "ability",
+  "img": "icons/magic/fire/explosion-fireball-large-orange.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Волшебник.</strong> Область 3×3, одна общая проверка и общий пул 3d8 магического урона со свойством Огонь.</p>",
+    "implementations": [
+      {
+        "id": "взрыв",
+        "name": "Взрыв",
+        "description": "",
+        "traitIds": [
+          "spell",
+          "action",
+          "attack",
+          "area",
+          "fire"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 1,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "area",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "spell",
+          "rangeCells": 0,
+          "requiresVisibility": true,
+          "areaShape": "square",
+          "areaSize": "3×3",
+          "text": "<p>Зона 3×3; центр в дистанции заклинаний.</p>"
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": true,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>Провал: удаляются все кубы.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": true
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>Частичный успех: удаляются наибольший и наименьший кубы.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 1,
+              "removeLowest": 1,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>Успех: удаляется наименьший куб.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 1,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>Большой успех: полный урон.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": [
+          {
+            "id": "blast-3x3",
+            "type": "rectangle",
+            "label": "Зона 3×3",
+            "width": 3,
+            "height": 3,
+            "length": 0,
+            "lineWidth": 1,
+            "text": "<p>Зона 3×3.</p>"
+          }
+        ]
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 3000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}

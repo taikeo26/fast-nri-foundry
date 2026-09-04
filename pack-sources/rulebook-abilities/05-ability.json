@@ -1,0 +1,217 @@
+{
+  "_id": "RB64000000000014",
+  "name": "Поджог",
+  "type": "ability",
+  "img": "icons/magic/fire/flame-burning-hand-orange.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Волшебник.</strong> Направленная атака: урон и отдельный Периодический эффект Горения зависят от степени.</p>",
+    "implementations": [
+      {
+        "id": "поджог",
+        "name": "Поджог",
+        "description": "<p>Горение — отдельный Периодический эффект со свойствами Магический и Огонь.</p>",
+        "traitIds": [
+          "spell",
+          "action",
+          "attack",
+          "ranged",
+          "fire"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 1,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "single",
+          "relation": "any",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "spell",
+          "rangeCells": 0,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": true,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": true
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>Провал: эффекта нет.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>Частичный успех: 1d8 магического урона и Горение 1.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": [
+              "Compendium.fast-nri.rulebook-abilities.Item.RB64000000000001"
+            ]
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>Успех: 2d8 магического урона и Горение 1d6.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "2d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": [
+              "Compendium.fast-nri.rulebook-abilities.Item.RB64000000000002"
+            ]
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>Большой успех: 3d8 магического урона и Горение 1d8.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d8",
+                  "damageType": "magic",
+                  "traitIds": [
+                    "fire"
+                  ]
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": [
+              "Compendium.fast-nri.rulebook-abilities.Item.RB64000000000003"
+            ]
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 4000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}

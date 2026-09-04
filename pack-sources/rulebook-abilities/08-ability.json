@@ -1,0 +1,110 @@
+{
+  "_id": "RB64000000000017",
+  "name": "Сотворение: Теневой щит",
+  "type": "ability",
+  "img": "icons/magic/defensive/shield-barrier-flaming-diamond-purple-orange.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Колдун.</strong> Сотворение; даёт 5 временных HP до начала следующего хода.</p>",
+    "implementations": [
+      {
+        "id": "сотворение:-теневой-щит",
+        "name": "Сотворение: Теневой щит",
+        "description": "<p>Получите <strong>5 временных HP</strong>. По Rulebook длительность — до начала следующего хода.</p>",
+        "traitIds": [
+          "spell",
+          "creation"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 1,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "self",
+          "relation": "self",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "none",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "<p>Нормативно применяется через Инвокацию подходящей рукой. Прямой запуск этой карточки в проверочном наборе имитирует одну обычную Инвокацию.</p>",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {},
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": true,
+            "components": [
+              {
+                "formula": "5",
+                "damageType": "physical",
+                "traitIds": []
+              }
+            ]
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 7000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Колдун",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true,
+      "verificationNote": "Прямой запуск имитирует обычную Инвокацию; автоматическое истечение TempHP по длительности пока проверяется вручную."
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "_id": "RB64000000000016",
+  "name": "Защитный щит",
+  "type": "ability",
+  "img": "icons/magic/defensive/shield-barrier-blue.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Волшебник.</strong> 1 Вмешательство и 1 Волшебная сила; союзник в дистанции заклинаний.</p>",
+    "implementations": [
+      {
+        "id": "защитный-щит",
+        "name": "Защитный щит",
+        "description": "<p>Направленная защита союзника. При удалении урона удаляются два самых больших оставшихся куба; степень Эффекта снижается на 2.</p>",
+        "traitIds": [
+          "spell",
+          "intervention",
+          "defensive"
+        ],
+        "costs": {
+          "action": 0,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 1,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "none",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "none",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "<p>Против Силового действия без проверки по Rulebook урон цели становится 0 без защитной проверки. Это специальное исключение пока исполняется вручную.</p>",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {},
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": true,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "manual",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "largest",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 2,
+          "effectDegreeReduction": 2,
+          "allowManeuver": true
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 6000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true,
+      "verificationNote": "Исключение Силовой без проверки остаётся ручным в этом проверочном импорте."
+    }
+  }
+}

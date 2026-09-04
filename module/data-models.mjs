@@ -177,6 +177,22 @@ const actionPartOutcomeSchema = () =>
     degreeSourceTargetSlotId: text(""),
     components: outcomeComponentArray(),
     effectUuids: stringArray(),
+    // Structured manual/maneuver result metadata used by real Rulebook abilities
+    // such as Telekinesis. These fields were already understood by the v2
+    // adapter but were not persisted by the Item DataModel.
+    maneuverId: text(""),
+    resultTextByDegree: new SchemaField({
+      failure: richText(""),
+      partial: richText(""),
+      success: richText(""),
+      great: richText("")
+    }),
+    enabledByDegree: new SchemaField({
+      failure: flag(true),
+      partial: flag(true),
+      success: flag(true),
+      great: flag(true)
+    }),
     dependsOn: new ArrayField(actionPartDependencySchema(), {
       required: true,
       nullable: false,

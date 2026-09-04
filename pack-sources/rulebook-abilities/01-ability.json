@@ -1,0 +1,112 @@
+{
+  "_id": "RB64000000000010",
+  "name": "Лечение",
+  "type": "ability",
+  "img": "icons/svg/heal.svg",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Клерик.</strong> 1 Воздействие; Заклинание, Исцеление; одна цель в дистанции заклинаний; восстановление 1d6 HP.</p>",
+    "implementations": [
+      {
+        "id": "лечение",
+        "name": "Лечение",
+        "description": "<p>Цель восстанавливает <strong>1d6 HP</strong>.</p>",
+        "traitIds": [
+          "spell",
+          "action",
+          "healing"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "single",
+          "relation": "any",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "spell",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {},
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": true,
+            "components": [
+              {
+                "formula": "1d6",
+                "damageType": "physical",
+                "traitIds": [
+                  "healing"
+                ]
+              }
+            ]
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 0,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Клерик",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}

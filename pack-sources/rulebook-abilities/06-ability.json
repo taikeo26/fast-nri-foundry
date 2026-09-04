@@ -1,0 +1,236 @@
+{
+  "_id": "RB64000000000015",
+  "name": "Телекинез",
+  "type": "ability",
+  "img": "icons/magic/control/telekinesis-hand-rays-blue.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Волшебник.</strong> Проверка против Стойкости; Противодействие меняет итоговую степень; перемещение и Сбивание с ног исполняются вручную.</p>",
+    "implementations": [
+      {
+        "id": "телекинез",
+        "name": "Телекинез",
+        "description": "<p>Проверка против Стойкости. Результат исполняется вручную после Противодействий.</p>",
+        "traitIds": [
+          "spell",
+          "action",
+          "maneuver"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 1,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "none",
+          "relation": "any",
+          "countMin": 0,
+          "countMax": 0,
+          "rangeMode": "none",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": false,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": false
+        },
+        "profiles": {},
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [
+          {
+            "id": "telekinesis",
+            "label": "Телекинез",
+            "traitIds": [
+              "spell",
+              "action",
+              "maneuver"
+            ],
+            "targetSlots": [
+              {
+                "id": "target",
+                "label": "Цель",
+                "roles": [
+                  "resolution",
+                  "recipient"
+                ],
+                "selectionMode": "manual",
+                "min": 1,
+                "max": 1,
+                "allowDuplicates": false,
+                "relation": "any",
+                "rangeMode": "spell",
+                "rangeCells": 0,
+                "requiresVisibility": true
+              }
+            ],
+            "targeting": {
+              "mode": "single",
+              "relation": "any",
+              "countMin": 1,
+              "countMax": 1,
+              "rangeMode": "spell",
+              "rangeCells": 0,
+              "requiresVisibility": true,
+              "areaShape": "none",
+              "areaSize": "",
+              "text": ""
+            },
+            "check": {
+              "enabled": true,
+              "formula": "1d20 + {combatDie}",
+              "targetCharacteristic": "fortitude"
+            },
+            "defenseProcedure": {
+              "directedDefense": false
+            },
+            "profiles": {},
+            "outcomes": {
+              "damage": {
+                "enabled": false,
+                "components": []
+              },
+              "healing": {
+                "enabled": false,
+                "components": []
+              },
+              "tempHp": {
+                "enabled": false,
+                "components": []
+              }
+            },
+            "effectUuids": [],
+            "outcomeComponents": [
+              {
+                "id": "move",
+                "type": "maneuver",
+                "label": "Принудительное перемещение",
+                "recipientType": "targetSlot",
+                "targetSlotId": "target",
+                "timing": "application",
+                "deliveryMode": "independent",
+                "deliveryKey": "",
+                "valueSourceType": "manual",
+                "valueSourceComponentId": "",
+                "value": 0,
+                "degreeSourceType": "effect-degree",
+                "degreeSourceTargetSlotId": "target",
+                "components": [],
+                "effectUuids": [],
+                "maneuverId": "move",
+                "resultTextByDegree": {
+                  "failure": "",
+                  "partial": "Переместить цель до 2 клеток",
+                  "success": "Переместить цель до 3 клеток",
+                  "great": "Переместить цель до 4 клеток"
+                },
+                "enabledByDegree": {
+                  "failure": false,
+                  "partial": true,
+                  "success": true,
+                  "great": true
+                },
+                "dependsOn": []
+              },
+              {
+                "id": "trip",
+                "type": "maneuver",
+                "label": "Сбить с ног",
+                "recipientType": "targetSlot",
+                "targetSlotId": "target",
+                "timing": "application",
+                "deliveryMode": "independent",
+                "deliveryKey": "",
+                "valueSourceType": "manual",
+                "valueSourceComponentId": "",
+                "value": 0,
+                "degreeSourceType": "effect-degree",
+                "degreeSourceTargetSlotId": "target",
+                "components": [],
+                "effectUuids": [],
+                "maneuverId": "trip",
+                "resultTextByDegree": {
+                  "failure": "",
+                  "partial": "",
+                  "success": "",
+                  "great": "Сбить цель с ног"
+                },
+                "enabledByDegree": {
+                  "failure": false,
+                  "partial": false,
+                  "success": false,
+                  "great": true
+                },
+                "dependsOn": []
+              }
+            ],
+            "repeat": {
+              "count": 1,
+              "label": "Телекинез"
+            }
+          }
+        ],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 5000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}

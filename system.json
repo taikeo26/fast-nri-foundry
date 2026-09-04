@@ -3,7 +3,7 @@
   "id": "fast-nri",
   "title": "Быстрая НРИ 6.4",
   "description": "Базовая система «Быстрая НРИ 6.4» для Foundry VTT 14.",
-  "version": "0.5.80",
+  "version": "0.5.80.1",
   "compatibility": {
     "minimum": 14,
     "verified": 14
@@ -21,18 +21,11 @@
   ],
   "packs": [
     {
-      "name": "qa-ability-spell",
-      "label": "Быстрая НРИ — QA способности и заклинания",
+      "name": "rulebook-abilities",
+      "label": "Быстрая НРИ — Способности Rulebook (проверочный набор)",
       "system": "fast-nri",
-      "path": "packs/qa-ability-spell",
+      "path": "packs/rulebook-abilities",
       "type": "Item"
-    },
-    {
-      "name": "qa-unified-action",
-      "label": "Быстрая НРИ — QA ActionState v2 0.5.76",
-      "system": "fast-nri",
-      "path": "packs/qa-unified-action",
-      "type": "Macro"
     },
     {
       "name": "weapons",
@@ -126,5 +119,5 @@
   "media": [],
   "url": "https://github.com/taikeo26/fast-nri-foundry",
   "manifest": "https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json",
-  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.80/fast-nri.zip"
+  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.80.1/fast-nri.zip"
 }

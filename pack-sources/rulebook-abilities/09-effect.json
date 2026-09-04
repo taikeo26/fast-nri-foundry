@@ -1,0 +1,59 @@
+{
+  "_id": "RB64000000000001",
+  "name": "Горение 1",
+  "type": "effect",
+  "img": "icons/magic/fire/flame-burning-creature-skeleton-orange.webp",
+  "system": {
+    "level": 1,
+    "description": "<p>Периодический эффект <strong>Горение 1</strong> из способности «Поджог». Свойства: Магический, Огонь. Значение бросается один раз при наложении.</p>",
+    "effectKind": "periodic",
+    "duration": {
+      "mode": "manual",
+      "rounds": 1,
+      "expiry": "turnStart"
+    },
+    "stacking": {
+      "mode": "none"
+    },
+    "rules": {
+      "disableMeleeControl": false,
+      "formation": {
+        "selfBonus": 0,
+        "adjacentAllyBonus": 0,
+        "targetPenalty": 0
+      }
+    },
+    "periodic": {
+      "valueFormula": "1",
+      "propertyIds": [
+        "magic",
+        "fire"
+      ],
+      "durationTicks": 0,
+      "standardRemovalCheck": true,
+      "removalCheckDc": 11,
+      "runtime": {
+        "storedValue": 0,
+        "remainingTicks": 0,
+        "appliedOrder": 0
+      }
+    },
+    "sourceUuid": "",
+    "runtime": {
+      "stackCount": 0,
+      "mirrorEffectId": "",
+      "timers": []
+    }
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 8000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}

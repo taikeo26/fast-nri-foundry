@@ -1,0 +1,204 @@
+{
+  "_id": "RB64000000000012",
+  "name": "Заряд",
+  "type": "ability",
+  "img": "icons/magic/light/projectile-smoke-blue-light.webp",
+  "system": {
+    "level": 1,
+    "category": "spell",
+    "description": "<p><strong>Rulebook 6.4 · Волшебник.</strong> Базовая направленная дистанционная Атака против КЗ.</p>",
+    "implementations": [
+      {
+        "id": "заряд",
+        "name": "Заряд",
+        "description": "",
+        "traitIds": [
+          "spell",
+          "action",
+          "attack",
+          "ranged"
+        ],
+        "costs": {
+          "action": 1,
+          "movement": 0,
+          "intervention": 0,
+          "freeAction": false,
+          "classResource": 0,
+          "additionalText": ""
+        },
+        "targeting": {
+          "mode": "single",
+          "relation": "any",
+          "countMin": 1,
+          "countMax": 1,
+          "rangeMode": "spell",
+          "rangeCells": 0,
+          "requiresVisibility": true,
+          "areaShape": "none",
+          "areaSize": "",
+          "text": ""
+        },
+        "conditionText": "",
+        "requirementText": "",
+        "limitationText": "",
+        "exceptionText": "",
+        "check": {
+          "enabled": true,
+          "formula": "1d20 + {combatDie}",
+          "targetCharacteristic": "armor"
+        },
+        "defenseProcedure": {
+          "directedDefense": true
+        },
+        "profiles": {
+          "failure": {
+            "enabled": true,
+            "text": "<p>Провал: урона нет.</p>",
+            "damage": {
+              "enabled": false,
+              "components": [],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "partial": {
+            "enabled": true,
+            "text": "<p>Частичный успех: 1d4 магического урона.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "1d4",
+                  "damageType": "magic",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "success": {
+            "enabled": true,
+            "text": "<p>Успех: 2d4 магического урона.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "2d4",
+                  "damageType": "magic",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          },
+          "great": {
+            "enabled": true,
+            "text": "<p>Большой успех: 3d4 магического урона.</p>",
+            "damage": {
+              "enabled": true,
+              "components": [
+                {
+                  "formula": "3d4",
+                  "damageType": "magic",
+                  "traitIds": []
+                }
+              ],
+              "removeHighest": 0,
+              "removeLowest": 0,
+              "removeAll": false
+            },
+            "healing": {
+              "enabled": false,
+              "components": []
+            },
+            "tempHp": {
+              "enabled": false,
+              "components": []
+            },
+            "effectUuids": []
+          }
+        },
+        "outcomes": {
+          "damage": {
+            "enabled": false,
+            "components": []
+          },
+          "healing": {
+            "enabled": false,
+            "components": []
+          },
+          "tempHp": {
+            "enabled": false,
+            "components": []
+          }
+        },
+        "actionParts": [],
+        "defenseAction": {
+          "enabled": false,
+          "procedure": "directed",
+          "targetScope": "ally",
+          "interventionCost": 1,
+          "rangeMode": "adjacent",
+          "rangeCells": 0,
+          "requiresVisibility": false,
+          "movementMode": "none",
+          "damageSelectionMode": "standard",
+          "combatDiceFormula": "",
+          "selfDefenseCharacteristic": "",
+          "removeDamageParts": 1,
+          "effectDegreeReduction": 1,
+          "allowManeuver": false
+        },
+        "effectUuids": [],
+        "repeat": {
+          "count": 1,
+          "label": "Результат"
+        },
+        "areas": []
+      }
+    ]
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 2000,
+  "flags": {
+    "fast-nri": {
+      "rulebookEdition": "6.4",
+      "rulebookClass": "Волшебник",
+      "rulebookVerificationSet": "0.5.80.1",
+      "normativeSource": true
+    }
+  }
+}
