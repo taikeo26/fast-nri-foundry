@@ -1208,7 +1208,10 @@ export function shiftPartTargetDegree(actionState, partId, slotId, selectionId, 
   return setPartTargetDegree(next, partId, slotId, selectionId, ACTION_DEGREES[targetIndex]);
 }
 
-export function setPartTargetResultBase(actionState, partId, slotId, selectionId, snapshot, { preserveSteps = true } = {}) {
+export function setPartTargetResultBase(actionState, partId, slotId, selectionId, snapshot, {
+  preserveSteps = true,
+  operationResolvers = {}
+} = {}) {
   const next = normalizeActionState(actionState);
   const part = requireActionPart(next, partId);
   const result = part.targetResults.find(entry => entry.targetSlotId === text(slotId) && entry.selectionId === text(selectionId));
@@ -1217,7 +1220,7 @@ export function setPartTargetResultBase(actionState, partId, slotId, selectionId
   target.base = normalizeResultSnapshot(snapshot);
   if (!preserveSteps) target.steps = [];
   target.stale = false;
-  result.targetResult = recalculateTargetResult(target);
+  result.targetResult = recalculateTargetResult(target, { operationResolvers });
   part.revision += 1;
   bump(next, ["resolution"]);
   staleFinalization(next);
@@ -1352,10 +1355,14 @@ export function validateActionStateV2(actionState) {
         });
       }
       for (const dependency of component.dependsOn) {
-        if (dependency.componentId && !components.has(dependency.componentId)) {
+        const dependencyPartId = text(dependency?.params?.partId) || part.partId;
+        const dependencyPart = state.parts.find(entry => entry.partId === dependencyPartId);
+        const dependencyExists = dependencyPart?.outcomeComponents?.some(entry => entry.componentId === dependency.componentId);
+        if (dependency.componentId && !dependencyExists) {
           push("error", "component-unknown-dependency", {
             partId: part.partId,
             componentId: component.componentId,
+            dependencyPartId,
             dependencyId: dependency.componentId
           });
         }

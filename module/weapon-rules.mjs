@@ -1,3 +1,4 @@
+import { CREATURE_TRAITS } from "./config.mjs";
 import {
   normalizeActorWeaponTraining,
   normalizeActorWeaponTrainingUpdate,
@@ -187,6 +188,48 @@ export function addDefaultUnarmedAttackToActorSource(actor) {
   items.push(defaultUnarmedAttackData());
   actor.updateSource({ items });
   return true;
+}
+
+
+function componentTraitIds(component, weapon, actor) {
+  const traits = new Set(component?.traitIds ?? []);
+
+  // Creature source traits are properties of each damage part.
+  for (const id of actor?.system?.creatureTraitIds ?? []) traits.add(id);
+
+  // Legacy worlds could store creature damage properties on the Weapon itself.
+  // This compatibility stays at data interpretation, never prose parsing.
+  for (const id of weapon?.system?.propertyIds ?? []) {
+    if (Object.hasOwn(CREATURE_TRAITS, id)) traits.add(id);
+  }
+
+  return Array.from(traits);
+}
+
+/**
+ * Structured Weapon damage profile shared by production v2 and retained
+ * compatibility helpers. Keeping this out of rolls.mjs prevents Weapon v2
+ * from depending on legacy chat orchestration.
+ */
+export function weaponDamageComponents(actor, weapon, profile) {
+  const configured = Array.from(weapon?.system?.damageComponents?.[profile] ?? [])
+    .map(component => ({
+      formula: String(component?.formula ?? "").trim(),
+      damageType: ["physical", "magic"].includes(component?.damageType)
+        ? component.damageType
+        : "physical",
+      traitIds: componentTraitIds(component, weapon, actor)
+    }))
+    .filter(component => component.formula);
+
+  if (configured.length) return configured;
+
+  const formula = String(weapon?.system?.damage?.[profile] ?? "0").trim() || "0";
+  return [{
+    formula,
+    damageType: weapon?.system?.damageType === "magic" ? "magic" : "physical",
+    traitIds: componentTraitIds({ traitIds: [] }, weapon, actor)
+  }];
 }
 
 export function activateWeaponRules() {

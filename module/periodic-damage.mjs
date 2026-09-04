@@ -876,22 +876,28 @@ async function launchRemovalAbility(button) {
   });
 }
 
-async function resolveRemovalAbilityResult(message) {
-  if (!message || message.getFlag(SYSTEM_ID, "kind") !== "ability-check") return;
-  const effectUuid = message.getFlag(SYSTEM_ID, "periodicRemovalEffectUuid");
-  if (!effectUuid) return;
-  const degree = message.getFlag(SYSTEM_ID, "degree");
-  if (!['success', 'great'].includes(degree)) return;
+export async function resolvePeriodicRemovalAbilitySuccess({ effectUuid = null, degree = null, sourceCheckMessageId = null } = {}) {
+  if (!effectUuid || !['success', 'great'].includes(degree)) return null;
   let effect = null;
   try { effect = await fromUuid(effectUuid); } catch (_error) { effect = null; }
-  if (!effect || !isPeriodicEffect(effect)) return;
+  if (!effect || !isPeriodicEffect(effect)) return null;
   const name = effect.name;
   const actor = effect.parent;
   await effect.delete();
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<div class="fast-nri-periodic-tick-card resolved"><div class="fast-nri-chat-roll-title"><i class="fa-solid fa-kit-medical"></i><strong>${esc(name)}</strong></div><div class="fast-nri-periodic-result removed">Эффект снят успешной специальной способностью.</div></div>`,
-    flags: { [SYSTEM_ID]: { kind: "periodic-special-removal", actorUuid: actor?.uuid ?? null, sourceCheckMessageId: message.id } }
+    flags: { [SYSTEM_ID]: { kind: "periodic-special-removal", actorUuid: actor?.uuid ?? null, sourceCheckMessageId } }
+  });
+  return { effectUuid, degree, actorUuid: actor?.uuid ?? null };
+}
+
+async function resolveRemovalAbilityResult(message) {
+  if (!message || message.getFlag(SYSTEM_ID, "kind") !== "ability-check") return;
+  return resolvePeriodicRemovalAbilitySuccess({
+    effectUuid: message.getFlag(SYSTEM_ID, "periodicRemovalEffectUuid"),
+    degree: message.getFlag(SYSTEM_ID, "degree"),
+    sourceCheckMessageId: message.id
   });
 }
 

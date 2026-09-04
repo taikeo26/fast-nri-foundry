@@ -3974,3 +3974,22 @@ button.fast-nri-property-reference:hover {
   opacity: 0.65;
   font-weight: 400;
 }
+
+/* v0.5.76.2 - explicit manual critical Application */
+.fast-nri-v2-critical-apply-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.fast-nri-v2-critical-apply-actions > button:first-child {
+  flex: 1 1 auto;
+}
+
+.fast-nri-v2-critical-apply-actions > .fast-nri-apply-damage-x2 {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 42px;
+  padding-inline: 9px;
+  white-space: nowrap;
+}

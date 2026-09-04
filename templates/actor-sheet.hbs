@@ -572,6 +572,30 @@
         </section>
       {{/unless}}
 
+      {{#each systemActionGroups as |group|}}
+        <section class="fast-nri-section fast-nri-system-actions-section">
+          <h2>{{group.label}}</h2>
+          <p class="fast-nri-help">Использует общий target-first pipeline: цель → проверка → степень → Противодействие/Защита → итог.</p>
+          <div class="fast-nri-skills-grid">
+            {{#each group.actions as |action|}}
+              <div class="fast-nri-skill-row fast-nri-system-action-row">
+                <button
+                  type="button"
+                  class="fast-nri-skill-roll"
+                  data-action="useSystemAction"
+                  data-system-action-id="{{action.id}}"
+                  title="{{action.label}} · {{action.formula}}"
+                >
+                  <i class="fa-solid fa-bolt"></i>
+                  <span>{{action.label}}</span>
+                </button>
+                <strong class="fast-nri-fixed-die-badge">{{action.formula}}</strong>
+              </div>
+            {{/each}}
+          </div>
+        </section>
+      {{/each}}
+
       <section class="fast-nri-section">
         <h2>Навыки</h2>
         <p class="fast-nri-help">Нажми на название навыка, чтобы выполнить проверку.</p>

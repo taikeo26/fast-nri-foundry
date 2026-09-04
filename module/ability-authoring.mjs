@@ -109,6 +109,7 @@ function legacyImplementation(system) {
     profiles: system.profiles ?? {},
     outcomes: system.outcomes ?? {},
     outcome: system.outcome ?? {},
+    actionParts: Array.from(system.actionParts ?? []),
     defenseAction: system.defenseAction ?? {},
     effectUuids: uniqueStrings(system.effectUuids),
     repeat: { count: 1, label: "Результат" },
@@ -174,6 +175,46 @@ export function abilityImplementationRuntime(item, implementationId = null) {
       }
     }
   };
+}
+
+
+/**
+ * Optional 0.5.77 explicit ActionPart definitions stored on an implementation.
+ * Empty means the implementation remains one logical Part and repeat.count
+ * expands it through ActionState v2. The helper only normalizes shape; it does
+ * not infer rules from prose.
+ */
+export function abilityActionParts(itemOrSystem) {
+  const system = rawSystem(itemOrSystem);
+  return Array.from(system.actionParts ?? []).map((part, index) => ({
+    ...part,
+    id: text(part?.id) || `part-${index + 1}`,
+    label: text(part?.label) || `Результат ${index + 1}`,
+    traitIds: uniqueStrings(part?.traitIds),
+    targetSlots: Array.from(part?.targetSlots ?? []).map((slot, slotIndex) => ({
+      ...slot,
+      id: text(slot?.id) || `target-${slotIndex + 1}`,
+      label: text(slot?.label) || `Цель ${slotIndex + 1}`,
+      roles: uniqueStrings(slot?.roles),
+      selectionMode: ["manual", "source"].includes(text(slot?.selectionMode))
+        ? text(slot.selectionMode)
+        : "manual",
+      min: positiveInt(slot?.min, 0),
+      max: positiveInt(slot?.max, 0),
+      allowDuplicates: Boolean(slot?.allowDuplicates)
+    })),
+    outcomeComponents: Array.from(part?.outcomeComponents ?? []).map((component, componentIndex) => ({
+      ...component,
+      id: text(component?.id) || `component-${componentIndex + 1}`,
+      type: text(component?.type) || "manual",
+      label: text(component?.label),
+      dependsOn: Array.from(component?.dependsOn ?? []).map(dep => ({ ...dep }))
+    })),
+    repeat: {
+      count: Math.max(1, positiveInt(part?.repeat?.count, 1)),
+      label: text(part?.repeat?.label) || text(part?.label) || "Результат"
+    }
+  }));
 }
 
 export function abilityImplementationLabel(itemOrSystem, implementationId = null) {

@@ -411,9 +411,14 @@ function basePackage(state, part, component, recipient, resolution, value, { suf
     application: {
       policy: FINAL_RESULT_APPLICATION_POLICY,
       supported: true,
-      adapterId: component.type
+      adapterId: text(state.metadata?.adapterId) || component.type
     },
-    metadata: { qaV2: Boolean(state.metadata?.qaV2Scenario), ...metadata }
+    metadata: {
+      qaV2: Boolean(state.metadata?.qaV2Scenario),
+      sourceAdapterId: text(state.metadata?.adapterId) || null,
+      componentMetadata: jsonClone(component.metadata ?? {}, {}),
+      ...metadata
+    }
   });
 }
 
@@ -526,9 +531,10 @@ function packagesForComponent(state, part, component) {
 }
 
 function dependencyMatchesPackage(dependency, source, dependent) {
-  if (source.partId !== dependent.partId) return false;
-  if (source.componentId !== dependency.componentId) return false;
   const params = dependency.params ?? {};
+  const sourcePartId = text(params.partId) || dependent.partId;
+  if (source.partId !== sourcePartId) return false;
+  if (source.componentId !== dependency.componentId) return false;
   if (params.targetSlotId && source.provenance.recipient.targetSlotId !== params.targetSlotId) return false;
   if (params.selectionId && source.provenance.recipient.selectionId !== params.selectionId) return false;
   if (params.actorUuid && source.provenance.recipient.actorUuid !== params.actorUuid) return false;

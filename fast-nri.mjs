@@ -61,7 +61,7 @@ import {
 } from "./module/sheets.mjs";
 
 Hooks.once("init", () => {
-  console.log("Быстрая НРИ 6.3 | Инициализация системы");
+  console.log("Быстрая НРИ 6.4 | Инициализация системы");
 
   registerFastNriSettings();
   registerTokenDefaultSettings();
@@ -125,7 +125,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
-  console.log("Быстрая НРИ 6.3 | Система готова");
+  console.log("Быстрая НРИ 6.4 | Система готова");
   activateChatInteractions(document);
   activateUnifiedActionQa(document);
   activateMultiPartActionQa(document);
@@ -147,5 +147,5 @@ Hooks.once("ready", async () => {
   await migrateWeaponTaxonomyOnce();
   await migrateTokenBarsOnce();
   await disableTokenAutoRotateByDefaultOnce();
-  ui.notifications.info("Быстрая НРИ 6.3 загружена");
+  ui.notifications.info("Быстрая НРИ 6.4 загружена");
 });

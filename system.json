@@ -1,9 +1,9 @@
 {
   "type": "system",
   "id": "fast-nri",
-  "title": "Быстрая НРИ 6.3",
-  "description": "Базовая система «Быстрая НРИ 6.3» для Foundry VTT 14.",
-  "version": "0.5.76",
+  "title": "Быстрая НРИ 6.4",
+  "description": "Базовая система «Быстрая НРИ 6.4» для Foundry VTT 14.",
+  "version": "0.5.80",
   "compatibility": {
     "minimum": 14,
     "verified": 14
@@ -81,7 +81,17 @@
           "implementations.*.profiles.failure.text",
           "implementations.*.profiles.partial.text",
           "implementations.*.profiles.success.text",
-          "implementations.*.profiles.great.text"
+          "implementations.*.profiles.great.text",
+          "implementations.*.actionParts.*.targeting.text",
+          "implementations.*.actionParts.*.profiles.failure.text",
+          "implementations.*.actionParts.*.profiles.partial.text",
+          "implementations.*.actionParts.*.profiles.success.text",
+          "implementations.*.actionParts.*.profiles.great.text",
+          "actionParts.*.targeting.text",
+          "actionParts.*.profiles.failure.text",
+          "actionParts.*.profiles.partial.text",
+          "actionParts.*.profiles.success.text",
+          "actionParts.*.profiles.great.text"
         ]
       },
       "equipment": {
@@ -116,5 +126,5 @@
   "media": [],
   "url": "https://github.com/taikeo26/fast-nri-foundry",
   "manifest": "https://github.com/taikeo26/fast-nri-foundry/releases/latest/download/system.json",
-  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.76/fast-nri.zip"
+  "download": "https://github.com/taikeo26/fast-nri-foundry/releases/download/v0.5.80/fast-nri.zip"
 }

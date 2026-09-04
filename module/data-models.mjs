@@ -133,6 +133,117 @@ const abilityAreaPresetArray = () =>
     initial: []
   });
 
+
+// 0.5.77: optional production ActionPart authoring contract.
+// It is intentionally structural: no prose parsing and no class-specific fields.
+// Content migration can populate it later without changing the shared pipeline.
+const actionPartTargetSlotSchema = () =>
+  new SchemaField({
+    id: text("target"),
+    label: text("Цель"),
+    roles: stringArray(),
+    selectionMode: text("manual"),
+    min: integer(0),
+    max: integer(0),
+    allowDuplicates: flag(false),
+    relation: text("any"),
+    rangeMode: text("none"),
+    rangeCells: integer(0),
+    requiresVisibility: flag(false)
+  });
+
+const actionPartDependencySchema = () =>
+  new SchemaField({
+    partId: text(""),
+    componentId: text(""),
+    condition: text("component-resolved"),
+    targetSlotId: text("")
+  });
+
+const actionPartOutcomeSchema = () =>
+  new SchemaField({
+    id: text(""),
+    type: text("damage"),
+    label: text(""),
+    recipientType: text("targetSlot"),
+    targetSlotId: text(""),
+    timing: text("resolution"),
+    deliveryMode: text("independent"),
+    deliveryKey: text(""),
+    valueSourceType: text("roll"),
+    valueSourceComponentId: text(""),
+    value: integer(0),
+    degreeSourceType: text("degree"),
+    degreeSourceTargetSlotId: text(""),
+    components: outcomeComponentArray(),
+    effectUuids: stringArray(),
+    dependsOn: new ArrayField(actionPartDependencySchema(), {
+      required: true,
+      nullable: false,
+      initial: []
+    })
+  });
+
+const abilityActionPartSchema = () =>
+  new SchemaField({
+    id: text(""),
+    label: text("Результат"),
+    traitIds: stringArray(),
+    targetSlots: new ArrayField(actionPartTargetSlotSchema(), {
+      required: true,
+      nullable: false,
+      initial: []
+    }),
+    targeting: new SchemaField({
+      mode: text("none"),
+      relation: text("any"),
+      countMin: integer(0),
+      countMax: integer(0),
+      rangeMode: text("none"),
+      rangeCells: integer(0),
+      requiresVisibility: flag(false),
+      areaShape: text("none"),
+      areaSize: text(""),
+      text: richText("")
+    }),
+    check: new SchemaField({
+      enabled: flag(false),
+      formula: text("1d20 + {combatDie}"),
+      targetCharacteristic: text("armor")
+    }),
+    defenseProcedure: new SchemaField({
+      directedDefense: flag(false)
+    }),
+    profiles: new SchemaField({
+      failure: abilityProfileSchema(),
+      partial: abilityProfileSchema(),
+      success: abilityProfileSchema(),
+      great: abilityProfileSchema()
+    }),
+    outcomes: new SchemaField({
+      damage: outcomeChannelSchema(),
+      healing: outcomeChannelSchema(),
+      tempHp: outcomeChannelSchema()
+    }),
+    effectUuids: stringArray(),
+    outcomeComponents: new ArrayField(actionPartOutcomeSchema(), {
+      required: true,
+      nullable: false,
+      initial: []
+    }),
+    repeat: new SchemaField({
+      count: integer(1),
+      label: text("Результат")
+    })
+  });
+
+const abilityActionPartArray = () =>
+  new ArrayField(abilityActionPartSchema(), {
+    required: true,
+    nullable: false,
+    initial: []
+  });
+
 const abilityImplementationSchema = () =>
   new SchemaField({
     id: text(""),
@@ -187,6 +298,9 @@ const abilityImplementationSchema = () =>
       healing: outcomeChannelSchema(),
       tempHp: outcomeChannelSchema()
     }),
+    // Optional explicit multi-part definition. Empty means the implementation
+    // itself is adapted as one ActionPart (plus repeat expansion).
+    actionParts: abilityActionPartArray(),
     defenseAction: new SchemaField({
       enabled: flag(false),
       procedure: text("directed"),
@@ -540,6 +654,10 @@ export class AbilityData extends foundry.abstract.TypeDataModel {
         healing: outcomeChannelSchema(),
         tempHp: outcomeChannelSchema()
       }),
+
+      // 0.5.77 compatibility: explicit ActionParts can also live on a legacy
+      // top-level Ability until it is migrated into implementations[].
+      actionParts: abilityActionPartArray(),
 
       // 0.5.52: универсальная направленная Check-модель. Цель проверки
       // хранится независимо от игрового типа действия. armor = КЗ; остальные

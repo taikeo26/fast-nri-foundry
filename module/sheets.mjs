@@ -58,7 +58,9 @@ import {
   DEFENSE_RANGE_MODES,
   DEFENSE_TARGET_SCOPES
 } from "./defense-actions.mjs";
-import { rollSkillCheck, rollSpecializationCheck, rollWeaponAttack } from "./rolls.mjs";
+import { rollSkillCheck, rollSpecializationCheck } from "./rolls.mjs";
+import { startWeaponAttackV2 } from "./ability-action-v2.mjs";
+import { startSystemActionByIdV2, systemActionGroupsForActor } from "./system-actions-v2.mjs";
 import {
   WEAPON_CATEGORY_CHOICES,
   WEAPON_TYPE_CHOICES,
@@ -111,6 +113,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       rollSkill: FastNriActorSheet.#rollSkill,
       rollSpecialization: FastNriActorSheet.#rollSpecialization,
       rollWeaponAttack: FastNriActorSheet.#rollWeaponAttack,
+      useSystemAction: FastNriActorSheet.#useSystemAction,
       useAbility: FastNriActorSheet.#useAbility
     }
   };
@@ -267,6 +270,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
       consumables: items.filter(item => item.type === "consumable"),
       skillRows,
       specializationRows,
+      systemActionGroups: systemActionGroupsForActor(this.actor),
       traitChoices: CREATURE_TRAITS,
       weaponTypeChoices: WEAPON_TYPE_CHOICES,
       resistanceChoices: RESISTANCE_TRAITS,
@@ -454,7 +458,7 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     const weapon = this.actor.items.get(itemId);
 
     if (!weapon || weapon.type !== "weapon") return;
-    await rollWeaponAttack(this.actor, weapon);
+    await startWeaponAttackV2(this.actor, weapon);
   }
 
   static async #rollSkill(event, target) {
@@ -474,6 +478,13 @@ export class FastNriActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) 
     });
   }
 
+
+  static async #useSystemAction(event, target) {
+    event.preventDefault();
+    const actionId = String(target.dataset.systemActionId ?? "").trim();
+    if (!actionId) return;
+    await startSystemActionByIdV2(this.actor, actionId);
+  }
 
   static async #rollSpecialization(event, target) {
     event.preventDefault();

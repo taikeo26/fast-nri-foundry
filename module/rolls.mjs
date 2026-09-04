@@ -15,9 +15,7 @@ import {
 } from "./defense-actions.mjs";
 import {
   itemIsEquipped,
-  itemIsHeld,
-  itemIsUsable,
-  itemRequiresHands
+  itemIsHeld
 } from "./equipment.mjs";
 import {
   effectiveArmorForAction,
@@ -62,8 +60,8 @@ import {
   abilityProfile
 } from "./ability-authoring.mjs";
 import { applyEffectToActor, effectChatCardHTML, resolveEffectDocuments } from "./effect-system.mjs";
-import { formulaWithActorCombatTerm, resolveActorCombatTerm, resolveWeaponAttackTerm } from "./attack-term.mjs";
-import { weaponCategoryLabel, weaponTypeLabel } from "./weapon-taxonomy.mjs";
+import { formulaWithActorCombatTerm, resolveActorCombatTerm } from "./attack-term.mjs";
+import { weaponDamageComponents } from "./weapon-rules.mjs";
 
 const DEGREE_LABELS = {
   failure: "Провал",
@@ -356,7 +354,7 @@ function attachDialogListeners(dialog, baseFormula, automaticModifiers, showDC =
   updateFormula();
 }
 
-async function prepareRoll({
+export async function prepareRoll({
   actor,
   label,
   baseFormula,
@@ -790,43 +788,6 @@ function armorMetaHTML(target, effectiveArmor = null, targetState = null) {
   `;
 }
 
-function componentTraitIds(component, weapon, actor) {
-  const traits = new Set(component?.traitIds ?? []);
-
-  // Общие свойства источника Creature также считаются свойствами каждой
-  // части его урона. Это позволяет, например, Уязвимости: Демон реагировать
-  // на урон демона без дублирования свойства в каждом оружии.
-  for (const id of actor?.system?.creatureTraitIds ?? []) traits.add(id);
-
-  // Legacy: свойство Яд раньше могло стоять в общем списке свойств оружия.
-  for (const id of weapon?.system?.propertyIds ?? []) {
-    if (Object.hasOwn(CREATURE_TRAITS, id)) traits.add(id);
-  }
-
-  return Array.from(traits);
-}
-
-function weaponDamageComponents(actor, weapon, profile) {
-  const configured = Array.from(weapon?.system?.damageComponents?.[profile] ?? [])
-    .map(component => ({
-      formula: String(component?.formula ?? "").trim(),
-      damageType: ["physical", "magic"].includes(component?.damageType)
-        ? component.damageType
-        : "physical",
-      traitIds: componentTraitIds(component, weapon, actor)
-    }))
-    .filter(component => component.formula);
-
-  if (configured.length) return configured;
-
-  const formula = String(weapon?.system?.damage?.[profile] ?? "0").trim() || "0";
-  return [{
-    formula,
-    damageType: weapon?.system?.damageType === "magic" ? "magic" : "physical",
-    traitIds: componentTraitIds({ traitIds: [] }, weapon, actor)
-  }];
-}
-
 function plainDamageFormula(components) {
   return (components ?? []).map(component => `(${component.formula})`).join(" + ") || "0";
 }
@@ -866,217 +827,6 @@ function damageComponentMap(components) {
   }
   return map;
 }
-
-function damageProfilesHTML(actor, weapon, degree, critical) {
-  const profiles = [
-    ["partial", "Частичный"],
-    ["success", "Успех"],
-    ["great", "Большой"]
-  ];
-
-  return `
-    <section class="fast-nri-hit-damage">
-      <div class="fast-nri-hit-damage-heading">
-        <span>Профиль урона</span>
-        ${critical ? `<strong class="fast-nri-critical-note">Крит: итоговый урон ×2</strong>` : ""}
-      </div>
-
-      <div class="fast-nri-hit-damage-buttons">
-        ${profiles.map(([key, label]) => {
-          const components = weaponDamageComponents(actor, weapon, key);
-          const formula = plainDamageFormula(components);
-          const selected = degree === key;
-
-          return `
-            <button
-              type="button"
-              class="fast-nri-hit-damage-button fast-nri-hit-damage-${key} ${selected ? "selected" : ""}"
-              data-fast-nri-damage
-              data-actor-uuid="${escAttr(actor.uuid)}"
-              data-item-uuid="${escAttr(weapon.uuid)}"
-              data-profile="${key}"
-              data-formula="${escAttr(formula)}"
-              data-critical="${critical ? "true" : "false"}"
-              title="Бросить урон: ${escAttr(label)} — ${escAttr(formula)}"
-            >
-              <span class="fast-nri-hit-damage-degree">${esc(label)}</span>
-              <strong class="fast-nri-hit-damage-formula">${esc(formula)}</strong>
-            </button>
-          `;
-        }).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function attackResultHTML(weapon, target, degree, rollTotal) {
-  return `
-    <section class="fast-nri-hit-summary">
-      <div class="fast-nri-hit-weapon">
-        <span class="fast-nri-hit-label">Оружие</span>
-        <strong>${esc(weapon.name)}</strong>
-      </div>
-
-      ${target?.actor ? `
-        <div class="fast-nri-hit-target">
-          <span class="fast-nri-hit-label">Цель</span>
-          <strong>${esc(target.name)}</strong>
-        </div>
-      ` : ""}
-
-      <div class="fast-nri-hit-result">
-        <span class="fast-nri-hit-label">Результат</span>
-        <strong>${esc(rollTotal)}</strong>
-      </div>
-
-      ${degree ? `
-        <div class="fast-nri-hit-degree">
-          <span class="fast-nri-hit-label">Степень</span>
-          <strong>${DEGREE_LABELS[degree]}</strong>
-        </div>
-      ` : ""}
-    </section>
-  `;
-}
-
-export async function rollWeaponAttack(actor, weapon) {
-  if (!actor || !weapon || weapon.type !== "weapon") return null;
-
-  if (!itemIsEquipped(weapon)) {
-    ui.notifications.warn(`«${weapon.name}» не экипировано и сейчас не доступно для использования.`);
-    return null;
-  }
-
-  if (itemRequiresHands(weapon) && !itemIsHeld(weapon)) {
-    ui.notifications.warn(`«${weapon.name}» требует рук, но не отмечено как «В руках».`);
-    return null;
-  }
-
-  if (!itemIsUsable(weapon)) return null;
-
-  const attackType = inferWeaponAttackType(weapon);
-  const attackTerm = resolveWeaponAttackTerm(actor, weapon);
-  const attackTermFormula = String(attackTerm?.formula ?? "").trim();
-  const baseFormula = attackTermFormula ? `1d20 + ${attackTermFormula}` : "1d20";
-  const target = getSingleTarget();
-  const baseActionContext = actionContextFromWeapon(actor, weapon, { target });
-  const previewTargetDefense = target?.actor
-    ? effectiveArmorForAction(target, actor)
-    : null;
-
-  if ((game.user?.targets?.size ?? 0) > 1) {
-    ui.notifications.warn("Для одиночной атаки выбери одну цель. Бросок будет выполнен без автоматической степени.");
-  }
-
-  const result = await prepareRoll({
-    actor,
-    label: `Атака: ${weapon.name}`,
-    baseFormula,
-    baseSources: [
-      { formula: "1d20", label: "Базовый d20", reason: "Атака" },
-      ...(attackTermFormula ? [{
-        formula: attackTermFormula,
-        label: attackTerm?.label || "Модификатор атаки",
-        reason: attackTerm?.reason || actor.name
-      }] : [])
-    ],
-    showDC: false,
-    contextHTML: armorContextHTML(
-      target,
-      previewTargetDefense?.armor ?? null,
-      previewTargetDefense?.state ?? null
-    )
-  });
-
-  if (!result) return null;
-
-  // Re-read field state at the exact moment the attack resolves. The dialog
-  // may have remained open while tokens or equipment changed.
-  const targetDefense = target?.actor
-    ? effectiveArmorForAction(target, actor)
-    : null;
-  const effectiveArmor = targetDefense?.armor ?? null;
-  const targetState = targetDefense?.state ?? null;
-
-  const degree = target?.actor
-    ? degreeVsArmor(result.roll.total, effectiveArmor, result.naturalD20)
-    : null;
-
-  const critical = result.naturalD20 === 20;
-  const actionContext = actionContextWithCheckResult(baseActionContext, {
-    target,
-    total: result.roll.total,
-    naturalD20: result.naturalD20,
-    degree,
-    critical,
-    formula: result.formula
-  });
-
-  const flavor = `
-    <div class="fast-nri-chat-roll fast-nri-attack-card">
-      ${rollCardHeader("Попадание", "fa-swords")}
-      ${attackResultHTML(weapon, target, degree, result.roll.total)}
-      <div class="fast-nri-attack-type"><small>Вид атаки: <strong>${esc(attackTypeLabel(attackType))}</strong></small></div>
-      <div class="fast-nri-attack-type"><small>Тип оружия: <strong>${esc(weaponTypeLabel(weapon.system?.typeId) || "не указан")}</strong>${weapon.system?.categoryId ? ` · ${esc(weaponCategoryLabel(weapon.system.categoryId))}` : ""}</small></div>
-      <div class="fast-nri-attack-type"><small>Базовый член атаки: <strong>${esc(attackTerm?.label || "только d20")}</strong>${attackTerm?.reason ? ` · ${esc(attackTerm.reason)}` : ""}</small></div>
-      ${armorMetaHTML(target, effectiveArmor, targetState)}
-
-      ${critical ? `
-        <div class="fast-nri-critical-roll">
-          <i class="fa-solid fa-burst"></i>
-          <strong>Натуральная 20</strong>
-        </div>
-      ` : ""}
-
-      ${degreeHTML(degree)}
-      ${damageProfilesHTML(actor, weapon, degree, critical)}
-      ${rollSourcesHTML(result)}
-    </div>
-  `;
-
-  const message = await result.roll.toMessage({
-    speaker: ChatMessage.getSpeaker({ actor }),
-    flavor,
-    flags: {
-      "fast-nri": {
-        kind: "attack",
-        actorUuid: actor.uuid,
-        itemUuid: weapon.uuid,
-        targetUuid: target?.document?.uuid ?? null,
-        degree,
-        critical,
-        rollTotal: result.roll.total,
-        naturalD20: result.naturalD20,
-        attackType,
-        attackTermKind: attackTerm?.kind ?? "unproficient",
-        weaponTypeId: String(weapon.system?.typeId ?? ""),
-        weaponCategoryId: String(weapon.system?.categoryId ?? ""),
-        weaponProficient: Boolean(attackTerm?.proficient),
-        weaponMastery: Boolean(attackTerm?.mastery),
-        actionTraits: actionContext.traits,
-        actionContext,
-        offGuard: Boolean(targetState?.offGuard),
-        surrounded: Boolean(targetState?.surrounding?.surrounded),
-        surroundingThreats: targetState?.surrounding?.threats ?? null,
-        surroundingFormation: targetState?.surrounding?.formation ?? null,
-        armorPenalty: targetState?.defensePenalty ?? 0
-      }
-    }
-  });
-
-  return {
-    roll: result.roll,
-    formula: result.formula,
-    naturalD20: result.naturalD20,
-    target,
-    degree,
-    critical,
-    attackType,
-    actionContext,
-    message
-  };
-}
-
 
 function chatMessageFromElement(element) {
   const id = element
@@ -2432,7 +2182,7 @@ function equippedDefensiveItem(actor) {
   ) ?? null;
 }
 
-function selfDefenseContextualModifiers(actor, weapon, effectDegree) {
+export function selfDefenseContextualModifiers(actor, weapon, effectDegree) {
   const modifiers = [];
 
   const defensiveItem = equippedDefensiveItem(actor);
